@@ -334,9 +334,9 @@ const parseBusinessQuery = (rows, branch, period) => rows.map(r => {
   return {
     period, branch: rowBranch,
     work_order: String(pick(r, '工單號', '工作單號')).trim(),
-    open_time: parseDateTime(pick(r, '開單時間', '開工時間', '進廠時間', '開立時間', '開單日期', '接車時間')),
+    open_time: parseDateTime(pick(r, '工單開單時間', '開單時間', '開工時間', '進廠時間', '開立時間', '開單日期', '接車時間')),
     settle_date: parseDate(pick(r, '結算日期')),
-    plate_no: String(pick(r, '車牌號碼', '車牌')).trim(),
+    plate_no: String(pick(r, '車牌號碼', '車牌號', '車牌')).trim(),
     vin: String(pick(r, '車身號碼', 'VIN')).trim(),
     status: String(pick(r, '工單狀態', '狀態')).trim(),
     repair_item: String(pick(r, '交修項目')).trim(),
