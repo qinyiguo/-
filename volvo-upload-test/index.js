@@ -565,6 +565,183 @@ app.get('/api/health', async (req, res) => {
 // ============================================================
 // 啟動
 // ============================================================
+// ============================================================
+// 統計 API
+// ============================================================
+
+// 維修收入總覽
+app.get('/api/stats/repair', async (req, res) => {
+  try {
+    const { period, branch } = req.query;
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+    if (period) { conditions.push(`period = $${idx++}`); params.push(period); }
+    if (branch) { conditions.push(`branch = $${idx++}`); params.push(branch); }
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    // 各據點/帳類彙總
+    const summary = await pool.query(`
+      SELECT
+        branch,
+        account_type,
+        COUNT(*) AS work_order_count,
+        SUM(total_untaxed) AS total_untaxed,
+        SUM(parts_income) AS parts_income,
+        SUM(accessories_income) AS accessories_income,
+        SUM(boutique_income) AS boutique_income,
+        SUM(engine_wage) AS engine_wage,
+        SUM(bodywork_income + paint_income) AS bodywork_income,
+        SUM(parts_cost) AS parts_cost
+      FROM repair_income ${where}
+      GROUP BY branch, account_type
+      ORDER BY branch, total_untaxed DESC
+    `, params);
+
+    // SA 業績彙總
+    const bySA = await pool.query(`
+      SELECT
+        branch,
+        service_advisor,
+        COUNT(DISTINCT work_order) AS car_count,
+        SUM(total_untaxed) AS total_untaxed,
+        SUM(engine_wage) AS engine_wage,
+        SUM(parts_income) AS parts_income
+      FROM repair_income ${where}
+      GROUP BY branch, service_advisor
+      HAVING service_advisor IS NOT NULL AND service_advisor != ''
+      ORDER BY total_untaxed DESC
+    `, params);
+
+    // 各據點合計
+    const totals = await pool.query(`
+      SELECT
+        branch,
+        COUNT(DISTINCT work_order) AS car_count,
+        SUM(total_untaxed) AS total_untaxed,
+        SUM(engine_wage) AS engine_wage,
+        SUM(parts_income) AS parts_income,
+        SUM(accessories_income) AS accessories_income,
+        SUM(boutique_income) AS boutique_income,
+        SUM(bodywork_income + paint_income) AS bodywork_income,
+        SUM(parts_cost) AS parts_cost
+      FROM repair_income ${where}
+      GROUP BY branch
+      ORDER BY branch
+    `, params);
+
+    res.json({ summary: summary.rows, bySA: bySA.rows, totals: totals.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 技師工資排名
+app.get('/api/stats/tech', async (req, res) => {
+  try {
+    const { period, branch } = req.query;
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+    if (period) { conditions.push(`period = $${idx++}`); params.push(period); }
+    if (branch) { conditions.push(`branch = $${idx++}`); params.push(branch); }
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    const ranking = await pool.query(`
+      SELECT
+        branch,
+        tech_name_clean,
+        SUM(car_count_flag) AS car_count,
+        SUM(standard_hours) AS total_hours,
+        SUM(wage) AS total_wage,
+        SUM(CASE WHEN is_beauty THEN wage ELSE 0 END) AS beauty_wage,
+        SUM(CASE WHEN NOT is_beauty THEN wage ELSE 0 END) AS net_wage
+      FROM tech_performance ${where}
+      GROUP BY branch, tech_name_clean
+      ORDER BY total_wage DESC
+    `, params);
+
+    res.json({ ranking: ranking.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 零件銷售彙總
+app.get('/api/stats/parts', async (req, res) => {
+  try {
+    const { period, branch } = req.query;
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+    if (period) { conditions.push(`period = $${idx++}`); params.push(period); }
+    if (branch) { conditions.push(`branch = $${idx++}`); params.push(branch); }
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    const byType = await pool.query(`
+      SELECT
+        branch,
+        part_type,
+        COUNT(*) AS count,
+        SUM(sale_qty) AS total_qty,
+        SUM(sale_price_untaxed) AS total_sales,
+        SUM(cost_untaxed) AS total_cost
+      FROM parts_sales ${where}
+      GROUP BY branch, part_type
+      ORDER BY branch, total_sales DESC
+    `, params);
+
+    // 銷售金額前20名零件
+    const topParts = await pool.query(`
+      SELECT
+        part_number, part_name, part_type,
+        SUM(sale_qty) AS total_qty,
+        SUM(sale_price_untaxed) AS total_sales
+      FROM parts_sales ${where}
+      GROUP BY part_number, part_name, part_type
+      ORDER BY total_sales DESC
+      LIMIT 20
+    `, params);
+
+    res.json({ byType: byType.rows, topParts: topParts.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 各期間趨勢
+app.get('/api/stats/trend', async (req, res) => {
+  try {
+    const { branch } = req.query;
+    const params = branch ? [branch] : [];
+    const branchCond = branch ? 'AND branch = $1' : '';
+
+    const trend = await pool.query(`
+      SELECT
+        period,
+        branch,
+        COUNT(DISTINCT work_order) AS car_count,
+        SUM(total_untaxed) AS total_untaxed,
+        SUM(engine_wage) AS engine_wage,
+        SUM(parts_income) AS parts_income
+      FROM repair_income
+      WHERE 1=1 ${branchCond}
+      GROUP BY period, branch
+      ORDER BY period, branch
+    `, params);
+
+    res.json({ trend: trend.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 可用期間清單
+app.get('/api/periods', async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT DISTINCT period FROM repair_income
+      UNION SELECT DISTINCT period FROM tech_performance
+      UNION SELECT DISTINCT period FROM parts_sales
+      ORDER BY period DESC
+    `);
+    res.json(r.rows.map(r => r.period));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
 initDatabase()
   .then(() => {
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
