@@ -216,7 +216,17 @@ const detectPeriod = (filename) => {
 // ============================================================
 // 各類解析
 // ============================================================
-const parseRepairIncome = (rows, branch, period) => rows.map(r => ({
+// 備註列過濾（Excel 底部說明行，工單號含中文則跳過）
+const isNoteRow = (val) => {
+  const s = String(val || '').trim();
+  if (!s || s === 'undefined') return true;
+  if (/[\u4e00-\u9fff]/.test(s)) return true;
+  return false;
+};
+
+const parseRepairIncome = (rows, branch, period) => rows
+  .filter(r => !isNoteRow(pick(r, '工作單號', '工單號')))
+  .map(r => ({
   period, branch,
   work_order: String(pick(r, '工作單號', '工單號')).trim(),
   settle_date: parseDate(pick(r, '結算日期')),
@@ -239,7 +249,9 @@ const parseRepairIncome = (rows, branch, period) => rows.map(r => ({
   service_advisor: String(pick(r, '服務顧問', '接待員')).trim(),
 }));
 
-const parseTechPerformance = (rows, branch, period) => rows.map(r => ({
+const parseTechPerformance = (rows, branch, period) => rows
+  .filter(r => !isNoteRow(pick(r, '工作單號', '工單號')))
+  .map(r => ({
   period, branch,
   tech_name_raw: String(pick(r, '技師姓名', '姓名')).trim(),
   tech_name_clean: String(pick(r, '技師姓名', '姓名')).trim().replace(/\s+/g, ''),
