@@ -807,9 +807,9 @@ app.get('/api/stats/daily', async (req, res) => {
     const summary = await pool.query(`
       SELECT
         "${branchCol}" AS branch,
-        COUNT(*)                                                      AS total_cars,
+        SUM(daily_cnt)                                                AS total_cars,
         COUNT(DISTINCT "${dateCol}"::date)                            AS working_days,
-        ROUND(COUNT(*)::numeric /
+        ROUND(SUM(daily_cnt)::numeric /
               NULLIF(COUNT(DISTINCT "${dateCol}"::date), 0), 1)       AS daily_avg,
         MAX(daily_cnt)                                                AS max_day,
         MIN(daily_cnt)                                                AS min_day
