@@ -6,7 +6,13 @@
 <title>Volvo 上傳測試</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 32px; }
+  body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+  .nav { background: #1e293b; border-bottom: 1px solid #2d3f56; padding: 0 24px; display: flex; align-items: center; }
+  .nav-brand { font-size: 15px; font-weight: 700; color: #fff; padding: 16px 0; margin-right: 24px; }
+  .nav-link { padding: 16px 16px; color: #64748b; font-size: 13px; font-weight: 600; text-decoration: none; border-bottom: 2px solid transparent; }
+  .nav-link:hover { color: #e2e8f0; }
+  .nav-link.active { color: #3b82f6; border-bottom-color: #3b82f6; }
+  .main { padding: 24px; }
   h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
   .sub { color: #64748b; font-size: 13px; margin-bottom: 24px; }
   .card { background: #1e293b; border: 1px solid #2d3f56; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
@@ -43,6 +49,12 @@
 </style>
 </head>
 <body>
+<nav class="nav">
+  <span class="nav-brand">🚗 Volvo 上傳測試</span>
+  <a href="/" class="nav-link active">📤 上傳</a>
+  <a href="/stats.html" class="nav-link">📊 統計</a>
+</nav>
+<div class="main">
 <h1>📤 Volvo Excel 上傳測試</h1>
 <p class="sub">確認四種 DMS Excel 是否能正確寫入 PostgreSQL</p>
 
@@ -214,5 +226,6 @@ async function loadHistory() {
 loadCounts();
 loadHistory();
 </script>
+</div>
 </body>
 </html>
