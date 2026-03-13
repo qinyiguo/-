@@ -235,49 +235,18 @@
   <!-- SA 零件銷售 -->
   <div id="tab-sa-sales" style="display:none">
 
-    <!-- 設定選擇器 -->
-    <div class="filter-bar" style="margin-bottom:16px">
-      <label>追蹤設定</label>
-      <select id="selConfig" style="background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:6px 10px;border-radius:6px;font-size:13px;min-width:220px" onchange="onConfigChange()">
-        <option value="">— 請選擇設定 —</option>
-      </select>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <div id="saMatrixMeta" style="font-size:13px;color:#64748b"></div>
       <a href="/settings.html" style="font-size:12px;color:#64748b;text-decoration:none;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border:1px solid #2d3f56;border-radius:6px;background:#1e293b">⚙️ 管理設定</a>
     </div>
 
-    <!-- 統計結果 -->
-    <div id="saSalesResult" style="display:none">
-      <div id="saKPI" class="kpi-grid"></div>
-
-      <div class="card">
-        <div class="card-title" id="saSATitle">SA 銷售排名</div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>#</th><th>據點</th><th>銷售人員</th><th class="num">單據數</th><th class="num">總數量</th><th class="num">銷售金額</th><th class="num">成本</th><th class="num">毛利</th><th class="num">毛利率</th><th>佔比</th></tr></thead>
-            <tbody id="tbSASales"><tr><td colspan="10" class="empty">請先選擇設定</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title" id="saPartTitle">零件明細（Top 50）</div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>#</th><th>零件編號</th><th>零件名稱</th><th>類別碼</th><th>功能碼</th><th class="num">單據數</th><th class="num">總數量</th><th class="num">銷售金額</th></tr></thead>
-            <tbody id="tbSAParts"><tr><td colspan="8" class="empty">請先選擇設定</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">📈 月份趨勢（此設定條件）</div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>期間</th><th>據點</th><th class="num">總數量</th><th class="num">銷售金額</th><th class="num">環比</th></tr></thead>
-            <tbody id="tbSATrend"><tr><td colspan="5" class="empty">請先選擇設定</td></tr></tbody>
-          </table>
-        </div>
+    <!-- 矩陣表格 -->
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="overflow-x:auto">
+        <div id="saMatrix"><div style="padding:48px;text-align:center;color:#64748b"><span class="spinner"></span>載入中...</div></div>
       </div>
     </div>
+
   </div>
 
   <!-- 月份趨勢 -->
@@ -320,7 +289,6 @@
 // ══════════════════════════════════════════════════════════
 let currentTab = 'repair';
 let configs = [];
-let selectedConfigId = null;
 
 // ══════════════════════════════════════════════════════════
 // 工具函式
@@ -382,6 +350,7 @@ async function loadAll() {
     loadParts(period, branch),
     loadTrend(branch),
     loadDaily(period, branch),
+    loadSASales(),
   ]);
   document.getElementById('lastUpdate').textContent = `更新於 ${new Date().toLocaleTimeString('zh-TW')}`;
 }
@@ -562,119 +531,161 @@ async function loadConfigs() {
   try {
     const res = await fetch('/api/sa-config');
     configs = await res.json();
-    const sel = document.getElementById('selConfig');
-    const prev = sel.value;
-    sel.innerHTML = '<option value="">— 請選擇設定 —</option>';
-    configs.forEach(c => {
-      const opt = document.createElement('option');
-      opt.value = c.id;
-      opt.textContent = c.config_name;
-      sel.appendChild(opt);
-    });
-    if (prev && configs.find(c => String(c.id) === prev)) sel.value = prev;
   } catch(e) {}
-}
-
-function onConfigChange() {
-  selectedConfigId = parseInt(document.getElementById('selConfig').value) || null;
-  if (selectedConfigId) loadSASales();
-  else document.getElementById('saSalesResult').style.display = 'none';
 }
 
 // ══════════════════════════════════════════════════════════
 // SA 銷售統計
 // ══════════════════════════════════════════════════════════
 async function loadSASales() {
-  if (!selectedConfigId) return;
   const period = document.getElementById('selPeriod').value;
   const branch = document.getElementById('selBranch').value;
-  document.getElementById('saSalesResult').style.display = '';
+  const matrixEl = document.getElementById('saMatrix');
+  const metaEl   = document.getElementById('saMatrixMeta');
+  matrixEl.innerHTML = '<div style="padding:40px;text-align:center;color:#64748b"><span class="spinner"></span>載入中...</div>';
 
-  const params = new URLSearchParams({ config_id: selectedConfigId });
+  const params = new URLSearchParams();
   if (period) params.set('period', period);
   if (branch) params.set('branch', branch);
 
   try {
-    const res = await fetch(`/api/stats/sa-sales?${params}`);
+    const res  = await fetch(`/api/stats/sa-sales-matrix?${params}`);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
-    const { config, bySA, byPart, trend, totals } = data;
+    const { configs, rows, colTotals } = data;
 
-    // KPI
-    const margin = totals.total_sales > 0
-      ? ((totals.gross_profit / totals.total_sales) * 100).toFixed(1)
-      : '0.0';
-    document.getElementById('saKPI').innerHTML = `
-      <div class="kpi-card"><div class="kpi-label">銷售總額</div><div class="kpi-value kpi-green">${fmt(totals.total_sales,1)}</div><div class="kpi-sub">K</div></div>
-      <div class="kpi-card"><div class="kpi-label">總數量</div><div class="kpi-value kpi-blue">${parseFloat(totals.total_qty||0).toLocaleString()}</div><div class="kpi-sub">件</div></div>
-      <div class="kpi-card"><div class="kpi-label">毛利</div><div class="kpi-value kpi-purple">${fmt(totals.gross_profit,1)}</div><div class="kpi-sub">K</div></div>
-      <div class="kpi-card"><div class="kpi-label">毛利率</div><div class="kpi-value">${margin}%</div><div class="kpi-sub"></div></div>
-      <div class="kpi-card"><div class="kpi-label">銷售人員數</div><div class="kpi-value">${totals.sa_count}</div><div class="kpi-sub">人</div></div>
-    `;
+    if (!configs.length) {
+      matrixEl.innerHTML = `<div style="padding:48px;text-align:center;color:#64748b">
+        尚未建立任何設定，請先至 <a href="/settings.html" style="color:#3b82f6">⚙️ 設定</a> 新增 SA 銷售追蹤項目
+      </div>`;
+      metaEl.textContent = '';
+      return;
+    }
+    if (!rows.length) {
+      matrixEl.innerHTML = `<div style="padding:48px;text-align:center;color:#64748b">此期間／據點無銷售資料</div>`;
+      return;
+    }
 
-    // SA 排名
-    document.getElementById('saSATitle').textContent = `👤 SA 銷售排名 — ${config.config_name}`;
-    const maxSales = Math.max(...bySA.map(r => parseFloat(r.total_sales||0)), 1);
-    document.getElementById('tbSASales').innerHTML = bySA.length ? bySA.map((r,i) => {
-      const s = parseFloat(r.total_sales||0);
-      const gp= parseFloat(r.gross_profit||0);
-      const gpRate = s > 0 ? (gp/s*100).toFixed(1) : '0.0';
-      return `<tr>
-        <td class="rank-no ${i<3?'rank-'+(i+1):''}">${i+1}</td>
-        <td><span class="badge badge-blue">${r.branch||'-'}</span></td>
-        <td style="font-weight:600">${r.sa_name}</td>
-        <td class="num">${parseInt(r.order_count||0)}</td>
-        <td class="num">${parseFloat(r.total_qty||0).toLocaleString()}</td>
-        <td class="num" style="font-weight:700;color:#10b981">${fmt(s)}</td>
-        <td class="num" style="color:#f59e0b">${fmt(r.total_cost)}</td>
-        <td class="num" style="color:#8b5cf6">${fmt(gp)}</td>
-        <td class="num" style="color:${parseFloat(gpRate)>20?'#10b981':parseFloat(gpRate)>10?'#f59e0b':'#ef4444'}">${gpRate}%</td>
-        <td style="min-width:100px">
-          <div class="bar-wrap">
-            <div class="bar-bg"><div class="bar-fill" style="width:${(s/maxSales*100).toFixed(0)}%"></div></div>
-            <span style="font-size:11px;color:#64748b">${(s/maxSales*100).toFixed(0)}%</span>
-          </div>
-        </td>
-      </tr>`;
-    }).join('') : '<tr><td colspan="10" class="empty">無資料，請確認零件銷售資料已上傳</td></tr>';
+    metaEl.textContent = `${configs.length} 個追蹤項目 · ${rows.length} 位銷售人員`;
 
-    // 零件明細
-    document.getElementById('saPartTitle').textContent = `🔩 零件明細 — ${config.config_name}`;
-    document.getElementById('tbSAParts').innerHTML = byPart.length ? byPart.map((r,i) => `
-      <tr>
-        <td class="rank-no ${i<3?'rank-'+(i+1):''}">${i+1}</td>
-        <td style="font-family:monospace;font-size:12px">${r.part_number||'-'}</td>
-        <td>${r.part_name||'-'}</td>
-        <td><span class="badge badge-blue" style="font-size:10px">${r.category_code||'-'}</span></td>
-        <td><span class="badge badge-purple" style="font-size:10px">${r.function_code||'-'}</span></td>
-        <td class="num">${parseInt(r.order_count||0)}</td>
-        <td class="num">${parseFloat(r.total_qty||0).toLocaleString()}</td>
-        <td class="num" style="font-weight:700;color:#10b981">${fmt(r.total_sales)}</td>
-      </tr>
-    `).join('') : '<tr><td colspan="8" class="empty">無資料</td></tr>';
+    // 按據點分組
+    const branches = [...new Set(rows.map(r => r.branch))].sort();
+    const branchColors = { AMA:'#3b82f6', AMC:'#10b981', AMD:'#f59e0b' };
 
-    // 月份趨勢
-    const prevMap = {};
-    document.getElementById('tbSATrend').innerHTML = trend.length ? trend.map(r => {
-      const key = r.branch;
-      const cur = parseFloat(r.total_sales||0);
-      const prev = prevMap[key];
-      const pct = prev ? ((cur-prev)/prev*100) : null;
-      prevMap[key] = cur;
-      return `<tr>
-        <td>${r.period.slice(0,4)}年${r.period.slice(4)}月</td>
-        <td><span class="badge badge-blue">${r.branch}</span></td>
-        <td class="num">${parseFloat(r.total_qty||0).toLocaleString()}</td>
-        <td class="num" style="font-weight:700">${fmt(cur)}</td>
-        <td class="num ${pct===null?'':pct>=0?'up':'down'}">
-          ${pct===null?'-':(pct>=0?'▲':'▼')+Math.abs(pct).toFixed(1)+'%'}
-        </td>
-      </tr>`;
-    }).join('') : '<tr><td colspan="5" class="empty">無趨勢資料</td></tr>';
+    // 每個 config 欄的顏色
+    const cfgColors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#f97316','#84cc16'];
+
+    // 表頭樣式
+    const thBase = 'padding:10px 14px;text-align:left;font-size:12px;font-weight:700;color:#64748b;background:#0f172a;border-bottom:1px solid #2d3f56;white-space:nowrap;';
+    const thNum  = thBase + 'text-align:right;';
+    const tdBase = 'padding:9px 14px;border-bottom:1px solid rgba(45,63,86,.4);font-size:13px;vertical-align:middle;';
+    const tdNum  = tdBase + 'text-align:right;font-variant-numeric:tabular-nums;';
+
+    // 欄位總數：固定欄(#, 據點, SA) + 每個config 2個子欄(數量, 金額)
+    const fixedCols = 3;
+    const totalCols = fixedCols + configs.length * 2;
+
+    // 建表
+    let html = `<table style="width:100%;border-collapse:collapse;font-size:13px">`;
+
+    // ── 第一行表頭：config 名稱（跨2欄）
+    html += `<thead>`;
+    html += `<tr>`;
+    html += `<th style="${thBase}border-right:1px solid #2d3f56" rowspan="2">#</th>`;
+    html += `<th style="${thBase}border-right:1px solid #2d3f56" rowspan="2">據點</th>`;
+    html += `<th style="${thBase}border-right:2px solid #2d3f56;min-width:120px" rowspan="2">銷售人員</th>`;
+    configs.forEach((cfg, ci) => {
+      const col = cfgColors[ci % cfgColors.length];
+      const borderR = ci < configs.length - 1 ? '2px solid #2d3f56' : '1px solid #2d3f56';
+      html += `<th colspan="2" style="${thBase}text-align:center;color:${col};border-right:${borderR};border-bottom:1px solid #1e293b">${cfg.config_name}</th>`;
+    });
+    html += `</tr>`;
+
+    // ── 第二行表頭：數量 / 金額
+    html += `<tr>`;
+    configs.forEach((cfg, ci) => {
+      const borderR = ci < configs.length - 1 ? '2px solid #2d3f56' : '1px solid #2d3f56';
+      html += `<th style="${thNum}font-size:11px">數量</th>`;
+      html += `<th style="${thNum}border-right:${borderR};font-size:11px">金額</th>`;
+    });
+    html += `</tr></thead>`;
+
+    // ── 資料列（依據點分組）
+    html += `<tbody>`;
+    let rowIdx = 0;
+
+    for (const br of branches) {
+      const brRows = rows.filter(r => r.branch === br);
+      const brColor = branchColors[br] || '#64748b';
+
+      brRows.forEach((row, ri) => {
+        rowIdx++;
+        const rowBg = rowIdx % 2 === 0 ? 'background:rgba(15,23,42,.4);' : '';
+        html += `<tr style="${rowBg}">`;
+        html += `<td style="${tdBase}color:#64748b;font-weight:700;border-right:1px solid #2d3f56">${rowIdx}</td>`;
+        // 據點 badge（首行顯示，後續合併視覺）
+        html += `<td style="${tdBase}border-right:1px solid #2d3f56">
+          <span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:${brColor}22;color:${brColor}">${br}</span>
+        </td>`;
+        html += `<td style="${tdBase}font-weight:600;border-right:2px solid #2d3f56">${row.sa_name}</td>`;
+
+        configs.forEach((cfg, ci) => {
+          const c = row.configs[cfg.id];
+          const qty   = c ? c.qty   : 0;
+          const sales = c ? c.sales : 0;
+          const hasData = qty > 0 || sales > 0;
+          const borderR = ci < configs.length - 1 ? '2px solid #2d3f56' : '';
+          const qtyStyle = hasData ? 'color:#e2e8f0;font-weight:600' : 'color:#334155';
+          const salesStyle = hasData ? 'color:#10b981;font-weight:700' : 'color:#334155';
+          html += `<td style="${tdNum}${qtyStyle}">`;
+          html += hasData ? qty.toLocaleString(undefined,{maximumFractionDigits:1}) : '—';
+          html += `</td>`;
+          html += `<td style="${tdNum}${salesStyle};border-right:${borderR}">`;
+          html += hasData ? fmt(sales) : '—';
+          html += `</td>`;
+        });
+        html += `</tr>`;
+      });
+
+      // 據點小計列
+      const brTotals = configs.map(cfg => {
+        const qty   = brRows.reduce((s,r) => s + (r.configs[cfg.id]?.qty   || 0), 0);
+        const sales = brRows.reduce((s,r) => s + (r.configs[cfg.id]?.sales || 0), 0);
+        return { qty, sales };
+      });
+      html += `<tr style="background:rgba(${brColor === '#3b82f6'?'59,130,246':brColor==='#10b981'?'16,185,129':'245,158,11'},.07);border-top:1px solid ${brColor}44">`;
+      html += `<td style="${tdBase}border-right:1px solid #2d3f56"></td>`;
+      html += `<td style="${tdBase}border-right:1px solid #2d3f56">
+        <span style="font-size:11px;font-weight:800;color:${brColor}">${br} 小計</span>
+      </td>`;
+      html += `<td style="${tdBase}font-size:12px;color:#64748b;border-right:2px solid #2d3f56">${brRows.length} 人</td>`;
+      brTotals.forEach((t, ci) => {
+        const borderR = ci < configs.length - 1 ? '2px solid #2d3f56' : '';
+        html += `<td style="${tdNum}color:#94a3b8;font-weight:700;font-size:12px">${t.qty>0?t.qty.toLocaleString(undefined,{maximumFractionDigits:1}):'—'}</td>`;
+        html += `<td style="${tdNum}color:${brColor};font-weight:800;font-size:12px;border-right:${borderR}">${t.sales>0?fmt(t.sales):'—'}</td>`;
+      });
+      html += `</tr>`;
+    }
+
+    // 全廠合計列
+    html += `<tr style="background:#1e293b;border-top:2px solid #3b82f6">`;
+    html += `<td style="${tdBase}border-right:1px solid #2d3f56"></td>`;
+    html += `<td style="${tdBase}border-right:1px solid #2d3f56"></td>`;
+    html += `<td style="${tdBase}font-size:13px;font-weight:800;color:#fff;border-right:2px solid #2d3f56">全廠合計</td>`;
+    configs.forEach((cfg, ci) => {
+      const t = colTotals[cfg.id] || { qty:0, sales:0 };
+      const borderR = ci < configs.length - 1 ? '2px solid #2d3f56' : '';
+      html += `<td style="${tdNum}color:#e2e8f0;font-weight:800;font-size:13px">${t.qty>0?t.qty.toLocaleString(undefined,{maximumFractionDigits:1}):'—'}</td>`;
+      html += `<td style="${tdNum}color:#10b981;font-weight:800;font-size:13px;border-right:${borderR}">${t.sales>0?fmt(t.sales):'—'}</td>`;
+    });
+    html += `</tr>`;
+
+    html += `</tbody></table>`;
+    matrixEl.innerHTML = html;
 
   } catch(e) {
-    document.getElementById('saKPI').innerHTML = `<div style="color:#ef4444;padding:12px">${e.message}</div>`;
+    matrixEl.innerHTML = `<div style="padding:24px;color:#ef4444">${e.message}</div>`;
   }
 }
 
