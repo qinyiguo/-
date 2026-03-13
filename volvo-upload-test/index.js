@@ -31,7 +31,6 @@ const initDatabase = async () => {
   try {
     console.log('[initDB] 開始建表...');
 
-    // 上傳歷史
     await client.query(`
       CREATE TABLE IF NOT EXISTS upload_history (
         id           SERIAL PRIMARY KEY,
@@ -46,7 +45,6 @@ const initDatabase = async () => {
       )
     `);
 
-    // 維修收入
     await client.query(`
       CREATE TABLE IF NOT EXISTS repair_income (
         id                 SERIAL PRIMARY KEY,
@@ -75,7 +73,6 @@ const initDatabase = async () => {
       )
     `);
 
-    // 技師績效
     await client.query(`
       CREATE TABLE IF NOT EXISTS tech_performance (
         id              SERIAL PRIMARY KEY,
@@ -96,7 +93,6 @@ const initDatabase = async () => {
       )
     `);
 
-    // 零件銷售
     await client.query(`
       CREATE TABLE IF NOT EXISTS parts_sales (
         id                 SERIAL PRIMARY KEY,
@@ -124,7 +120,6 @@ const initDatabase = async () => {
       )
     `);
 
-    // 業務查詢
     await client.query(`
       CREATE TABLE IF NOT EXISTS business_query (
         id              SERIAL PRIMARY KEY,
@@ -152,7 +147,6 @@ const initDatabase = async () => {
       )
     `);
 
-    // ── Migration：偵測 business_query 是否有 work_order 欄位，沒有就 DROP 重建 ──
     const bqCheck = await client.query(`
       SELECT column_name FROM information_schema.columns
       WHERE table_name = 'business_query' AND column_name = 'work_order'
@@ -186,12 +180,8 @@ const initDatabase = async () => {
           created_at      TIMESTAMPTZ DEFAULT NOW()
         )
       `);
-      console.log('[initDB] ✅ business_query 重建完成，請重新上傳業務查詢 Excel');
-    } else {
-      console.log('[initDB] ✅ business_query 欄位正常');
     }
 
-    // parts_catalog（零配件比對 — 以零件編號為主鍵，upsert）
     await client.query(`
       CREATE TABLE IF NOT EXISTS parts_catalog (
         part_number   VARCHAR(50) PRIMARY KEY,
@@ -202,6 +192,20 @@ const initDatabase = async () => {
         function_code VARCHAR(20),
         branch        VARCHAR(10),
         updated_at    TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // ── SA 銷售設定表 ──────────────────────────────────────────────
+    // filters 欄位為 JSONB 陣列，每個元素：
+    //   { type: 'category_code' | 'function_code' | 'part_number', value: '...' }
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sa_sales_config (
+        id           SERIAL PRIMARY KEY,
+        config_name  VARCHAR(100) NOT NULL,
+        description  TEXT,
+        filters      JSONB NOT NULL DEFAULT '[]',
+        created_at   TIMESTAMPTZ DEFAULT NOW(),
+        updated_at   TIMESTAMPTZ DEFAULT NOW()
       )
     `);
 
@@ -549,7 +553,6 @@ app.post('/api/upload', upload.array('files', 8), async (req, res) => {
 
         await client.query('COMMIT');
         results.push({ filename, status: 'success', fileType, branch, period, rowCount });
-        console.log(`✅ ${filename} → ${fileType} / ${branch} / ${period} / ${rowCount}筆`);
 
       } catch (err) {
         await client.query('ROLLBACK');
@@ -560,7 +563,6 @@ app.post('/api/upload', upload.array('files', 8), async (req, res) => {
 
     } catch (err) {
       results.push({ filename, status: 'error', error: err.message });
-      console.error(`❌ ${filename}: ${err.message}`);
       try {
         await pool.query(`
           INSERT INTO upload_history (file_name, file_type, status, error_msg)
@@ -574,7 +576,220 @@ app.post('/api/upload', upload.array('files', 8), async (req, res) => {
 });
 
 // ============================================================
-// 查詢 API — 確認各表格筆數
+// SA 銷售設定 API
+// ============================================================
+
+// 列出所有設定
+app.get('/api/sa-config', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT id, config_name, description, filters, created_at, updated_at
+       FROM sa_sales_config ORDER BY id`
+    );
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 新增設定
+app.post('/api/sa-config', async (req, res) => {
+  const { config_name, description, filters } = req.body;
+  if (!config_name) return res.status(400).json({ error: '名稱為必填' });
+  if (!Array.isArray(filters) || filters.length === 0)
+    return res.status(400).json({ error: '至少需要一個篩選條件' });
+  try {
+    const r = await pool.query(
+      `INSERT INTO sa_sales_config (config_name, description, filters)
+       VALUES ($1, $2, $3) RETURNING *`,
+      [config_name.trim(), description || '', JSON.stringify(filters)]
+    );
+    res.json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 更新設定
+app.put('/api/sa-config/:id', async (req, res) => {
+  const { config_name, description, filters } = req.body;
+  if (!config_name) return res.status(400).json({ error: '名稱為必填' });
+  if (!Array.isArray(filters) || filters.length === 0)
+    return res.status(400).json({ error: '至少需要一個篩選條件' });
+  try {
+    const r = await pool.query(
+      `UPDATE sa_sales_config
+       SET config_name=$1, description=$2, filters=$3, updated_at=NOW()
+       WHERE id=$4 RETURNING *`,
+      [config_name.trim(), description || '', JSON.stringify(filters), req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: '找不到設定' });
+    res.json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 刪除設定
+app.delete('/api/sa-config/:id', async (req, res) => {
+  try {
+    await pool.query(`DELETE FROM sa_sales_config WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// parts_catalog 查詢（供前端自動完成）
+// GET /api/sa-config/parts-lookup?type=category_code&q=AB
+app.get('/api/sa-config/parts-lookup', async (req, res) => {
+  const { type, q } = req.query;
+  const allowed = ['category_code', 'function_code', 'part_number'];
+  if (!allowed.includes(type)) return res.status(400).json({ error: '無效的 type' });
+
+  try {
+    const search = `%${(q || '').trim()}%`;
+    let sql, params;
+
+    if (type === 'part_number') {
+      sql = `
+        SELECT part_number AS value, part_name AS label, category_code, function_code
+        FROM parts_catalog
+        WHERE part_number ILIKE $1 OR part_name ILIKE $1
+        ORDER BY part_number
+        LIMIT 30
+      `;
+      params = [search];
+    } else {
+      // category_code 或 function_code：回傳不重複的值與其覆蓋零件數
+      sql = `
+        SELECT ${type} AS value,
+               COUNT(*) AS part_count,
+               STRING_AGG(DISTINCT part_name, '、' ORDER BY part_name) FILTER (WHERE part_name != '') AS sample_names
+        FROM parts_catalog
+        WHERE ${type} ILIKE $1 AND ${type} != ''
+        GROUP BY ${type}
+        ORDER BY part_count DESC
+        LIMIT 30
+      `;
+      params = [search];
+    }
+
+    const r = await pool.query(sql, params);
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============================================================
+// SA 銷售統計 API
+// GET /api/stats/sa-sales?config_id=1&period=202501&branch=AMA
+// ============================================================
+app.get('/api/stats/sa-sales', async (req, res) => {
+  const { config_id, period, branch } = req.query;
+  if (!config_id) return res.status(400).json({ error: '請指定 config_id' });
+
+  try {
+    // 取設定
+    const cfgRow = await pool.query(`SELECT * FROM sa_sales_config WHERE id=$1`, [config_id]);
+    if (!cfgRow.rows.length) return res.status(404).json({ error: '找不到設定' });
+    const cfg = cfgRow.rows[0];
+    const filters = cfg.filters; // [{type, value}, ...]
+
+    if (!filters.length) return res.json({ config: cfg, bySA: [], byPart: [], totals: {} });
+
+    // 把 filters 拆成三類
+    const catCodes  = filters.filter(f => f.type === 'category_code').map(f => f.value);
+    const funcCodes = filters.filter(f => f.type === 'function_code').map(f => f.value);
+    const partNums  = filters.filter(f => f.type === 'part_number').map(f => f.value);
+
+    // 動態組 WHERE
+    const conds = [];
+    const params = [];
+    let idx = 1;
+
+    if (period)  { conds.push(`ps.period = $${idx++}`); params.push(period); }
+    if (branch)  { conds.push(`ps.branch = $${idx++}`); params.push(branch); }
+
+    // 零件篩選（OR 邏輯）
+    const partConds = [];
+    if (catCodes.length)  { partConds.push(`ps.category_code = ANY($${idx++})`); params.push(catCodes); }
+    if (funcCodes.length) { partConds.push(`ps.function_code  = ANY($${idx++})`); params.push(funcCodes); }
+    if (partNums.length)  { partConds.push(`ps.part_number    = ANY($${idx++})`); params.push(partNums); }
+    if (partConds.length) conds.push(`(${partConds.join(' OR ')})`);
+
+    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+
+    // ── SA 彙總（以 sales_person 為主） ──
+    const bySA = await pool.query(`
+      SELECT
+        ps.branch,
+        COALESCE(NULLIF(ps.sales_person,''), '（未知）') AS sa_name,
+        COUNT(DISTINCT ps.order_no)       AS order_count,
+        SUM(ps.sale_qty)                  AS total_qty,
+        SUM(ps.sale_price_untaxed)        AS total_sales,
+        SUM(ps.cost_untaxed)              AS total_cost,
+        SUM(ps.sale_price_untaxed)
+          - SUM(ps.cost_untaxed)          AS gross_profit
+      FROM parts_sales ps
+      ${where}
+      GROUP BY ps.branch, sa_name
+      ORDER BY total_sales DESC
+    `, params);
+
+    // ── 零件明細彙總（Top 50） ──
+    const byPart = await pool.query(`
+      SELECT
+        ps.part_number,
+        ps.part_name,
+        ps.category_code,
+        ps.function_code,
+        ps.part_type,
+        COUNT(DISTINCT ps.order_no)  AS order_count,
+        SUM(ps.sale_qty)             AS total_qty,
+        SUM(ps.sale_price_untaxed)   AS total_sales,
+        SUM(ps.cost_untaxed)         AS total_cost
+      FROM parts_sales ps
+      ${where}
+      GROUP BY ps.part_number, ps.part_name, ps.category_code, ps.function_code, ps.part_type
+      ORDER BY total_sales DESC
+      LIMIT 50
+    `, params);
+
+    // ── 期間趨勢（此設定條件下各月份） ──
+    // 用同樣的零件篩選，但忽略 period 條件
+    const trendConds = [];
+    const trendParams = [];
+    let tidx = 1;
+    if (branch) { trendConds.push(`ps.branch = $${tidx++}`); trendParams.push(branch); }
+    if (partConds.length) {
+      // 重新組一次，因為 params idx 不同
+      const tPartConds = [];
+      if (catCodes.length)  { tPartConds.push(`ps.category_code = ANY($${tidx++})`); trendParams.push(catCodes); }
+      if (funcCodes.length) { tPartConds.push(`ps.function_code  = ANY($${tidx++})`); trendParams.push(funcCodes); }
+      if (partNums.length)  { tPartConds.push(`ps.part_number    = ANY($${tidx++})`); trendParams.push(partNums); }
+      trendConds.push(`(${tPartConds.join(' OR ')})`);
+    }
+    const trendWhere = trendConds.length ? 'WHERE ' + trendConds.join(' AND ') : '';
+
+    const trend = await pool.query(`
+      SELECT
+        ps.period,
+        ps.branch,
+        SUM(ps.sale_qty)           AS total_qty,
+        SUM(ps.sale_price_untaxed) AS total_sales
+      FROM parts_sales ps
+      ${trendWhere}
+      GROUP BY ps.period, ps.branch
+      ORDER BY ps.period, ps.branch
+    `, trendParams);
+
+    // ── 合計 ──
+    const totals = {
+      total_qty:    bySA.rows.reduce((s, r) => s + parseFloat(r.total_qty   || 0), 0),
+      total_sales:  bySA.rows.reduce((s, r) => s + parseFloat(r.total_sales || 0), 0),
+      total_cost:   bySA.rows.reduce((s, r) => s + parseFloat(r.total_cost  || 0), 0),
+      gross_profit: bySA.rows.reduce((s, r) => s + parseFloat(r.gross_profit|| 0), 0),
+      sa_count:     bySA.rows.length,
+    };
+
+    res.json({ config: cfg, bySA: bySA.rows, byPart: byPart.rows, trend: trend.rows, totals });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============================================================
+// 查詢 API
 // ============================================================
 app.get('/api/counts', async (req, res) => {
   try {
@@ -583,72 +798,51 @@ app.get('/api/counts', async (req, res) => {
       SELECT 'tech_performance',        COUNT(*)          FROM tech_performance UNION ALL
       SELECT 'parts_sales',             COUNT(*)          FROM parts_sales      UNION ALL
       SELECT 'business_query',          COUNT(*)          FROM business_query   UNION ALL
-      SELECT 'parts_catalog',           COUNT(*)          FROM parts_catalog   UNION ALL
+      SELECT 'parts_catalog',           COUNT(*)          FROM parts_catalog    UNION ALL
       SELECT 'upload_history',          COUNT(*)          FROM upload_history
     `);
     res.json(r.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/history', async (req, res) => {
   try {
     const r = await pool.query('SELECT * FROM upload_history ORDER BY created_at DESC LIMIT 20');
     res.json(r.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
     res.json({ status: 'ok', db: 'connected' });
-  } catch (err) {
-    res.status(500).json({ status: 'error', error: err.message });
-  }
+  } catch (err) { res.status(500).json({ status: 'error', error: err.message }); }
 });
 
 // ============================================================
-// 統計 API
+// 統計 API（原有）
 // ============================================================
-
-// 維修收入總覽
 app.get('/api/stats/repair', async (req, res) => {
   try {
     const { period, branch } = req.query;
-    const conditions = [];
-    const params = [];
-    let idx = 1;
+    const conditions = []; const params = []; let idx = 1;
     if (period) { conditions.push(`period = $${idx++}`); params.push(period); }
     if (branch) { conditions.push(`branch = $${idx++}`); params.push(branch); }
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
     const summary = await pool.query(`
-      SELECT
-        branch,
-        account_type,
-        COUNT(*) AS work_order_count,
-        SUM(total_untaxed) AS total_untaxed,
-        SUM(parts_income) AS parts_income,
-        SUM(accessories_income) AS accessories_income,
-        SUM(boutique_income) AS boutique_income,
-        SUM(engine_wage) AS engine_wage,
-        SUM(bodywork_income + paint_income) AS bodywork_income,
+      SELECT branch, account_type, COUNT(*) AS work_order_count,
+        SUM(total_untaxed) AS total_untaxed, SUM(parts_income) AS parts_income,
+        SUM(accessories_income) AS accessories_income, SUM(boutique_income) AS boutique_income,
+        SUM(engine_wage) AS engine_wage, SUM(bodywork_income + paint_income) AS bodywork_income,
         SUM(parts_cost) AS parts_cost
       FROM repair_income ${where}
-      GROUP BY branch, account_type
-      ORDER BY branch, total_untaxed DESC
+      GROUP BY branch, account_type ORDER BY branch, total_untaxed DESC
     `, params);
 
     const bySA = await pool.query(`
-      SELECT
-        branch,
-        service_advisor,
-        COUNT(DISTINCT work_order) AS car_count,
-        SUM(total_untaxed) AS total_untaxed,
-        SUM(engine_wage) AS engine_wage,
+      SELECT branch, service_advisor, COUNT(DISTINCT work_order) AS car_count,
+        SUM(total_untaxed) AS total_untaxed, SUM(engine_wage) AS engine_wage,
         SUM(parts_income) AS parts_income
       FROM repair_income ${where}
       GROUP BY branch, service_advisor
@@ -657,94 +851,69 @@ app.get('/api/stats/repair', async (req, res) => {
     `, params);
 
     const totals = await pool.query(`
-      SELECT
-        branch,
-        COUNT(DISTINCT work_order) AS car_count,
-        SUM(total_untaxed) AS total_untaxed,
-        SUM(engine_wage) AS engine_wage,
-        SUM(parts_income) AS parts_income,
-        SUM(accessories_income) AS accessories_income,
+      SELECT branch, COUNT(DISTINCT work_order) AS car_count,
+        SUM(total_untaxed) AS total_untaxed, SUM(engine_wage) AS engine_wage,
+        SUM(parts_income) AS parts_income, SUM(accessories_income) AS accessories_income,
         SUM(boutique_income) AS boutique_income,
         SUM(bodywork_income + paint_income) AS bodywork_income,
         SUM(parts_cost) AS parts_cost
       FROM repair_income ${where}
-      GROUP BY branch
-      ORDER BY branch
+      GROUP BY branch ORDER BY branch
     `, params);
 
     res.json({ summary: summary.rows, bySA: bySA.rows, totals: totals.rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 技師工資排名
 app.get('/api/stats/tech', async (req, res) => {
   try {
     const { period, branch } = req.query;
-    const conditions = [];
-    const params = [];
-    let idx = 1;
+    const conditions = []; const params = []; let idx = 1;
     if (period) { conditions.push(`period = $${idx++}`); params.push(period); }
     if (branch) { conditions.push(`branch = $${idx++}`); params.push(branch); }
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
     const ranking = await pool.query(`
-      SELECT
-        branch,
-        tech_name_clean,
-        COUNT(DISTINCT work_order) AS car_count,
-        SUM(standard_hours) AS total_hours,
-        SUM(wage) AS total_wage,
+      SELECT branch, tech_name_clean, COUNT(DISTINCT work_order) AS car_count,
+        SUM(standard_hours) AS total_hours, SUM(wage) AS total_wage,
         SUM(CASE WHEN wage_category ILIKE '%美容%' THEN wage ELSE 0 END) AS beauty_wage,
         SUM(CASE WHEN wage_category NOT ILIKE '%美容%' THEN wage ELSE 0 END) AS net_wage
       FROM tech_performance ${where}
-      GROUP BY branch, tech_name_clean
-      ORDER BY total_wage DESC
+      GROUP BY branch, tech_name_clean ORDER BY total_wage DESC
     `, params);
 
     res.json({ ranking: ranking.rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 零件銷售彙總
 app.get('/api/stats/parts', async (req, res) => {
   try {
     const { period, branch } = req.query;
-    const conditions = [];
-    const params = [];
-    let idx = 1;
+    const conditions = []; const params = []; let idx = 1;
     if (period) { conditions.push(`period = $${idx++}`); params.push(period); }
     if (branch) { conditions.push(`branch = $${idx++}`); params.push(branch); }
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
     const byType = await pool.query(`
-      SELECT
-        branch,
-        part_type,
-        COUNT(*) AS count,
-        SUM(sale_qty) AS total_qty,
-        SUM(sale_price_untaxed) AS total_sales,
+      SELECT branch, part_type, COUNT(*) AS count,
+        SUM(sale_qty) AS total_qty, SUM(sale_price_untaxed) AS total_sales,
         SUM(cost_untaxed) AS total_cost
       FROM parts_sales ${where}
-      GROUP BY branch, part_type
-      ORDER BY branch, total_sales DESC
+      GROUP BY branch, part_type ORDER BY branch, total_sales DESC
     `, params);
 
     const topParts = await pool.query(`
-      SELECT
-        part_number, part_name, part_type,
-        SUM(sale_qty) AS total_qty,
-        SUM(sale_price_untaxed) AS total_sales
+      SELECT part_number, part_name, part_type,
+        SUM(sale_qty) AS total_qty, SUM(sale_price_untaxed) AS total_sales
       FROM parts_sales ${where}
       GROUP BY part_number, part_name, part_type
-      ORDER BY total_sales DESC
-      LIMIT 20
+      ORDER BY total_sales DESC LIMIT 20
     `, params);
 
     res.json({ byType: byType.rows, topParts: topParts.rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 各期間趨勢
 app.get('/api/stats/trend', async (req, res) => {
   try {
     const { branch } = req.query;
@@ -752,95 +921,69 @@ app.get('/api/stats/trend', async (req, res) => {
     const branchCond = branch ? 'AND branch = $1' : '';
 
     const trend = await pool.query(`
-      SELECT
-        period,
-        branch,
-        COUNT(DISTINCT work_order) AS car_count,
-        SUM(total_untaxed) AS total_untaxed,
-        SUM(engine_wage) AS engine_wage,
+      SELECT period, branch, COUNT(DISTINCT work_order) AS car_count,
+        SUM(total_untaxed) AS total_untaxed, SUM(engine_wage) AS engine_wage,
         SUM(parts_income) AS parts_income
-      FROM repair_income
-      WHERE 1=1 ${branchCond}
-      GROUP BY period, branch
-      ORDER BY period, branch
+      FROM repair_income WHERE 1=1 ${branchCond}
+      GROUP BY period, branch ORDER BY period, branch
     `, params);
 
     res.json({ trend: trend.rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 每日進廠台數（排除 PDI）
 app.get('/api/stats/daily', async (req, res) => {
   try {
     const { period, branch } = req.query;
-
-    // 動態偵測欄位名稱（支援中英文欄位）
     const colRows = await pool.query(`
       SELECT column_name FROM information_schema.columns WHERE table_name = 'business_query'
     `);
     const cols = colRows.rows.map(r => r.column_name);
-
-    const dateCol  = cols.find(c => ['open_time','進廠時間','開單時間','開立時間','接車時間'].includes(c)) || 'open_time';
-    const typeCol  = cols.find(c => ['repair_type','維修類型'].includes(c));
-    const branchCol= cols.find(c => ['branch','據點','分店'].includes(c)) || 'branch';
-    const periodCol= cols.find(c => ['period','期間'].includes(c)) || 'period';
+    const dateCol   = cols.find(c => ['open_time','進廠時間','開單時間','開立時間','接車時間'].includes(c)) || 'open_time';
+    const typeCol   = cols.find(c => ['repair_type','維修類型'].includes(c));
+    const branchCol = cols.find(c => ['branch','據點','分店'].includes(c)) || 'branch';
+    const periodCol = cols.find(c => ['period','期間'].includes(c)) || 'period';
 
     const conditions = [`"${dateCol}" IS NOT NULL`];
     if (typeCol) conditions.push(`"${typeCol}" NOT ILIKE '%PDI%'`);
-
-    const params = [];
-    let idx = 1;
+    const params = []; let idx = 1;
     if (period) { conditions.push(`"${periodCol}" = $${idx++}`); params.push(period); }
     if (branch) { conditions.push(`"${branchCol}" = $${idx++}`); params.push(branch); }
     const where = 'WHERE ' + conditions.join(' AND ');
 
     const daily = await pool.query(`
-      SELECT
-        "${dateCol}"::date AS arrive_date,
-        "${branchCol}" AS branch,
-        COUNT(*) AS car_count
+      SELECT "${dateCol}"::date AS arrive_date, "${branchCol}" AS branch, COUNT(*) AS car_count
       FROM business_query ${where}
-      GROUP BY "${dateCol}"::date, "${branchCol}"
-      ORDER BY arrive_date, "${branchCol}"
+      GROUP BY "${dateCol}"::date, "${branchCol}" ORDER BY arrive_date, "${branchCol}"
     `, params);
 
     const summary = await pool.query(`
-      SELECT
-        "${branchCol}" AS branch,
-        SUM(daily_cnt)                                                AS total_cars,
-        COUNT(DISTINCT "${dateCol}"::date)                            AS working_days,
-        ROUND(SUM(daily_cnt)::numeric /
-              NULLIF(COUNT(DISTINCT "${dateCol}"::date), 0), 1)       AS daily_avg,
-        MAX(daily_cnt)                                                AS max_day,
-        MIN(daily_cnt)                                                AS min_day
+      SELECT "${branchCol}" AS branch,
+        SUM(daily_cnt) AS total_cars,
+        COUNT(DISTINCT "${dateCol}"::date) AS working_days,
+        ROUND(SUM(daily_cnt)::numeric / NULLIF(COUNT(DISTINCT "${dateCol}"::date),0),1) AS daily_avg,
+        MAX(daily_cnt) AS max_day, MIN(daily_cnt) AS min_day
       FROM (
-        SELECT "${branchCol}", "${dateCol}"::date,
-               COUNT(*) AS daily_cnt
-        FROM business_query ${where}
-        GROUP BY "${branchCol}", "${dateCol}"::date
+        SELECT "${branchCol}", "${dateCol}"::date, COUNT(*) AS daily_cnt
+        FROM business_query ${where} GROUP BY "${branchCol}", "${dateCol}"::date
       ) sub
-      GROUP BY "${branchCol}"
-      ORDER BY "${branchCol}"
+      GROUP BY "${branchCol}" ORDER BY "${branchCol}"
     `, params);
 
     res.json({ daily: daily.rows, summary: summary.rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 偵錯：查看 business_query 實際欄位
 app.get('/api/debug/columns', async (req, res) => {
   try {
     const r = await pool.query(`
-      SELECT column_name, data_type
-      FROM information_schema.columns
-      WHERE table_name = 'business_query'
-      ORDER BY ordinal_position
+      SELECT column_name, data_type FROM information_schema.columns
+      WHERE table_name = 'business_query' ORDER BY ordinal_position
     `);
     res.json(r.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 可用期間清單
 app.get('/api/periods', async (req, res) => {
   try {
     const r = await pool.query(`
