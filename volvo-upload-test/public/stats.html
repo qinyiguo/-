@@ -581,6 +581,9 @@ async function loadSASales() {
     const thNum  = thBase + 'text-align:right;';
     const tdBase = 'padding:9px 14px;border-bottom:1px solid rgba(45,63,86,.4);font-size:13px;vertical-align:middle;';
     const tdNum  = tdBase + 'text-align:right;font-variant-numeric:tabular-nums;';
+    // sticky 固定欄樣式
+    const stickyTh = (left, extra='') => `position:sticky;left:${left}px;z-index:3;background:#0f172a;${extra}`;
+    const stickyTd = (left, bg='#111827', extra='') => `position:sticky;left:${left}px;z-index:2;background:${bg};${extra}`;
 
     // 欄位總數：固定欄(#, 據點, SA) + 每個config 2個子欄(數量, 金額)
     const fixedCols = 3;
@@ -592,9 +595,9 @@ async function loadSASales() {
     // ── 第一行表頭：config 名稱（跨2欄）
     html += `<thead>`;
     html += `<tr>`;
-    html += `<th style="${thBase}border-right:1px solid #2d3f56" rowspan="2">#</th>`;
-    html += `<th style="${thBase}border-right:1px solid #2d3f56" rowspan="2">據點</th>`;
-    html += `<th style="${thBase}border-right:2px solid #2d3f56;min-width:120px" rowspan="2">銷售人員</th>`;
+    html += `<th style="${thBase}${stickyTh(0,'border-right:1px solid #2d3f56;width:40px')}" rowspan="2">#</th>`;
+    html += `<th style="${thBase}${stickyTh(40,'border-right:1px solid #2d3f56;width:70px')}" rowspan="2">據點</th>`;
+    html += `<th style="${thBase}${stickyTh(110,'border-right:2px solid #374151;min-width:130px')}" rowspan="2">銷售人員</th>`;
     configs.forEach((cfg, ci) => {
       const col = cfgColors[ci % cfgColors.length];
       const borderR = ci < configs.length - 1 ? '2px solid #2d3f56' : '1px solid #2d3f56';
@@ -621,14 +624,13 @@ async function loadSASales() {
 
       brRows.forEach((row, ri) => {
         rowIdx++;
-        const rowBg = rowIdx % 2 === 0 ? 'background:rgba(15,23,42,.4);' : '';
-        html += `<tr style="${rowBg}">`;
-        html += `<td style="${tdBase}color:#64748b;font-weight:700;border-right:1px solid #2d3f56">${rowIdx}</td>`;
-        // 據點 badge（首行顯示，後續合併視覺）
-        html += `<td style="${tdBase}border-right:1px solid #2d3f56">
+        html += `<tr>`;
+        const rowBgColor = rowIdx % 2 === 0 ? '#0e1a29' : '#111827';
+        html += `<td style="${tdBase}${stickyTd(0, rowBgColor, 'color:#64748b;font-weight:700;border-right:1px solid #2d3f56;width:40px')}">${rowIdx}</td>`;
+        html += `<td style="${tdBase}${stickyTd(40, rowBgColor, 'border-right:1px solid #2d3f56;width:70px')}">
           <span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:${brColor}22;color:${brColor}">${br}</span>
         </td>`;
-        html += `<td style="${tdBase}font-weight:600;border-right:2px solid #2d3f56">${row.sa_name}</td>`;
+        html += `<td style="${tdBase}${stickyTd(110, rowBgColor, 'font-weight:600;border-right:2px solid #374151;min-width:130px')}">${row.sa_name}</td>`;
 
         configs.forEach((cfg, ci) => {
           const c = row.configs[cfg.id];
@@ -654,12 +656,13 @@ async function loadSASales() {
         const sales = brRows.reduce((s,r) => s + (r.configs[cfg.id]?.sales || 0), 0);
         return { qty, sales };
       });
-      html += `<tr style="background:rgba(${brColor === '#3b82f6'?'59,130,246':brColor==='#10b981'?'16,185,129':'245,158,11'},.07);border-top:1px solid ${brColor}44">`;
-      html += `<td style="${tdBase}border-right:1px solid #2d3f56"></td>`;
-      html += `<td style="${tdBase}border-right:1px solid #2d3f56">
+      const subBg = brColor === '#3b82f6' ? 'rgba(59,130,246,.1)' : brColor==='#10b981' ? 'rgba(16,185,129,.1)' : 'rgba(245,158,11,.1)';
+      html += `<tr style="background:${subBg};border-top:1px solid ${brColor}44">`;
+      html += `<td style="${tdBase}${stickyTd(0, 'transparent', 'border-right:1px solid #2d3f56')}"></td>`;
+      html += `<td style="${tdBase}${stickyTd(40, 'transparent', 'border-right:1px solid #2d3f56')}">
         <span style="font-size:11px;font-weight:800;color:${brColor}">${br} 小計</span>
       </td>`;
-      html += `<td style="${tdBase}font-size:12px;color:#64748b;border-right:2px solid #2d3f56">${brRows.length} 人</td>`;
+      html += `<td style="${tdBase}${stickyTd(110, 'transparent', 'font-size:12px;color:#64748b;border-right:2px solid #374151')}">${brRows.length} 人</td>`;
       brTotals.forEach((t, ci) => {
         const borderR = ci < configs.length - 1 ? '2px solid #2d3f56' : '';
         html += `<td style="${tdNum}color:#94a3b8;font-weight:700;font-size:12px">${t.qty>0?t.qty.toLocaleString(undefined,{maximumFractionDigits:1}):'—'}</td>`;
@@ -670,9 +673,9 @@ async function loadSASales() {
 
     // 全廠合計列
     html += `<tr style="background:#1e293b;border-top:2px solid #3b82f6">`;
-    html += `<td style="${tdBase}border-right:1px solid #2d3f56"></td>`;
-    html += `<td style="${tdBase}border-right:1px solid #2d3f56"></td>`;
-    html += `<td style="${tdBase}font-size:13px;font-weight:800;color:#fff;border-right:2px solid #2d3f56">全廠合計</td>`;
+    html += `<td style="${tdBase}${stickyTd(0,'#1e293b','border-right:1px solid #2d3f56')}"></td>`;
+    html += `<td style="${tdBase}${stickyTd(40,'#1e293b','border-right:1px solid #2d3f56')}"></td>`;
+    html += `<td style="${tdBase}${stickyTd(110,'#1e293b','font-size:13px;font-weight:800;color:#fff;border-right:2px solid #374151')}">全廠合計</td>`;
     configs.forEach((cfg, ci) => {
       const t = colTotals[cfg.id] || { qty:0, sales:0 };
       const borderR = ci < configs.length - 1 ? '2px solid #2d3f56' : '';
