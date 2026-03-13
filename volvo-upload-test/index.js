@@ -152,6 +152,32 @@ const initDatabase = async () => {
       )
     `);
 
+    // ── Migration：補齊 business_query 可能缺少的欄位（舊表升級用）──
+    const bqCols = [
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS work_order      VARCHAR(30)`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS open_time       TIMESTAMPTZ`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS settle_date     DATE`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS plate_no        VARCHAR(20)`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS vin             VARCHAR(30)`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS status          VARCHAR(20)`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS repair_item     VARCHAR(200)`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS service_advisor VARCHAR(50)`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS assigned_tech   VARCHAR(50)`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS repair_tech     VARCHAR(50)`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS repair_type     VARCHAR(50)`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS car_series      VARCHAR(50)`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS car_model       VARCHAR(50)`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS model_year      VARCHAR(10)`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS owner           VARCHAR(100)`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS is_ev           VARCHAR(10)`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS mileage_in      INTEGER`,
+      `ALTER TABLE business_query ADD COLUMN IF NOT EXISTS mileage_out     INTEGER`,
+    ];
+    for (const sql of bqCols) {
+      await client.query(sql);
+    }
+    console.log('[initDB] ✅ business_query 欄位補齊完成');
+
     // parts_catalog（零配件比對 — 以零件編號為主鍵，upsert）
     await client.query(`
       CREATE TABLE IF NOT EXISTS parts_catalog (
@@ -200,18 +226,15 @@ const parseDate = (val) => {
   return null;
 };
 
-// 解析日期時間，支援 "2026-03-12 09:24" 或 "2026/03/12 09:24:00" 等格式
 const parseDateTime = (val) => {
   if (!val) return null;
   if (val instanceof Date) return isNaN(val) ? null : val.toISOString();
   const s = String(val).trim();
-  // 匹配 YYYY-MM-DD HH:MM 或 YYYY/MM/DD HH:MM:SS
   const m = s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})[\s T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
   if (m) {
     const [, y, mo, d, h, mi, sec] = m;
     return `${y}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}T${h.padStart(2,'0')}:${mi}:${(sec||'00')}+08:00`;
   }
-  // 只有日期沒有時間
   const dm = s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
   if (dm) return `${dm[1]}-${dm[2].padStart(2,'0')}-${dm[3].padStart(2,'0')}T00:00:00+08:00`;
   return null;
@@ -248,7 +271,6 @@ const detectPeriod = (filename) => {
 // ============================================================
 // 各類解析
 // ============================================================
-// 備註列過濾（Excel 底部說明行，工單號含中文則跳過）
 const isNoteRow = (val) => {
   const s = String(val || '').trim();
   if (!s || s === 'undefined') return true;
@@ -259,44 +281,44 @@ const isNoteRow = (val) => {
 const parseRepairIncome = (rows, branch, period) => rows
   .filter(r => !isNoteRow(pick(r, '工作單號', '工單號')))
   .map(r => ({
-  period, branch,
-  work_order: String(pick(r, '工作單號', '工單號')).trim(),
-  settle_date: parseDate(pick(r, '結算日期')),
-  customer: String(pick(r, '客戶名稱', '客戶')).trim(),
-  plate_no: String(pick(r, '車牌號碼', '車牌')).trim(),
-  account_type_code: String(pick(r, '帳類代碼')).trim(),
-  account_type: String(pick(r, '帳類')).trim(),
-  parts_income: num(pick(r, '零件收入')),
-  accessories_income: num(pick(r, '配件收入')),
-  boutique_income: num(pick(r, '精品收入')),
-  engine_wage: num(pick(r, '引擎工資', '工資收入')),
-  bodywork_income: num(pick(r, '鈑金收入')),
-  paint_income: num(pick(r, '烤漆收入')),
-  carwash_income: num(pick(r, '洗車美容收入', '洗車收入')),
-  outsource_income: num(pick(r, '外包收入')),
-  addon_income: num(pick(r, '附加服務收入', '附加服務')),
-  total_untaxed: num(pick(r, '收入合計（未稅）', '收入合計(未稅)', '收入合計')),
-  total_taxed: num(pick(r, '收入合計(含稅)', '收入合計（含稅）')),
-  parts_cost: num(pick(r, '零件成本（未稅）', '零件成本(未稅)', '零件成本')),
-  service_advisor: String(pick(r, '服務顧問', '接待員')).trim(),
-}));
+    period, branch,
+    work_order: String(pick(r, '工作單號', '工單號')).trim(),
+    settle_date: parseDate(pick(r, '結算日期')),
+    customer: String(pick(r, '客戶名稱', '客戶')).trim(),
+    plate_no: String(pick(r, '車牌號碼', '車牌')).trim(),
+    account_type_code: String(pick(r, '帳類代碼')).trim(),
+    account_type: String(pick(r, '帳類')).trim(),
+    parts_income: num(pick(r, '零件收入')),
+    accessories_income: num(pick(r, '配件收入')),
+    boutique_income: num(pick(r, '精品收入')),
+    engine_wage: num(pick(r, '引擎工資', '工資收入')),
+    bodywork_income: num(pick(r, '鈑金收入')),
+    paint_income: num(pick(r, '烤漆收入')),
+    carwash_income: num(pick(r, '洗車美容收入', '洗車收入')),
+    outsource_income: num(pick(r, '外包收入')),
+    addon_income: num(pick(r, '附加服務收入', '附加服務')),
+    total_untaxed: num(pick(r, '收入合計（未稅）', '收入合計(未稅)', '收入合計')),
+    total_taxed: num(pick(r, '收入合計(含稅)', '收入合計（含稅）')),
+    parts_cost: num(pick(r, '零件成本（未稅）', '零件成本(未稅)', '零件成本')),
+    service_advisor: String(pick(r, '服務顧問', '接待員')).trim(),
+  }));
 
 const parseTechPerformance = (rows, branch, period) => rows
   .filter(r => !isNoteRow(pick(r, '工作單號', '工單號')))
   .map(r => ({
-  period, branch,
-  tech_name_raw: String(pick(r, '技師姓名', '姓名')).trim(),
-  tech_name_clean: String(pick(r, '技師姓名', '姓名')).trim().replace(/\s+/g, ''),
-  dispatch_date: parseDate(pick(r, '出廠日期')),
-  work_order: String(pick(r, '工作單號', '工單號')).trim(),
-  work_code: String(pick(r, '維修工時代碼', '工時代碼')).trim(),
-  task_content: String(pick(r, '作業內容')).trim(),
-  standard_hours: num(pick(r, '標準工時')),
-  wage: num(pick(r, '工資')),
-  account_type: String(pick(r, '帳類')).trim(),
-  discount: num(pick(r, '折扣')),
-  wage_category: String(pick(r, '工資類別')).trim(),
-}));
+    period, branch,
+    tech_name_raw: String(pick(r, '技師姓名', '姓名')).trim(),
+    tech_name_clean: String(pick(r, '技師姓名', '姓名')).trim().replace(/\s+/g, ''),
+    dispatch_date: parseDate(pick(r, '出廠日期')),
+    work_order: String(pick(r, '工作單號', '工單號')).trim(),
+    work_code: String(pick(r, '維修工時代碼', '工時代碼')).trim(),
+    task_content: String(pick(r, '作業內容')).trim(),
+    standard_hours: num(pick(r, '標準工時')),
+    wage: num(pick(r, '工資')),
+    account_type: String(pick(r, '帳類')).trim(),
+    discount: num(pick(r, '折扣')),
+    wage_category: String(pick(r, '工資類別')).trim(),
+  }));
 
 const parsePartsSales = (rows, branch, period) => rows.map(r => {
   const rowBranch = branch || (() => {
@@ -354,7 +376,6 @@ const parseBusinessQuery = (rows, branch, period) => rows.map(r => {
   };
 });
 
-// parsePartsCatalog
 const parsePartsCatalog = (rows) => rows
   .filter(r => {
     const pn = String(pick(r, '零件編號', '料號') || '').trim();
@@ -395,7 +416,6 @@ const batchInsert = async (client, table, cols, rows) => {
   return total;
 };
 
-// upsertPartsCatalog
 const upsertPartsCatalog = async (client, rows) => {
   let count = 0;
   const BATCH = 200;
@@ -439,7 +459,6 @@ app.post('/api/upload', upload.array('files', 8), async (req, res) => {
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
-      // 印出前3列欄位名稱供除錯
       if (rawRows.length > 0) {
         console.log(`[${filename}] 欄位: ${Object.keys(rawRows[0]).join(' | ')}`);
       }
@@ -560,7 +579,6 @@ app.get('/api/counts', async (req, res) => {
   }
 });
 
-// 查看最新上傳歷史
 app.get('/api/history', async (req, res) => {
   try {
     const r = await pool.query('SELECT * FROM upload_history ORDER BY created_at DESC LIMIT 20');
@@ -570,7 +588,6 @@ app.get('/api/history', async (req, res) => {
   }
 });
 
-// Health check
 app.get('/api/health', async (req, res) => {
   try {
     await pool.query('SELECT 1');
@@ -580,9 +597,6 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// ============================================================
-// 啟動
-// ============================================================
 // ============================================================
 // 統計 API
 // ============================================================
@@ -598,7 +612,6 @@ app.get('/api/stats/repair', async (req, res) => {
     if (branch) { conditions.push(`branch = $${idx++}`); params.push(branch); }
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
-    // 各據點/帳類彙總
     const summary = await pool.query(`
       SELECT
         branch,
@@ -616,7 +629,6 @@ app.get('/api/stats/repair', async (req, res) => {
       ORDER BY branch, total_untaxed DESC
     `, params);
 
-    // SA 業績彙總
     const bySA = await pool.query(`
       SELECT
         branch,
@@ -631,7 +643,6 @@ app.get('/api/stats/repair', async (req, res) => {
       ORDER BY total_untaxed DESC
     `, params);
 
-    // 各據點合計
     const totals = await pool.query(`
       SELECT
         branch,
@@ -705,7 +716,6 @@ app.get('/api/stats/parts', async (req, res) => {
       ORDER BY branch, total_sales DESC
     `, params);
 
-    // 銷售金額前20名零件
     const topParts = await pool.query(`
       SELECT
         part_number, part_name, part_type,
@@ -750,14 +760,13 @@ app.get('/api/stats/trend', async (req, res) => {
 app.get('/api/stats/daily', async (req, res) => {
   try {
     const { period, branch } = req.query;
-    const conditions = [`repair_type NOT ILIKE 'PDI'`, `open_time IS NOT NULL`];
+    const conditions = [`repair_type NOT ILIKE '%PDI%'`, `open_time IS NOT NULL`];
     const params = [];
     let idx = 1;
     if (period) { conditions.push(`period = $${idx++}`); params.push(period); }
     if (branch) { conditions.push(`branch = $${idx++}`); params.push(branch); }
     const where = 'WHERE ' + conditions.join(' AND ');
 
-    // 每日各據點台數（用開單時間 = 進廠時間）
     const daily = await pool.query(`
       SELECT
         open_time::date AS arrive_date,
@@ -768,7 +777,6 @@ app.get('/api/stats/daily', async (req, res) => {
       ORDER BY arrive_date, branch
     `, params);
 
-    // 各據點彙總：總台數、有效工作天、日均
     const summary = await pool.query(`
       SELECT
         branch,
@@ -805,7 +813,9 @@ app.get('/api/periods', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-
+// ============================================================
+// 啟動
+// ============================================================
 initDatabase()
   .then(() => {
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
