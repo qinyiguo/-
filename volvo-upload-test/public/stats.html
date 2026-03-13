@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Volvo 營運統計</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+
+  .nav { background: #1e293b; border-bottom: 1px solid #2d3f56; padding: 0 24px; display: flex; align-items: center; gap: 0; }
+  .nav-brand { font-size: 15px; font-weight: 700; color: #fff; padding: 16px 0; margin-right: 24px; }
+  .nav-link { padding: 16px 16px; color: #64748b; font-size: 13px; font-weight: 600; text-decoration: none; border-bottom: 2px solid transparent; }
+  .nav-link:hover { color: #e2e8f0; }
+  .nav-link.active { color: #3b82f6; border-bottom-color: #3b82f6; }
+
+  .container { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+  .filter-bar { display: flex; gap: 10px; align-items: center; background: #1e293b; border: 1px solid #2d3f56; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .filter-bar label { font-size: 12px; color: #64748b; font-weight: 600; }
+  .filter-bar select { background: #0f172a; border: 1px solid #2d3f56; color: #e2e8f0; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+  .btn { padding: 7px 16px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-primary { background: #3b82f6; color: #fff; }
+  .btn-primary:hover { background: #2563eb; }
+
+  .tabs { display: flex; gap: 2px; background: #1e293b; border-radius: 8px; padding: 3px; margin-bottom: 20px; }
+  .tab { padding: 8px 18px; border: none; background: transparent; color: #64748b; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px; }
+  .tab:hover { color: #e2e8f0; background: #253347; }
+  .tab.active { background: #3b82f6; color: #fff; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .kpi-card { background: #1e293b; border: 1px solid #2d3f56; border-radius: 10px; padding: 18px; }
+  .kpi-label { font-size: 12px; color: #64748b; margin-bottom: 6px; }
+  .kpi-value { font-size: 26px; font-weight: 800; color: #fff; }
+  .kpi-sub { font-size: 12px; color: #64748b; margin-top: 4px; }
+  .kpi-green { color: #10b981; }
+  .kpi-blue { color: #3b82f6; }
+  .kpi-yellow { color: #f59e0b; }
+
+  .card { background: #1a2332; border: 1px solid #2d3f56; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .card-title { font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 14px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #0f172a; color: #64748b; font-size: 12px; font-weight: 600; text-align: left; padding: 10px 12px; border-bottom: 1px solid #2d3f56; white-space: nowrap; }
+  td { padding: 9px 12px; border-bottom: 1px solid rgba(45,63,86,.4); }
+  tr:hover td { background: rgba(37,51,71,.5); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid #2d3f56; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .badge-blue { background: rgba(59,130,246,.15); color: #3b82f6; }
+  .badge-green { background: rgba(16,185,129,.15); color: #10b981; }
+  .badge-yellow { background: rgba(245,158,11,.15); color: #f59e0b; }
+  .badge-purple { background: rgba(139,92,246,.15); color: #8b5cf6; }
+
+  .empty { text-align: center; padding: 48px; color: #64748b; font-size: 14px; }
+  .loading { text-align: center; padding: 48px; color: #64748b; }
+  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #2d3f56; border-top-color: #3b82f6; border-radius: 50%; animation: spin .7s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .rank-no { font-weight: 800; color: #64748b; width: 30px; }
+  .rank-1 { color: #f59e0b; }
+  .rank-2 { color: #94a3b8; }
+  .rank-3 { color: #b45309; }
+
+  .bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .bar-bg { flex: 1; background: #0f172a; border-radius: 4px; height: 6px; min-width: 60px; }
+  .bar-fill { height: 6px; border-radius: 4px; background: #3b82f6; }
+  .bar-fill.green { background: #10b981; }
+  .bar-fill.yellow { background: #f59e0b; }
+
+  .trend-row td { font-size: 12px; }
+  .up { color: #10b981; }
+  .down { color: #ef4444; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <span class="nav-brand">🚗 Volvo 營運統計</span>
+  <a href="/" class="nav-link">📤 上傳</a>
+  <a href="/stats.html" class="nav-link active">📊 統計</a>
+</nav>
+
+<div class="container">
+  <!-- 篩選器 -->
+  <div class="filter-bar">
+    <label>期間</label>
+    <select id="selPeriod">
+      <option value="">全部期間</option>
+    </select>
+    <label>據點</label>
+    <select id="selBranch">
+      <option value="">全部</option>
+      <option value="AMA">AMA</option>
+      <option value="AMC">AMC</option>
+      <option value="AMD">AMD</option>
+    </select>
+    <button class="btn btn-primary" onclick="loadAll()">查詢</button>
+    <span id="lastUpdate" style="margin-left:auto;font-size:12px;color:#64748b"></span>
+  </div>
+
+  <!-- 分頁 -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('repair')">🔧 維修收入</button>
+    <button class="tab" onclick="switchTab('tech')">👨‍🔧 技師工資</button>
+    <button class="tab" onclick="switchTab('parts')">🔩 零件銷售</button>
+    <button class="tab" onclick="switchTab('trend')">📈 月份趨勢</button>
+  </div>
+
+  <!-- 維修收入 -->
+  <div id="tab-repair">
+    <div id="repairKPI" class="kpi-grid"></div>
+    <div class="card">
+      <div class="card-title">📋 SA 業績排名</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>據點</th><th>服務顧問</th><th class="num">出廠台數</th><th class="num">總營收(未稅)</th><th class="num">引擎工資</th><th class="num">零件收入</th><th class="num">佔比</th></tr></thead>
+          <tbody id="tbSA"><tr><td colspan="8" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">📂 帳類分析</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>據點</th><th>帳類</th><th class="num">工單數</th><th class="num">總營收</th><th class="num">零件</th><th class="num">引擎工資</th><th class="num">鈑烤</th><th class="num">零件成本</th></tr></thead>
+          <tbody id="tbAccount"><tr><td colspan="8" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 技師工資 -->
+  <div id="tab-tech" style="display:none">
+    <div id="techKPI" class="kpi-grid"></div>
+    <div class="card">
+      <div class="card-title">🏆 技師工資排名</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>據點</th><th>技師</th><th class="num">台數</th><th class="num">標準工時</th><th class="num">總工資</th><th class="num">美容工資</th><th class="num">淨工資</th><th>工資佔比</th></tr></thead>
+          <tbody id="tbTech"><tr><td colspan="9" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 零件銷售 -->
+  <div id="tab-parts" style="display:none">
+    <div id="partsKPI" class="kpi-grid"></div>
+    <div class="card">
+      <div class="card-title">📦 零件種類彙總</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>據點</th><th>種類</th><th class="num">筆數</th><th class="num">總數量</th><th class="num">銷售金額</th><th class="num">成本</th><th class="num">毛利</th><th class="num">毛利率</th></tr></thead>
+          <tbody id="tbPartsType"><tr><td colspan="8" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">🥇 銷售金額 Top 20 零件</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>零件編號</th><th>零件名稱</th><th>種類</th><th class="num">總數量</th><th class="num">銷售金額</th></tr></thead>
+          <tbody id="tbTopParts"><tr><td colspan="6" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 月份趨勢 -->
+  <div id="tab-trend" style="display:none">
+    <div class="card">
+      <div class="card-title">📈 各月份維修收入趨勢</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>期間</th><th>據點</th><th class="num">出廠台數</th><th class="num">總營收</th><th class="num">引擎工資</th><th class="num">零件收入</th><th class="num">環比</th></tr></thead>
+          <tbody id="tbTrend"><tr><td colspan="7" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentTab = 'repair';
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', ['repair','tech','parts','trend'][i] === tab);
+  });
+  ['repair','tech','parts','trend'].forEach(t => {
+    document.getElementById(`tab-${t}`).style.display = t === tab ? '' : 'none';
+  });
+}
+
+const fmt = (v, k=0) => {
+  const n = parseFloat(v || 0);
+  if (k) return Math.round(n/1000).toLocaleString() + 'K';
+  return Math.round(n).toLocaleString();
+};
+const fmtPct = v => (parseFloat(v||0)*100).toFixed(1) + '%';
+const badgeType = (t) => {
+  const map = {'零件':'badge-blue','配件':'badge-green','精品':'badge-yellow','一般':'badge-blue'};
+  return map[t] || 'badge-purple';
+};
+
+async function loadPeriods() {
+  try {
+    const res = await fetch('/api/periods');
+    const periods = await res.json();
+    const sel = document.getElementById('selPeriod');
+    periods.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p; opt.textContent = `${p.slice(0,4)}年${p.slice(4)}月`;
+      sel.appendChild(opt);
+    });
+    if (periods.length) sel.value = periods[0]; // 預設最新期間
+  } catch(e) {}
+}
+
+async function loadAll() {
+  const period = document.getElementById('selPeriod').value;
+  const branch = document.getElementById('selBranch').value;
+  document.getElementById('lastUpdate').textContent = '更新中...';
+  await Promise.all([loadRepair(period, branch), loadTech(period, branch), loadParts(period, branch), loadTrend(branch)]);
+  document.getElementById('lastUpdate').textContent = `更新於 ${new Date().toLocaleTimeString('zh-TW')}`;
+}
+
+async function loadRepair(period, branch) {
+  try {
+    const params = new URLSearchParams();
+    if (period) params.set('period', period);
+    if (branch) params.set('branch', branch);
+    const res = await fetch(`/api/stats/repair?${params}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const totals = data.totals;
+    const totalRevenue = totals.reduce((s, r) => s + parseFloat(r.total_untaxed||0), 0);
+    const totalCars = totals.reduce((s, r) => s + parseInt(r.car_count||0), 0);
+    const totalEngine = totals.reduce((s, r) => s + parseFloat(r.engine_wage||0), 0);
+    const totalParts = totals.reduce((s, r) => s + parseFloat(r.parts_income||0), 0);
+    const totalCost = totals.reduce((s, r) => s + parseFloat(r.parts_cost||0), 0);
+
+    document.getElementById('repairKPI').innerHTML = `
+      <div class="kpi-card"><div class="kpi-label">總營收（未稅）</div><div class="kpi-value kpi-green">${fmt(totalRevenue, 1)}</div><div class="kpi-sub">元（千）</div></div>
+      <div class="kpi-card"><div class="kpi-label">出廠台數</div><div class="kpi-value kpi-blue">${totalCars.toLocaleString()}</div><div class="kpi-sub">台</div></div>
+      <div class="kpi-card"><div class="kpi-label">引擎工資</div><div class="kpi-value">${fmt(totalEngine, 1)}</div><div class="kpi-sub">K</div></div>
+      <div class="kpi-card"><div class="kpi-label">零件收入</div><div class="kpi-value">${fmt(totalParts, 1)}</div><div class="kpi-sub">K</div></div>
+      <div class="kpi-card"><div class="kpi-label">零件成本</div><div class="kpi-value kpi-yellow">${fmt(totalCost, 1)}</div><div class="kpi-sub">K</div></div>
+      ${totals.map(t => `
+        <div class="kpi-card">
+          <div class="kpi-label">${t.branch} 營收</div>
+          <div class="kpi-value">${fmt(t.total_untaxed, 1)}</div>
+          <div class="kpi-sub">${parseInt(t.car_count||0)}台 | 引擎${fmt(t.engine_wage,1)}K</div>
+        </div>
+      `).join('')}
+    `;
+
+    const saRows = data.bySA;
+    const maxRev = Math.max(...saRows.map(r => parseFloat(r.total_untaxed||0)));
+    document.getElementById('tbSA').innerHTML = saRows.length ? saRows.map((r, i) => `
+      <tr>
+        <td class="rank-no ${i<3?'rank-'+(i+1):''}">${i+1}</td>
+        <td><span class="badge badge-blue">${r.branch}</span></td>
+        <td style="font-weight:600">${r.service_advisor}</td>
+        <td class="num">${parseInt(r.car_count||0)}</td>
+        <td class="num" style="font-weight:700;color:#10b981">${fmt(r.total_untaxed)}</td>
+        <td class="num">${fmt(r.engine_wage)}</td>
+        <td class="num">${fmt(r.parts_income)}</td>
+        <td style="min-width:120px">
+          <div class="bar-wrap">
+            <div class="bar-bg"><div class="bar-fill" style="width:${maxRev>0?(parseFloat(r.total_untaxed)/maxRev*100).toFixed(0):0}%"></div></div>
+            <span style="font-size:11px;color:#64748b">${maxRev>0?(parseFloat(r.total_untaxed)/maxRev*100).toFixed(0):0}%</span>
+          </div>
+        </td>
+      </tr>
+    `).join('') : '<tr><td colspan="8" class="empty">無資料</td></tr>';
+
+    document.getElementById('tbAccount').innerHTML = data.summary.length ? data.summary.map(r => `
+      <tr>
+        <td><span class="badge badge-blue">${r.branch}</span></td>
+        <td><span class="badge ${badgeType(r.account_type)}">${r.account_type||'-'}</span></td>
+        <td class="num">${parseInt(r.work_order_count||0).toLocaleString()}</td>
+        <td class="num" style="font-weight:700">${fmt(r.total_untaxed)}</td>
+        <td class="num">${fmt(r.parts_income)}</td>
+        <td class="num">${fmt(r.engine_wage)}</td>
+        <td class="num">${fmt(r.bodywork_income)}</td>
+        <td class="num" style="color:#f59e0b">${fmt(r.parts_cost)}</td>
+      </tr>
+    `).join('') : '<tr><td colspan="8" class="empty">無資料</td></tr>';
+
+  } catch(e) {
+    document.getElementById('tbSA').innerHTML = `<tr><td colspan="8" style="color:#ef4444;padding:16px">${e.message}</td></tr>`;
+  }
+}
+
+async function loadTech(period, branch) {
+  try {
+    const params = new URLSearchParams();
+    if (period) params.set('period', period);
+    if (branch) params.set('branch', branch);
+    const res = await fetch(`/api/stats/tech?${params}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const rows = data.ranking;
+    const totalWage = rows.reduce((s, r) => s + parseFloat(r.total_wage||0), 0);
+    const maxWage = Math.max(...rows.map(r => parseFloat(r.total_wage||0)));
+
+    document.getElementById('techKPI').innerHTML = `
+      <div class="kpi-card"><div class="kpi-label">技師人數</div><div class="kpi-value kpi-blue">${rows.length}</div><div class="kpi-sub">人</div></div>
+      <div class="kpi-card"><div class="kpi-label">工資總額</div><div class="kpi-value kpi-green">${fmt(totalWage,1)}</div><div class="kpi-sub">K</div></div>
+      <div class="kpi-card"><div class="kpi-label">平均工資</div><div class="kpi-value">${rows.length?fmt(totalWage/rows.length):0}</div><div class="kpi-sub">元/人</div></div>
+    `;
+
+    document.getElementById('tbTech').innerHTML = rows.length ? rows.map((r, i) => `
+      <tr>
+        <td class="rank-no ${i<3?'rank-'+(i+1):''}">${i+1}</td>
+        <td><span class="badge badge-blue">${r.branch}</span></td>
+        <td style="font-weight:600">${r.tech_name_clean}</td>
+        <td class="num">${parseInt(r.car_count||0)}</td>
+        <td class="num">${parseFloat(r.total_hours||0).toFixed(1)}</td>
+        <td class="num" style="font-weight:700;color:#10b981">${fmt(r.total_wage)}</td>
+        <td class="num" style="color:#f59e0b">${fmt(r.beauty_wage)}</td>
+        <td class="num" style="color:#3b82f6">${fmt(r.net_wage)}</td>
+        <td style="min-width:120px">
+          <div class="bar-wrap">
+            <div class="bar-bg"><div class="bar-fill green" style="width:${maxWage>0?(parseFloat(r.total_wage)/maxWage*100).toFixed(0):0}%"></div></div>
+            <span style="font-size:11px;color:#64748b">${totalWage>0?(parseFloat(r.total_wage)/totalWage*100).toFixed(1):0}%</span>
+          </div>
+        </td>
+      </tr>
+    `).join('') : '<tr><td colspan="9" class="empty">無資料</td></tr>';
+  } catch(e) {
+    document.getElementById('tbTech').innerHTML = `<tr><td colspan="9" style="color:#ef4444;padding:16px">${e.message}</td></tr>`;
+  }
+}
+
+async function loadParts(period, branch) {
+  try {
+    const params = new URLSearchParams();
+    if (period) params.set('period', period);
+    if (branch) params.set('branch', branch);
+    const res = await fetch(`/api/stats/parts?${params}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const byType = data.byType;
+    const totalSales = byType.reduce((s, r) => s + parseFloat(r.total_sales||0), 0);
+    const totalCost = byType.reduce((s, r) => s + parseFloat(r.total_cost||0), 0);
+
+    document.getElementById('partsKPI').innerHTML = `
+      <div class="kpi-card"><div class="kpi-label">銷售總額</div><div class="kpi-value kpi-green">${fmt(totalSales,1)}</div><div class="kpi-sub">K</div></div>
+      <div class="kpi-card"><div class="kpi-label">成本總額</div><div class="kpi-value kpi-yellow">${fmt(totalCost,1)}</div><div class="kpi-sub">K</div></div>
+      <div class="kpi-card"><div class="kpi-label">毛利</div><div class="kpi-value kpi-blue">${fmt(totalSales-totalCost,1)}</div><div class="kpi-sub">K</div></div>
+      <div class="kpi-card"><div class="kpi-label">毛利率</div><div class="kpi-value">${totalSales>0?((totalSales-totalCost)/totalSales*100).toFixed(1):0}%</div><div class="kpi-sub"></div></div>
+    `;
+
+    document.getElementById('tbPartsType').innerHTML = byType.length ? byType.map(r => {
+      const sales = parseFloat(r.total_sales||0);
+      const cost = parseFloat(r.total_cost||0);
+      const margin = sales > 0 ? ((sales-cost)/sales*100) : 0;
+      return `<tr>
+        <td><span class="badge badge-blue">${r.branch}</span></td>
+        <td><span class="badge ${badgeType(r.part_type)}">${r.part_type||'-'}</span></td>
+        <td class="num">${parseInt(r.count||0).toLocaleString()}</td>
+        <td class="num">${parseFloat(r.total_qty||0).toLocaleString()}</td>
+        <td class="num" style="font-weight:700">${fmt(sales)}</td>
+        <td class="num">${fmt(cost)}</td>
+        <td class="num" style="color:#10b981">${fmt(sales-cost)}</td>
+        <td class="num" style="color:${margin>20?'#10b981':margin>10?'#f59e0b':'#ef4444'}">${margin.toFixed(1)}%</td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="8" class="empty">無資料</td></tr>';
+
+    document.getElementById('tbTopParts').innerHTML = data.topParts.length ? data.topParts.map((r, i) => `
+      <tr>
+        <td class="rank-no ${i<3?'rank-'+(i+1):''}">${i+1}</td>
+        <td style="font-family:monospace;font-size:12px">${r.part_number}</td>
+        <td>${r.part_name||'-'}</td>
+        <td><span class="badge ${badgeType(r.part_type)}">${r.part_type||'-'}</span></td>
+        <td class="num">${parseFloat(r.total_qty||0).toLocaleString()}</td>
+        <td class="num" style="font-weight:700;color:#10b981">${fmt(r.total_sales)}</td>
+      </tr>
+    `).join('') : '<tr><td colspan="6" class="empty">無資料</td></tr>';
+  } catch(e) {
+    document.getElementById('tbPartsType').innerHTML = `<tr><td colspan="8" style="color:#ef4444;padding:16px">${e.message}</td></tr>`;
+  }
+}
+
+async function loadTrend(branch) {
+  try {
+    const params = new URLSearchParams();
+    if (branch) params.set('branch', branch);
+    const res = await fetch(`/api/stats/trend?${params}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const rows = data.trend;
+    // 計算環比
+    const prevMap = {};
+    document.getElementById('tbTrend').innerHTML = rows.length ? rows.map((r, i) => {
+      const key = r.branch;
+      const prev = prevMap[key];
+      const cur = parseFloat(r.total_untaxed||0);
+      const pct = prev ? ((cur - prev) / prev * 100) : null;
+      prevMap[key] = cur;
+      return `<tr class="trend-row">
+        <td>${r.period.slice(0,4)}年${r.period.slice(4)}月</td>
+        <td><span class="badge badge-blue">${r.branch}</span></td>
+        <td class="num">${parseInt(r.car_count||0)}</td>
+        <td class="num" style="font-weight:700">${fmt(r.total_untaxed)}</td>
+        <td class="num">${fmt(r.engine_wage)}</td>
+        <td class="num">${fmt(r.parts_income)}</td>
+        <td class="num ${pct===null?'':pct>=0?'up':'down'}">${pct===null?'-':(pct>=0?'▲':'▼')+Math.abs(pct).toFixed(1)+'%'}</td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="7" class="empty">無資料</td></tr>';
+  } catch(e) {
+    document.getElementById('tbTrend').innerHTML = `<tr><td colspan="7" style="color:#ef4444;padding:16px">${e.message}</td></tr>`;
+  }
+}
+
+// 初始化
+(async () => {
+  await loadPeriods();
+  await loadAll();
+})();
+</script>
+</body>
+</html>
