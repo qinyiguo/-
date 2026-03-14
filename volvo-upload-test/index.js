@@ -197,16 +197,23 @@ const initDatabase = async () => {
 
     // ── SA 銷售設定表 ──────────────────────────────────────────────
     // filters 欄位為 JSONB 陣列，每個元素：
-    //   { type: 'category_code' | 'function_code' | 'part_number', value: '...' }
+    //   { type: 'category_code' | 'function_code' | 'part_number' | 'part_type', value: '...' }
+    // stat_method: 'amount' | 'quantity' | 'count'
     await client.query(`
       CREATE TABLE IF NOT EXISTS sa_sales_config (
         id           SERIAL PRIMARY KEY,
         config_name  VARCHAR(100) NOT NULL,
         description  TEXT,
         filters      JSONB NOT NULL DEFAULT '[]',
+        stat_method  VARCHAR(20) NOT NULL DEFAULT 'amount',
         created_at   TIMESTAMPTZ DEFAULT NOW(),
         updated_at   TIMESTAMPTZ DEFAULT NOW()
       )
+    `);
+    // 補 migration，舊資料表自動加欄位
+    await client.query(`
+      ALTER TABLE sa_sales_config
+      ADD COLUMN IF NOT EXISTS stat_method VARCHAR(20) NOT NULL DEFAULT 'amount'
     `);
 
     // ── 系統設定表 ──────────────────────────────────────────────
@@ -597,7 +604,7 @@ app.post('/api/upload', upload.array('files', 8), async (req, res) => {
 app.get('/api/sa-config', async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT id, config_name, description, filters, created_at, updated_at
+      `SELECT id, config_name, description, filters, stat_method, created_at, updated_at
        FROM sa_sales_config ORDER BY id`
     );
     res.json(r.rows);
@@ -606,15 +613,17 @@ app.get('/api/sa-config', async (req, res) => {
 
 // 新增設定
 app.post('/api/sa-config', async (req, res) => {
-  const { config_name, description, filters } = req.body;
+  const { config_name, description, filters, stat_method } = req.body;
   if (!config_name) return res.status(400).json({ error: '名稱為必填' });
   if (!Array.isArray(filters) || filters.length === 0)
     return res.status(400).json({ error: '至少需要一個篩選條件' });
+  const validMethods = ['amount', 'quantity', 'count'];
+  const method = validMethods.includes(stat_method) ? stat_method : 'amount';
   try {
     const r = await pool.query(
-      `INSERT INTO sa_sales_config (config_name, description, filters)
-       VALUES ($1, $2, $3) RETURNING *`,
-      [config_name.trim(), description || '', JSON.stringify(filters)]
+      `INSERT INTO sa_sales_config (config_name, description, filters, stat_method)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [config_name.trim(), description || '', JSON.stringify(filters), method]
     );
     res.json(r.rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -622,16 +631,18 @@ app.post('/api/sa-config', async (req, res) => {
 
 // 更新設定
 app.put('/api/sa-config/:id', async (req, res) => {
-  const { config_name, description, filters } = req.body;
+  const { config_name, description, filters, stat_method } = req.body;
   if (!config_name) return res.status(400).json({ error: '名稱為必填' });
   if (!Array.isArray(filters) || filters.length === 0)
     return res.status(400).json({ error: '至少需要一個篩選條件' });
+  const validMethods = ['amount', 'quantity', 'count'];
+  const method = validMethods.includes(stat_method) ? stat_method : 'amount';
   try {
     const r = await pool.query(
       `UPDATE sa_sales_config
-       SET config_name=$1, description=$2, filters=$3, updated_at=NOW()
-       WHERE id=$4 RETURNING *`,
-      [config_name.trim(), description || '', JSON.stringify(filters), req.params.id]
+       SET config_name=$1, description=$2, filters=$3, stat_method=$4, updated_at=NOW()
+       WHERE id=$5 RETURNING *`,
+      [config_name.trim(), description || '', JSON.stringify(filters), method, req.params.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: '找不到設定' });
     res.json(r.rows[0]);
@@ -667,7 +678,6 @@ app.get('/api/sa-config/parts-lookup', async (req, res) => {
       `;
       params = [search];
     } else {
-      // category_code 或 function_code：回傳不重複的值與其覆蓋零件數
       sql = `
         SELECT ${type} AS value,
                COUNT(*) AS part_count,
@@ -695,37 +705,31 @@ app.get('/api/stats/sa-sales', async (req, res) => {
   if (!config_id) return res.status(400).json({ error: '請指定 config_id' });
 
   try {
-    // 取設定
     const cfgRow = await pool.query(`SELECT * FROM sa_sales_config WHERE id=$1`, [config_id]);
     if (!cfgRow.rows.length) return res.status(404).json({ error: '找不到設定' });
     const cfg = cfgRow.rows[0];
-    const filters = cfg.filters; // [{type, value}, ...]
+    const filters = cfg.filters;
 
     if (!filters.length) return res.json({ config: cfg, bySA: [], byPart: [], totals: {} });
 
-    // 把 filters 拆成三類
     const catCodes  = filters.filter(f => f.type === 'category_code').map(f => f.value);
     const funcCodes = filters.filter(f => f.type === 'function_code').map(f => f.value);
     const partNums  = filters.filter(f => f.type === 'part_number').map(f => f.value);
+    const partTypes = filters.filter(f => f.type === 'part_type').map(f => f.value);
 
-    // 動態組 WHERE
     const conds = [];
     const params = [];
     let idx = 1;
 
     if (period)  { conds.push(`ps.period = $${idx++}`); params.push(period); }
     if (branch)  { conds.push(`ps.branch = $${idx++}`); params.push(branch); }
-
-    // 零件篩選：同類型取 OR，不同類型之間取 AND
-    // 例：category_code=93 AND function_code=1832
-    //     或只用 part_number IN (...)
     if (catCodes.length)  { conds.push(`ps.category_code = ANY($${idx++})`); params.push(catCodes); }
     if (funcCodes.length) { conds.push(`ps.function_code  = ANY($${idx++})`); params.push(funcCodes); }
     if (partNums.length)  { conds.push(`ps.part_number    = ANY($${idx++})`); params.push(partNums); }
+    if (partTypes.length) { conds.push(`ps.part_type      = ANY($${idx++})`); params.push(partTypes); }
 
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
 
-    // ── SA 彙總（以 sales_person 為主） ──
     const bySA = await pool.query(`
       SELECT
         ps.branch,
@@ -742,7 +746,6 @@ app.get('/api/stats/sa-sales', async (req, res) => {
       ORDER BY total_sales DESC
     `, params);
 
-    // ── 零件明細彙總（Top 50） ──
     const byPart = await pool.query(`
       SELECT
         ps.part_number,
@@ -761,16 +764,14 @@ app.get('/api/stats/sa-sales', async (req, res) => {
       LIMIT 50
     `, params);
 
-    // ── 期間趨勢（此設定條件下各月份） ──
-    // 用同樣的零件篩選，但忽略 period 條件
     const trendConds = [];
     const trendParams = [];
     let tidx = 1;
     if (branch) { trendConds.push(`ps.branch = $${tidx++}`); trendParams.push(branch); }
-    // 趨勢也用 AND 邏輯（同主查詢）
     if (catCodes.length)  { trendConds.push(`ps.category_code = ANY($${tidx++})`); trendParams.push(catCodes); }
     if (funcCodes.length) { trendConds.push(`ps.function_code  = ANY($${tidx++})`); trendParams.push(funcCodes); }
     if (partNums.length)  { trendConds.push(`ps.part_number    = ANY($${tidx++})`); trendParams.push(partNums); }
+    if (partTypes.length) { trendConds.push(`ps.part_type      = ANY($${tidx++})`); trendParams.push(partTypes); }
     const trendWhere = trendConds.length ? 'WHERE ' + trendConds.join(' AND ') : '';
 
     const trend = await pool.query(`
@@ -785,7 +786,6 @@ app.get('/api/stats/sa-sales', async (req, res) => {
       ORDER BY ps.period, ps.branch
     `, trendParams);
 
-    // ── 合計 ──
     const totals = {
       total_qty:    bySA.rows.reduce((s, r) => s + parseFloat(r.total_qty   || 0), 0),
       total_sales:  bySA.rows.reduce((s, r) => s + parseFloat(r.total_sales || 0), 0),
@@ -1014,7 +1014,7 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
   const { period, branch } = req.query;
   try {
     const cfgRows = await pool.query(
-      `SELECT id, config_name, filters FROM sa_sales_config ORDER BY id`
+      `SELECT id, config_name, filters, stat_method FROM sa_sales_config ORDER BY id`
     );
     const configs = cfgRows.rows;
     if (!configs.length) return res.json({ configs: [], rows: [], colTotals: {} });
@@ -1026,7 +1026,8 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
       const catCodes  = filters.filter(f => f.type === 'category_code').map(f => f.value);
       const funcCodes = filters.filter(f => f.type === 'function_code').map(f => f.value);
       const partNums  = filters.filter(f => f.type === 'part_number').map(f => f.value);
-      if (!catCodes.length && !funcCodes.length && !partNums.length) continue;
+      const partTypes = filters.filter(f => f.type === 'part_type').map(f => f.value);
+      if (!catCodes.length && !funcCodes.length && !partNums.length && !partTypes.length) continue;
 
       const conds = [];
       const params = [];
@@ -1036,6 +1037,7 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
       if (catCodes.length)  { conds.push(`category_code = ANY($${idx++})`); params.push(catCodes); }
       if (funcCodes.length) { conds.push(`function_code  = ANY($${idx++})`); params.push(funcCodes); }
       if (partNums.length)  { conds.push(`part_number    = ANY($${idx++})`); params.push(partNums); }
+      if (partTypes.length) { conds.push(`part_type      = ANY($${idx++})`); params.push(partTypes); }
 
       const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
       const r = await pool.query(`
@@ -1043,7 +1045,8 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
           branch,
           COALESCE(NULLIF(sales_person,''), '（未知）') AS sa_name,
           SUM(sale_qty)           AS qty,
-          SUM(sale_price_untaxed) AS sales
+          SUM(sale_price_untaxed) AS sales,
+          COUNT(*)                AS cnt
         FROM parts_sales ${where}
         GROUP BY branch, sa_name
       `, params);
@@ -1054,6 +1057,7 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
         saMap[key].configs[cfg.id] = {
           qty:   parseFloat(row.qty   || 0),
           sales: parseFloat(row.sales || 0),
+          cnt:   parseInt(row.cnt     || 0),
         };
       }
     }
@@ -1068,9 +1072,9 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
     const colTotals = {};
     for (const cfg of configs) {
       colTotals[cfg.id] = rows.reduce((s, row) => {
-        const c = row.configs[cfg.id] || { qty: 0, sales: 0 };
-        return { qty: s.qty + c.qty, sales: s.sales + c.sales };
-      }, { qty: 0, sales: 0 });
+        const c = row.configs[cfg.id] || { qty: 0, sales: 0, cnt: 0 };
+        return { qty: s.qty + c.qty, sales: s.sales + c.sales, cnt: s.cnt + c.cnt };
+      }, { qty: 0, sales: 0, cnt: 0 });
     }
 
     res.json({ configs, rows, colTotals });
@@ -1083,13 +1087,11 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
 const crypto = require('crypto');
 const SESSION_TOKENS = new Set();
 
-// helper — 從 DB 取目前密碼
 async function getSettingsPassword() {
   const r = await pool.query("SELECT value FROM app_settings WHERE key='settings_password'");
   return r.rows[0]?.value || 'admin1234';
 }
 
-// POST /api/auth/settings  { password }  → { token }
 app.post('/api/auth/settings', async (req, res) => {
   const { password } = req.body;
   if (!password) return res.status(400).json({ error: '請輸入密碼' });
@@ -1097,17 +1099,15 @@ app.post('/api/auth/settings', async (req, res) => {
   if (password !== correct) return res.status(401).json({ error: '密碼錯誤' });
   const token = crypto.randomBytes(24).toString('hex');
   SESSION_TOKENS.add(token);
-  setTimeout(() => SESSION_TOKENS.delete(token), 8 * 60 * 60 * 1000); // 8h
+  setTimeout(() => SESSION_TOKENS.delete(token), 8 * 60 * 60 * 1000);
   res.json({ token });
 });
 
-// GET /api/auth/settings/check?token=...
 app.get('/api/auth/settings/check', (req, res) => {
   const token = req.query.token;
   res.json({ valid: !!(token && SESSION_TOKENS.has(token)) });
 });
 
-// PUT /api/auth/settings/password  { token, currentPassword, newPassword }
 app.put('/api/auth/settings/password', async (req, res) => {
   const { token, currentPassword, newPassword } = req.body;
   if (!token || !SESSION_TOKENS.has(token))
@@ -1121,7 +1121,6 @@ app.put('/api/auth/settings/password', async (req, res) => {
     "UPDATE app_settings SET value=$1 WHERE key='settings_password'",
     [newPassword]
   );
-  // 清除所有現有 session，強迫重新登入
   SESSION_TOKENS.clear();
   res.json({ ok: true });
 });
