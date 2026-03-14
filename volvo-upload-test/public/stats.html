@@ -287,7 +287,7 @@
   <div id="tab-boutique" style="display:none">
     <div style="background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.25);border-radius:8px;padding:10px 14px;font-size:12px;color:#a78bfa;margin-bottom:14px;line-height:1.8">
       💡 <strong>資料來源</strong>：零件銷售明細（parts_sales），品項類型透過<strong>零件型錄（parts_catalog）</strong>比對 part_number 判斷。
-      若無型錄資料，則以零件銷售明細中的 Paycode 欄位判斷。「帳類」欄位對應零件銷售的「帳類」（part_type）欄位。
+      若無型錄資料，則以零件銷售明細中的 Paycode 欄位判斷。「帳類」欄位對應零件銷售的「付款部門」（department）欄位。
     </div>
     <div id="boutiqueKPI" class="kpi-grid"></div>
     <div class="card" style="padding:0;overflow:hidden">
@@ -798,24 +798,30 @@ async function loadBoutiqueAccessories(period, branch) {
     const thN = thB + 'text-align:right;';
     const tdB = 'padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.4);font-size:12px;vertical-align:middle;';
     const tdN = tdB + 'text-align:right;font-variant-numeric:tabular-nums;';
-    const sTh = (l,e='') => `position:sticky;left:${l}px;z-index:3;background:#0f172a;${e}`;
+    // 水平 sticky（左欄固定）
+    const sTh = (l,e='') => `position:sticky;left:${l}px;z-index:5;background:#0f172a;${e}`;
     const sTd = (l,bg='#111827',e='') => `position:sticky;left:${l}px;z-index:2;background:${bg};${e}`;
+    // 垂直 sticky（表頭固定）row1 top:0, row2 top:表頭第一行高度
+    const sThTop0 = `position:sticky;top:0;z-index:4;`;
+    const sThTop1 = `position:sticky;top:32px;z-index:4;`;
+    // 左+上同時固定（左上角固定欄）
+    const sThCorner = (l,e='') => `position:sticky;left:${l}px;top:0;z-index:6;background:#0f172a;${e}`;
 
     let html = `<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>`;
-    html += `<th rowspan="2" style="${thB}${sTh(0,'border-right:1px solid #2d3f56;width:36px')}">#</th>`;
-    html += `<th rowspan="2" style="${thB}${sTh(36,'border-right:1px solid #2d3f56;width:60px')}">據點</th>`;
-    html += `<th rowspan="2" style="${thB}${sTh(96,'border-right:2px solid #374151;min-width:110px')}">銷售人員</th>`;
+    html += `<th rowspan="2" style="${thB}${sThCorner(0,'border-right:1px solid #2d3f56;width:36px')}">#</th>`;
+    html += `<th rowspan="2" style="${thB}${sThCorner(36,'border-right:1px solid #2d3f56;width:60px')}">據點</th>`;
+    html += `<th rowspan="2" style="${thB}${sThCorner(96,'border-right:2px solid #374151;min-width:110px')}">銷售人員</th>`;
     PART_TYPES.forEach((pt, pi) => {
       const col = typeColors[pt]||'#94a3b8';
       const span = depts.length + 1;
       const bdr = pi < PART_TYPES.length-1 ? '2px solid #374151' : '1px solid #2d3f56';
-      html += `<th colspan="${span}" style="${thB}text-align:center;color:${col};border-right:${bdr};border-bottom:1px solid #1e293b">${pt}</th>`;
+      html += `<th colspan="${span}" style="${thB}${sThTop0}text-align:center;color:${col};border-right:${bdr};border-bottom:1px solid #1e293b">${pt}</th>`;
     });
-    html += `<th rowspan="2" style="${thN}color:#10b981;border-left:2px solid #374151">總計(元)</th></tr><tr>`;
+    html += `<th rowspan="2" style="${thN}${sThTop0}color:#10b981;border-left:2px solid #374151">總計(元)</th></tr><tr>`;
     PART_TYPES.forEach((pt, pi) => {
-      depts.forEach(d => { html += `<th style="${thN}font-size:10px;color:#475569;border-right:1px solid #2d3f56">${d}</th>`; });
+      depts.forEach(d => { html += `<th style="${thN}${sThTop1}font-size:10px;color:#475569;border-right:1px solid #2d3f56">${d}</th>`; });
       const bdr = pi < PART_TYPES.length-1 ? '2px solid #374151' : '1px solid #2d3f56';
-      html += `<th style="${thN}color:${typeColors[pt]||'#94a3b8'};font-size:10px;border-right:${bdr}">小計</th>`;
+      html += `<th style="${thN}${sThTop1}color:${typeColors[pt]||'#94a3b8'};font-size:10px;border-right:${bdr}">小計</th>`;
     });
     html += `</tr></thead><tbody>`;
 
@@ -893,6 +899,17 @@ async function loadBoutiqueAccessories(period, branch) {
     html += `</tbody></table>`;
     matrixEl.innerHTML = html;
 
+    // 動態修正第二列 sticky top（等第一列實際渲染後取高度）
+    requestAnimationFrame(() => {
+      const rows = matrixEl.querySelectorAll('thead tr');
+      if (rows.length >= 2) {
+        const row1H = rows[0].getBoundingClientRect().height;
+        rows[1].querySelectorAll('th').forEach(th => {
+          th.style.top = row1H + 'px';
+        });
+      }
+    });
+
   } catch(e) {
     kpiEl.innerHTML    = `<div style="color:#ef4444;padding:12px;grid-column:1/-1">${e.message}</div>`;
     matrixEl.innerHTML = '';
@@ -933,19 +950,22 @@ async function loadSASales() {
     const thNum  = thBase + 'text-align:right;';
     const tdBase = 'padding:9px 14px;border-bottom:1px solid rgba(45,63,86,.4);font-size:13px;vertical-align:middle;';
     const tdNum  = tdBase + 'text-align:right;font-variant-numeric:tabular-nums;';
-    const stTh   = (l, e='') => `position:sticky;left:${l}px;z-index:3;background:#0f172a;${e}`;
+    const stTh   = (l, e='') => `position:sticky;left:${l}px;z-index:5;background:#0f172a;${e}`;
     const stTd   = (l, bg='#111827', e='') => `position:sticky;left:${l}px;z-index:2;background:${bg};${e}`;
+    const saThTop0 = `position:sticky;top:0;z-index:4;`;
+    const saThTop1 = `position:sticky;top:38px;z-index:4;`;
+    const saCorner = (l,e='') => `position:sticky;left:${l}px;top:0;z-index:6;background:#0f172a;${e}`;
     let html = `<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>`;
-    html += `<th style="${thBase}${stTh(0,'border-right:1px solid #2d3f56;width:40px')}" rowspan="2">#</th>`;
-    html += `<th style="${thBase}${stTh(40,'border-right:1px solid #2d3f56;width:70px')}" rowspan="2">據點</th>`;
-    html += `<th style="${thBase}${stTh(110,'border-right:2px solid #374151;min-width:130px')}" rowspan="2">銷售人員</th>`;
+    html += `<th style="${thBase}${saCorner(0,'border-right:1px solid #2d3f56;width:40px')}" rowspan="2">#</th>`;
+    html += `<th style="${thBase}${saCorner(40,'border-right:1px solid #2d3f56;width:70px')}" rowspan="2">據點</th>`;
+    html += `<th style="${thBase}${saCorner(110,'border-right:2px solid #374151;min-width:130px')}" rowspan="2">銷售人員</th>`;
     configs.forEach((cfg, ci) => {
       const col = cfgColors[ci % cfgColors.length];
-      html += `<th colspan="1" style="${thBase}text-align:center;color:${col};border-right:${ci<configs.length-1?'2px solid #2d3f56':'1px solid #2d3f56'};border-bottom:1px solid #1e293b">${cfg.config_name}</th>`;
+      html += `<th colspan="1" style="${thBase}${saThTop0}text-align:center;color:${col};border-right:${ci<configs.length-1?'2px solid #2d3f56':'1px solid #2d3f56'};border-bottom:1px solid #1e293b">${cfg.config_name}</th>`;
     });
     html += `</tr><tr>`;
     configs.forEach((cfg, ci) => {
-      html += `<th style="${thNum}border-right:${ci<configs.length-1?'2px solid #2d3f56':'1px solid #2d3f56'};font-size:11px">${methodUnitMap[cfg.stat_method]||'金額(元)'}</th>`;
+      html += `<th style="${thNum}${saThTop1}border-right:${ci<configs.length-1?'2px solid #2d3f56':'1px solid #2d3f56'};font-size:11px">${methodUnitMap[cfg.stat_method]||'金額(元)'}</th>`;
     });
     html += `</tr></thead><tbody>`;
     let rowIdx = 0;
@@ -1007,6 +1027,15 @@ async function loadSASales() {
     });
     html += `</tr></tbody></table>`;
     matrixEl.innerHTML = html;
+
+    // 動態修正第二列 sticky top
+    requestAnimationFrame(() => {
+      const rows = matrixEl.querySelectorAll('thead tr');
+      if (rows.length >= 2) {
+        const row1H = rows[0].getBoundingClientRect().height;
+        rows[1].querySelectorAll('th').forEach(th => { th.style.top = row1H + 'px'; });
+      }
+    });
   } catch(e) { matrixEl.innerHTML = `<div style="padding:24px;color:#ef4444">${e.message}</div>`; }
 }
 
