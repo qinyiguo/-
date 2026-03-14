@@ -7,40 +7,25 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
-
   .nav { background: #1e293b; border-bottom: 1px solid #2d3f56; padding: 0 24px; display: flex; align-items: center; }
   .nav-brand { font-size: 15px; font-weight: 700; color: #fff; padding: 16px 0; margin-right: 24px; }
   .nav-link { padding: 16px 16px; color: #64748b; font-size: 13px; font-weight: 600; text-decoration: none; border-bottom: 2px solid transparent; }
   .nav-link:hover { color: #e2e8f0; }
   .nav-link.active { color: #3b82f6; border-bottom-color: #3b82f6; }
-
   .layout { display: flex; min-height: calc(100vh - 53px); }
-
-  .sidebar {
-    width: 220px; flex-shrink: 0;
-    background: #1e293b; border-right: 1px solid #2d3f56;
-    padding: 20px 12px;
-  }
+  .sidebar { width: 220px; flex-shrink: 0; background: #1e293b; border-right: 1px solid #2d3f56; padding: 20px 12px; }
   .sidebar-section { margin-bottom: 24px; }
   .sidebar-label { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: .06em; padding: 0 8px; margin-bottom: 6px; }
-  .sidebar-item {
-    display: flex; align-items: center; gap: 8px;
-    padding: 9px 10px; border-radius: 7px; cursor: pointer;
-    font-size: 13px; font-weight: 600; color: #64748b;
-    transition: all .15s;
-  }
+  .sidebar-item { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 600; color: #64748b; transition: all .15s; }
   .sidebar-item:hover { background: #253347; color: #e2e8f0; }
   .sidebar-item.active { background: rgba(59,130,246,.15); color: #3b82f6; }
   .sidebar-item .icon { font-size: 16px; width: 20px; text-align: center; }
-
-  .main { flex: 1; padding: 28px; overflow-y: auto; max-width: 960px; }
+  .main { flex: 1; padding: 28px; overflow-y: auto; max-width: 980px; }
   .page-title { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
   .page-sub { font-size: 13px; color: #64748b; margin-bottom: 24px; }
-
   .card { background: #1e293b; border: 1px solid #2d3f56; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
   .card-title { font-size: 14px; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
   .card-title-note { font-size: 12px; font-weight: 400; color: #64748b; margin-left: auto; }
-
   .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
   .btn-primary { background: #3b82f6; color: #fff; }
   .btn-primary:hover { background: #2563eb; }
@@ -50,7 +35,6 @@
   .btn-danger:hover { background: rgba(239,68,68,.2); }
   .btn-sm { padding: 5px 10px; font-size: 12px; }
   .btn:disabled { opacity: .5; cursor: not-allowed; }
-
   .upload-zone { border: 2px dashed #2d3f56; border-radius: 8px; padding: 36px; text-align: center; cursor: pointer; transition: all .2s; }
   .upload-zone:hover, .upload-zone.drag { border-color: #3b82f6; background: rgba(59,130,246,.05); }
   .upload-zone .icon { font-size: 36px; margin-bottom: 8px; }
@@ -62,44 +46,31 @@
   .badge-green { background: rgba(16,185,129,.15); color: #10b981; }
   .badge-red { background: rgba(239,68,68,.15); color: #ef4444; }
   .badge-blue { background: rgba(59,130,246,.15); color: #3b82f6; }
-  .badge-purple { background: rgba(139,92,246,.15); color: #8b5cf6; }
   .badge-yellow { background: rgba(245,158,11,.15); color: #f59e0b; }
-  .badge-orange { background: rgba(249,115,22,.15); color: #fb923c; }
-
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th { background: #0f172a; color: #64748b; font-size: 11px; font-weight: 700; text-align: left; padding: 9px 12px; border-bottom: 1px solid #2d3f56; white-space: nowrap; }
   td { padding: 9px 12px; border-bottom: 1px solid rgba(45,63,86,.4); vertical-align: middle; }
   tr:hover td { background: rgba(37,51,71,.4); }
   .num { text-align: right; }
-
   .hint { background: rgba(59,130,246,.07); border: 1px solid rgba(59,130,246,.2); border-radius: 8px; padding: 11px 14px; font-size: 12px; color: #94a3b8; line-height: 1.8; margin-bottom: 14px; }
   .hint code { background: #0f172a; padding: 1px 5px; border-radius: 3px; color: #60a5fa; }
-
   .counts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px,1fr)); gap: 8px; }
   .count-card { background: #0f172a; border: 1px solid #2d3f56; border-radius: 8px; padding: 12px; text-align: center; }
   .count-val { font-size: 24px; font-weight: 800; }
   .count-label { font-size: 11px; color: #64748b; margin-top: 2px; }
-
-  /* SA 設定 */
-  .config-item {
-    background: #0f172a; border: 1px solid #2d3f56; border-radius: 10px;
-    padding: 14px 16px; display: flex; align-items: flex-start; gap: 12px;
-    transition: border-color .15s;
-  }
+  .config-item { background: #0f172a; border: 1px solid #2d3f56; border-radius: 10px; padding: 14px 16px; display: flex; align-items: flex-start; gap: 12px; transition: border-color .15s; }
   .config-item:hover { border-color: #3b82f6; }
   .config-item-info { flex: 1; min-width: 0; }
   .config-item-name { font-weight: 700; font-size: 14px; }
   .config-item-desc { font-size: 12px; color: #64748b; margin-top: 2px; }
   .config-item-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
   .config-list { display: flex; flex-direction: column; gap: 8px; }
-
   .editor-panel { background: #0f172a; border: 1px solid #3b82f6; border-radius: 10px; padding: 20px; margin-top: 8px; }
   .form-row { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; flex-wrap: wrap; }
   .form-row label { font-size: 12px; color: #64748b; font-weight: 600; white-space: nowrap; padding-top: 9px; min-width: 40px; }
   .form-input { background: #1e293b; border: 1px solid #2d3f56; color: #e2e8f0; padding: 8px 12px; border-radius: 6px; font-size: 13px; flex: 1; min-width: 0; }
   .form-input:focus { outline: none; border-color: #3b82f6; }
   .form-select { background: #1e293b; border: 1px solid #2d3f56; color: #e2e8f0; padding: 8px 10px; border-radius: 6px; font-size: 13px; }
-
   .filter-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
   .filter-tag-row { display: flex; align-items: center; gap: 8px; background: #1e293b; border: 1px solid #2d3f56; border-radius: 7px; padding: 7px 12px; }
   .type-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 5px; white-space: nowrap; }
@@ -107,11 +78,8 @@
   .type-function_code  { background: rgba(139,92,246,.2); color: #a78bfa; }
   .type-part_number    { background: rgba(16,185,129,.2); color: #34d399; }
   .type-part_type      { background: rgba(249,115,22,.2); color: #fb923c; }
-  .filter-val { font-size: 13px; font-weight: 600; flex: 1; }
-  .filter-sub { font-size: 11px; color: #64748b; }
   .remove-btn { background: none; border: none; color: #475569; cursor: pointer; font-size: 18px; line-height: 1; padding: 0 2px; }
   .remove-btn:hover { color: #ef4444; }
-
   .add-filter-row { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
   .lookup-wrap { position: relative; flex: 1; min-width: 180px; }
   .lookup-input { width: 100%; background: #1e293b; border: 1px solid #2d3f56; color: #e2e8f0; padding: 8px 12px; border-radius: 6px; font-size: 13px; }
@@ -122,76 +90,75 @@
   .lookup-item:hover { background: rgba(59,130,246,.1); }
   .lookup-item-val { font-size: 13px; font-weight: 600; }
   .lookup-item-sub { font-size: 11px; color: #64748b; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
   .logic-hint { font-size: 12px; color: #64748b; background: #0f172a; border: 1px solid #2d3f56; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; line-height: 1.7; }
   .logic-hint strong { color: #94a3b8; }
-
-  /* 付款類別 checkbox */
   .part-type-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-  .part-type-chip {
-    display: flex; align-items: center; gap: 5px; cursor: pointer;
-    background: #1e293b; border: 1px solid #2d3f56; border-radius: 6px;
-    padding: 5px 10px; font-size: 12px; font-weight: 600; color: #94a3b8;
-    transition: all .15s; user-select: none;
-  }
+  .part-type-chip { display: flex; align-items: center; gap: 5px; cursor: pointer; background: #1e293b; border: 1px solid #2d3f56; border-radius: 6px; padding: 5px 10px; font-size: 12px; font-weight: 600; color: #94a3b8; transition: all .15s; user-select: none; }
   .part-type-chip:hover { border-color: #fb923c; color: #fb923c; }
   .part-type-chip input { display: none; }
   .part-type-chip.checked { background: rgba(249,115,22,.15); border-color: #fb923c; color: #fb923c; }
   .part-type-chip.disabled { opacity: .4; pointer-events: none; }
-
-  /* 統計方式 radio */
   .stat-method-group { margin-bottom: 14px; }
   .stat-method-label { font-size: 13px; font-weight: 700; color: #94a3b8; margin-bottom: 10px; }
   .stat-method-options { display: flex; gap: 8px; flex-wrap: wrap; }
-  .stat-radio-item {
-    display: flex; align-items: center; gap: 8px; cursor: pointer;
-    background: #1e293b; border: 1px solid #2d3f56; border-radius: 8px;
-    padding: 10px 14px; transition: all .15s; flex: 1; min-width: 130px;
-  }
+  .stat-radio-item { display: flex; align-items: center; gap: 8px; cursor: pointer; background: #1e293b; border: 1px solid #2d3f56; border-radius: 8px; padding: 10px 14px; transition: all .15s; flex: 1; min-width: 130px; }
   .stat-radio-item:hover { border-color: #3b82f6; }
   .stat-radio-item input[type=radio] { accent-color: #3b82f6; width: 15px; height: 15px; }
   .stat-radio-item.selected { border-color: #3b82f6; background: rgba(59,130,246,.1); }
   .stat-radio-info { display: flex; flex-direction: column; }
   .stat-radio-name { font-size: 13px; font-weight: 700; }
   .stat-radio-desc { font-size: 11px; color: #64748b; margin-top: 1px; }
-
   .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #2d3f56; border-top-color: #3b82f6; border-radius: 50%; animation: spin .7s linear infinite; margin-right: 6px; vertical-align: middle; }
   @keyframes spin { to { transform: rotate(360deg); } }
-
   .empty-state { text-align: center; padding: 40px 20px; color: #64748b; }
   .empty-state .big { font-size: 36px; margin-bottom: 10px; }
-
   .section-page { display: none; }
   .section-page.active { display: block; }
+
+  /* ── 工作天數月曆 ── */
+  .wd-controls { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .wd-calendar { display: grid; grid-template-columns: repeat(7,1fr); gap: 5px; margin-bottom: 16px; }
+  .wd-day-head { text-align: center; font-size: 11px; font-weight: 700; color: #475569; padding: 4px 0; }
+  .wd-day-head.sun { color: #ef4444; }
+  .wd-day-head.sat { color: #3b82f6; }
+  .wd-day-cell {
+    aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+    border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600;
+    border: 1.5px solid #2d3f56; background: #0f172a; color: #64748b;
+    transition: all .12s; user-select: none;
+  }
+  .wd-day-cell:hover { border-color: #3b82f6; color: #93c5fd; }
+  .wd-day-cell.work { background: rgba(16,185,129,.15); border-color: #10b981; color: #10b981; }
+  .wd-day-cell.work:hover { background: rgba(16,185,129,.25); }
+  .wd-day-cell.empty { background: transparent; border-color: transparent; cursor: default; }
+  .wd-day-cell.empty:hover { border-color: transparent; }
+  .wd-day-cell.sun-col { }
+  .wd-day-cell.sat-col { }
+  .wd-summary { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+  .wd-count { font-weight: 800; font-size: 20px; color: #10b981; }
+  .wd-legend { display: flex; gap: 14px; font-size: 12px; color: #64748b; }
+  .wd-legend span { display: flex; align-items: center; gap: 5px; }
+  .wd-legend .dot { width: 10px; height: 10px; border-radius: 3px; }
+  .wd-existing-list { display: flex; flex-direction: column; gap: 6px; }
+  .wd-existing-item { display: flex; align-items: center; gap: 10px; background: #0f172a; border: 1px solid #2d3f56; border-radius: 8px; padding: 10px 14px; }
+  .wd-existing-item .info { flex: 1; }
+  .wd-existing-item .name { font-weight: 700; }
+  .wd-existing-item .sub { font-size: 12px; color: #64748b; margin-top: 2px; }
 </style>
 </head>
 <body>
-<div id="lockScreen" style="
-  position:fixed;inset:0;background:#0f172a;z-index:9999;
-  display:flex;align-items:center;justify-content:center;
-">
-  <div style="
-    background:#1e293b;border:1px solid #2d3f56;border-radius:16px;
-    padding:44px 40px;width:100%;max-width:360px;text-align:center;
-    box-shadow:0 24px 64px rgba(0,0,0,.6);
-  ">
+
+<!-- 鎖定畫面 -->
+<div id="lockScreen" style="position:fixed;inset:0;background:#0f172a;z-index:9999;display:flex;align-items:center;justify-content:center;">
+  <div style="background:#1e293b;border:1px solid #2d3f56;border-radius:16px;padding:44px 40px;width:100%;max-width:360px;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,.6);">
     <div style="font-size:44px;margin-bottom:12px">🔒</div>
     <div style="font-size:20px;font-weight:800;color:#fff;margin-bottom:6px">設定管理</div>
     <div style="font-size:13px;color:#64748b;margin-bottom:28px">請輸入管理員密碼以繼續</div>
     <input type="password" id="lockInput" placeholder="輸入密碼..."
-      style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;
-             padding:12px 16px;border-radius:8px;font-size:16px;margin-bottom:8px;
-             text-align:center;letter-spacing:4px;outline:none"
-      onkeydown="if(event.key==='Enter') doLogin()"
-      autocomplete="current-password">
+      style="width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:12px 16px;border-radius:8px;font-size:16px;margin-bottom:8px;text-align:center;letter-spacing:4px;outline:none"
+      onkeydown="if(event.key==='Enter') doLogin()" autocomplete="current-password">
     <div id="lockError" style="font-size:12px;color:#ef4444;height:20px;margin-bottom:10px;line-height:20px"></div>
-    <button id="lockBtn" onclick="doLogin()" style="
-      width:100%;background:#3b82f6;color:#fff;border:none;
-      padding:12px;border-radius:8px;font-size:14px;font-weight:700;
-      cursor:pointer;transition:background .15s
-    " onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">
-      進入設定
-    </button>
+    <button id="lockBtn" onclick="doLogin()" style="width:100%;background:#3b82f6;color:#fff;border:none;padding:12px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">進入設定</button>
   </div>
 </div>
 
@@ -217,6 +184,9 @@
       <div class="sidebar-item" onclick="showSection('sa-config')" id="menu-sa-config">
         <span class="icon">👤</span> SA 零件銷售
       </div>
+      <div class="sidebar-item" onclick="showSection('working-days')" id="menu-working-days">
+        <span class="icon">📅</span> 工作天數
+      </div>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-label">系統</div>
@@ -228,19 +198,17 @@
 
   <div class="main">
 
-    <!-- ── 上傳 Excel ───────────────────────────────────── -->
+    <!-- ── 上傳 Excel ── -->
     <div class="section-page active" id="section-upload">
       <div class="page-title">📤 上傳 Excel</div>
       <p class="page-sub">將 DMS 匯出的四種報表上傳至資料庫</p>
-
       <div class="hint">
-        ⚠️ <strong>檔名需包含據點和期間</strong>，系統才能自動辨識，例如：<br>
+        ⚠️ <strong>檔名需包含據點和期間</strong>，例如：<br>
         <code>維修收入分類明細_AMA_202501.xlsx</code>　
         <code>技師績效報表_AMC_202501.xlsx</code>　
         <code>零件銷售明細_AMD_202501.xlsx</code>　
         <code>業務查詢_AMA_202501.xlsx</code>
       </div>
-
       <div class="card">
         <div class="card-title">選擇檔案</div>
         <div class="upload-zone" id="zone" onclick="document.getElementById('fileInput').click()">
@@ -255,12 +223,10 @@
           <span id="uploadStatus" style="font-size:13px;color:#64748b"></span>
         </div>
       </div>
-
       <div class="card" id="resultsCard" style="display:none">
         <div class="card-title">上傳結果</div>
         <div id="results"></div>
       </div>
-
       <div class="card">
         <div class="card-title">📜 最近上傳紀錄 <span class="card-title-note"><button class="btn btn-secondary btn-sm" onclick="loadHistory()">重新整理</button></span></div>
         <div style="overflow-x:auto">
@@ -272,7 +238,7 @@
       </div>
     </div>
 
-    <!-- ── 資料庫狀態 ────────────────────────────────────── -->
+    <!-- ── 資料庫狀態 ── -->
     <div class="section-page" id="section-dbstatus">
       <div class="page-title">🗄️ 資料庫狀態</div>
       <p class="page-sub">各資料表目前的筆數</p>
@@ -282,21 +248,17 @@
       </div>
     </div>
 
-    <!-- ── SA 零件銷售設定 ──────────────────────────────── -->
+    <!-- ── SA 零件銷售設定 ── -->
     <div class="section-page" id="section-sa-config">
       <div class="page-title">👤 SA 零件銷售設定</div>
       <p class="page-sub">設定追蹤哪些零件的銷售量，統計頁可依設定查看各 SA 業績</p>
-
       <div class="card">
         <div class="card-title">
           設定清單
           <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="startNewConfig()">＋ 新增設定</button>
         </div>
-
-        <!-- 新增/編輯面板（預設隱藏） -->
         <div id="editorPanel" style="display:none" class="editor-panel">
           <div style="font-size:14px;font-weight:700;margin-bottom:16px" id="editorTitle">新增設定</div>
-
           <div class="form-row">
             <label>名稱</label>
             <input type="text" id="cfgName" class="form-input" placeholder="例：機油銷售、鋼圈銷售..." maxlength="100">
@@ -305,16 +267,12 @@
             <label>說明</label>
             <input type="text" id="cfgDesc" class="form-input" placeholder="（選填）" maxlength="200">
           </div>
-
           <div style="font-size:13px;font-weight:700;color:#94a3b8;margin:14px 0 8px">篩選條件</div>
           <div class="logic-hint">
-            <strong>不同類型之間 AND（且）</strong> — 例：類別碼 93 且 功能碼 1832，必須兩個同時符合<br>
+            <strong>不同類型之間 AND（且）</strong> — 例：類別碼 93 且 功能碼 1832<br>
             <strong>同類型多個值 OR（或）</strong> — 例：加入多個零件編號，符合任一即納入
           </div>
-
           <div class="filter-list" id="filterList"></div>
-
-          <!-- 新增條件列 -->
           <div style="background:#1e293b;border:1px solid #2d3f56;border-radius:8px;padding:12px;margin-bottom:14px">
             <div style="font-size:11px;color:#64748b;font-weight:700;margin-bottom:8px">新增條件</div>
             <div class="add-filter-row">
@@ -324,67 +282,130 @@
                 <option value="part_number">零件編號</option>
                 <option value="part_type">付款類別</option>
               </select>
-
-              <!-- 一般輸入（類別碼/功能碼/零件編號） -->
               <div class="lookup-wrap" id="lookupWrap">
-                <input type="text" id="addValue" class="lookup-input" placeholder="輸入代碼或名稱搜尋..."
-                  oninput="debounceLookup()" autocomplete="off">
+                <input type="text" id="addValue" class="lookup-input" placeholder="輸入代碼或名稱搜尋..." oninput="debounceLookup()" autocomplete="off">
                 <div class="lookup-dropdown" id="lookupDropdown" style="display:none"></div>
               </div>
               <button class="btn btn-secondary btn-sm" id="btnAddFilter" onclick="addFilter()">＋ 加入</button>
             </div>
-
-            <!-- 付款類別 checkbox 面板 -->
             <div id="partTypePanel" style="display:none;margin-top:10px">
               <div class="part-type-grid" id="partTypeCheckboxes"></div>
               <button class="btn btn-secondary btn-sm" onclick="addPartTypeFilters()">＋ 加入勾選項目</button>
             </div>
-
             <div id="addHint" style="font-size:11px;color:#64748b;margin-top:6px;min-height:16px"></div>
           </div>
-
-          <!-- 統計方式 -->
           <div class="stat-method-group">
             <div class="stat-method-label">統計方式</div>
             <div class="stat-method-options">
               <label class="stat-radio-item selected" id="smLabel-amount" onclick="selectStatMethod('amount')">
                 <input type="radio" name="stat_method" value="amount" checked>
-                <div class="stat-radio-info">
-                  <span class="stat-radio-name">💰 銷售金額</span>
-                  <span class="stat-radio-desc">加總售價（元）</span>
-                </div>
+                <div class="stat-radio-info"><span class="stat-radio-name">💰 銷售金額</span><span class="stat-radio-desc">加總售價（元）</span></div>
               </label>
               <label class="stat-radio-item" id="smLabel-quantity" onclick="selectStatMethod('quantity')">
                 <input type="radio" name="stat_method" value="quantity">
-                <div class="stat-radio-info">
-                  <span class="stat-radio-name">📦 數量</span>
-                  <span class="stat-radio-desc">加總銷售件數</span>
-                </div>
+                <div class="stat-radio-info"><span class="stat-radio-name">📦 數量</span><span class="stat-radio-desc">加總銷售件數</span></div>
               </label>
               <label class="stat-radio-item" id="smLabel-count" onclick="selectStatMethod('count')">
                 <input type="radio" name="stat_method" value="count">
-                <div class="stat-radio-info">
-                  <span class="stat-radio-name">🧾 筆數</span>
-                  <span class="stat-radio-desc">計算銷售單數</span>
-                </div>
+                <div class="stat-radio-info"><span class="stat-radio-name">🧾 筆數</span><span class="stat-radio-desc">計算銷售單數</span></div>
               </label>
             </div>
           </div>
-
           <div style="display:flex;gap:8px;justify-content:flex-end">
             <button class="btn btn-secondary" onclick="cancelEdit()">取消</button>
             <button class="btn btn-primary" id="btnSaveCfg" onclick="saveConfig()">儲存設定</button>
           </div>
         </div>
-
-        <!-- 設定列表 -->
         <div class="config-list" id="configList" style="margin-top:4px">
           <div style="color:#64748b;font-size:13px;padding:8px 0"><span class="spinner"></span>載入中</div>
         </div>
       </div>
     </div>
 
-    <!-- ── 管理員密碼 ──────────────────────────────────── -->
+    <!-- ── 工作天數設定 ── -->
+    <div class="section-page" id="section-working-days">
+      <div class="page-title">📅 工作天數設定</div>
+      <p class="page-sub">設定各據點每個月的實際營業日，用於計算日均進廠台數</p>
+
+      <div class="hint">
+        💡 <strong>為什麼需要手動設定？</strong><br>
+        系統預設用「有開工單的日期」自動判斷工作天，但若颱風假、連假補班、或節日異常操作，可能導致誤判。
+        手動設定後，「每日進廠台數」的日均計算將使用設定值，並顯示 ✅ 手動設定標示。
+      </div>
+
+      <!-- 選擇器 + 月曆編輯 -->
+      <div class="card">
+        <div class="card-title">🗓️ 設定營業日</div>
+
+        <div class="wd-controls">
+          <select id="wdBranch" class="form-select">
+            <option value="AMA">AMA</option>
+            <option value="AMC">AMC</option>
+            <option value="AMD">AMD</option>
+          </select>
+          <select id="wdPeriod" class="form-select" style="min-width:140px">
+            <option value="">選擇期間...</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" onclick="loadWdCalendar()">載入</button>
+          <div id="wdConfigStatus" style="font-size:12px;color:#64748b;margin-left:4px"></div>
+        </div>
+
+        <div id="wdCalendarWrap" style="display:none">
+          <!-- 月曆標題 -->
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-size:14px;font-weight:700" id="wdMonthTitle"></div>
+            <div class="wd-legend">
+              <span><div class="dot" style="background:rgba(16,185,129,.3);border:1px solid #10b981"></div>營業日</span>
+              <span><div class="dot" style="background:#0f172a;border:1px solid #2d3f56"></div>休息日</span>
+            </div>
+          </div>
+
+          <!-- 星期標頭 -->
+          <div class="wd-calendar" id="wdCalHeader">
+            <div class="wd-day-head sun">日</div>
+            <div class="wd-day-head">一</div>
+            <div class="wd-day-head">二</div>
+            <div class="wd-day-head">三</div>
+            <div class="wd-day-head">四</div>
+            <div class="wd-day-head">五</div>
+            <div class="wd-day-head sat">六</div>
+          </div>
+
+          <!-- 日期格子 -->
+          <div class="wd-calendar" id="wdCalendar"></div>
+
+          <!-- 快速操作 -->
+          <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+            <button class="btn btn-secondary btn-sm" onclick="wdSelectWeekdays()">選週一到五</button>
+            <button class="btn btn-secondary btn-sm" onclick="wdSelectAll()">全選</button>
+            <button class="btn btn-secondary btn-sm" onclick="wdClearAll()">全部清除</button>
+          </div>
+
+          <!-- 摘要 + 儲存 -->
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 0;border-top:1px solid #2d3f56;flex-wrap:wrap">
+            <div class="wd-summary">
+              <span class="wd-count" id="wdWorkCount">0</span>
+              <span style="color:#64748b;font-size:13px">個營業日</span>
+            </div>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <button class="btn btn-danger btn-sm" id="btnWdDelete" onclick="deleteWdConfig()" style="display:none">🗑️ 刪除設定（回到自動）</button>
+              <button class="btn btn-primary" onclick="saveWdConfig()" id="btnWdSave">💾 儲存工作天數</button>
+            </div>
+          </div>
+          <div id="wdMsg" style="font-size:13px;min-height:20px;margin-top:4px"></div>
+        </div>
+      </div>
+
+      <!-- 現有設定列表 -->
+      <div class="card">
+        <div class="card-title">已設定的月份 <span class="card-title-note"><button class="btn btn-secondary btn-sm" onclick="loadWdList()">重新整理</button></span></div>
+        <div id="wdExistingList">
+          <div style="color:#64748b;font-size:13px"><span class="spinner"></span>載入中</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 管理員密碼 ── -->
     <div class="section-page" id="section-password">
       <div class="page-title">🔑 管理員密碼</div>
       <div class="card" style="max-width:460px">
@@ -392,44 +413,30 @@
         <div style="display:flex;flex-direction:column;gap:14px;margin-top:4px">
           <div>
             <label style="display:block;font-size:12px;color:#64748b;margin-bottom:6px">目前密碼</label>
-            <input type="password" id="pwdCurrent" placeholder="輸入目前密碼"
-              style="width:100%;background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px">
+            <input type="password" id="pwdCurrent" placeholder="輸入目前密碼" style="width:100%;background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px">
           </div>
           <div>
             <label style="display:block;font-size:12px;color:#64748b;margin-bottom:6px">新密碼</label>
-            <input type="password" id="pwdNew" placeholder="輸入新密碼（至少 4 字元）"
-              style="width:100%;background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px">
+            <input type="password" id="pwdNew" placeholder="輸入新密碼（至少 4 字元）" style="width:100%;background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px">
           </div>
           <div>
             <label style="display:block;font-size:12px;color:#64748b;margin-bottom:6px">確認新密碼</label>
-            <input type="password" id="pwdConfirm" placeholder="再次輸入新密碼"
-              style="width:100%;background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px"
-              onkeydown="if(event.key==='Enter') changePassword()">
+            <input type="password" id="pwdConfirm" placeholder="再次輸入新密碼" style="width:100%;background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px" onkeydown="if(event.key==='Enter') changePassword()">
           </div>
           <div id="pwdMsg" style="font-size:13px;min-height:20px"></div>
-          <div>
-            <button class="btn btn-primary" onclick="changePassword()" id="pwdBtn">儲存新密碼</button>
-          </div>
-        </div>
-      </div>
-      <div class="card" style="max-width:460px;margin-top:16px;border-color:#2d3f56">
-        <div style="font-size:13px;color:#64748b;line-height:1.7">
-          <div style="font-weight:700;color:#94a3b8;margin-bottom:8px">⚠️ 注意事項</div>
-          <div>• 密碼修改後，所有已登入的分頁將被登出，需重新輸入新密碼</div>
-          <div>• 預設密碼為 <code style="background:#0f172a;padding:2px 6px;border-radius:4px;color:#f59e0b">admin1234</code>，建議首次使用時立即修改</div>
-          <div>• 密碼儲存在資料庫中，伺服器重啟後不會重置</div>
+          <div><button class="btn btn-primary" onclick="changePassword()" id="pwdBtn">儲存新密碼</button></div>
         </div>
       </div>
     </div>
 
-  </div>
-</div>
+  </div><!-- /main -->
+</div><!-- /layout -->
 
 <script>
 // ══════════════════════════════════════════════════════════
 // 側欄切換
 // ══════════════════════════════════════════════════════════
-const sections = ['upload','dbstatus','sa-config','password'];
+const sections = ['upload','dbstatus','sa-config','working-days','password'];
 
 function showSection(id) {
   sections.forEach(s => {
@@ -438,13 +445,13 @@ function showSection(id) {
   });
   if (id === 'dbstatus') loadCounts();
   if (id === 'sa-config') loadConfigs();
+  if (id === 'working-days') { loadWdPeriods(); loadWdList(); }
 }
 
 // ══════════════════════════════════════════════════════════
 // 上傳
 // ══════════════════════════════════════════════════════════
 let selectedFiles = [];
-
 const zone = document.getElementById('zone');
 zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
 zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
@@ -455,12 +462,7 @@ function handleFiles(files) {
   selectedFiles = Array.from(files).filter(f => f.name.match(/\.xlsx?$/i));
   const list = document.getElementById('fileList');
   if (!selectedFiles.length) { list.innerHTML = ''; return; }
-  list.innerHTML = selectedFiles.map(f => `
-    <div class="file-item">
-      <span>📄 ${f.name}</span>
-      <span style="color:#64748b">${(f.size/1024).toFixed(0)} KB</span>
-    </div>
-  `).join('');
+  list.innerHTML = selectedFiles.map(f => `<div class="file-item"><span>📄 ${f.name}</span><span style="color:#64748b">${(f.size/1024).toFixed(0)} KB</span></div>`).join('');
   document.getElementById('btnUpload').disabled = false;
 }
 
@@ -468,24 +470,17 @@ async function doUpload() {
   if (!selectedFiles.length) return;
   const btn = document.getElementById('btnUpload');
   const status = document.getElementById('uploadStatus');
-  btn.disabled = true;
-  status.textContent = '上傳中...';
-
+  btn.disabled = true; status.textContent = '上傳中...';
   const formData = new FormData();
   selectedFiles.forEach(f => formData.append('files', f));
   try {
-    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const res = await fetch('/api/upload', { method:'POST', body:formData });
     const data = await res.json();
     showResults(data.results);
-    selectedFiles = [];
-    document.getElementById('fileList').innerHTML = '';
+    selectedFiles = []; document.getElementById('fileList').innerHTML = '';
     loadHistory();
-  } catch (err) {
-    status.textContent = '上傳失敗: ' + err.message;
-  } finally {
-    btn.disabled = false;
-    status.textContent = '';
-  }
+  } catch (err) { status.textContent = '上傳失敗: '+err.message; }
+  finally { btn.disabled = false; status.textContent = ''; }
 }
 
 function showResults(results) {
@@ -494,20 +489,16 @@ function showResults(results) {
     <div class="result-item">
       <span style="font-weight:600">${r.filename}</span>
       <div style="display:flex;gap:8px;align-items:center">
-        ${r.status === 'success'
-          ? `<span class="badge badge-green">成功</span>
-             <span style="color:#64748b;font-size:12px">${r.fileType} / ${r.branch||'-'} / ${r.period||'-'} / ${r.rowCount}筆</span>`
-          : `<span class="badge badge-red">失敗</span>
-             <span style="color:#ef4444;font-size:12px">${r.error}</span>`}
+        ${r.status==='success'
+          ? `<span class="badge badge-green">成功</span><span style="color:#64748b;font-size:12px">${r.fileType}/${r.branch||'-'}/${r.period||'-'}/${r.rowCount}筆</span>`
+          : `<span class="badge badge-red">失敗</span><span style="color:#ef4444;font-size:12px">${r.error}</span>`}
       </div>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 async function loadHistory() {
   try {
-    const res = await fetch('/api/history');
-    const data = await res.json();
+    const data = await (await fetch('/api/history')).json();
     const tbody = document.getElementById('historyBody');
     if (!data.length) { tbody.innerHTML = '<tr><td colspan="7" style="color:#64748b;padding:16px">尚無紀錄</td></tr>'; return; }
     tbody.innerHTML = data.map(h => `
@@ -515,109 +506,56 @@ async function loadHistory() {
         <td style="font-size:12px;color:#64748b;white-space:nowrap">${new Date(h.created_at).toLocaleString('zh-TW')}</td>
         <td style="font-size:12px">${h.file_name}</td>
         <td><span class="badge badge-blue">${h.file_type||'-'}</span></td>
-        <td>${h.branch||'-'}</td>
-        <td>${h.period||'-'}</td>
+        <td>${h.branch||'-'}</td><td>${h.period||'-'}</td>
         <td class="num">${h.row_count?.toLocaleString()||0}</td>
         <td><span class="badge ${h.status==='success'?'badge-green':'badge-red'}">${h.status==='success'?'成功':'失敗'}</span></td>
-      </tr>
-    `).join('');
-  } catch(e) {
-    document.getElementById('historyBody').innerHTML = `<tr><td colspan="7" style="color:#ef4444">${e.message}</td></tr>`;
-  }
+      </tr>`).join('');
+  } catch(e) { document.getElementById('historyBody').innerHTML = `<tr><td colspan="7" style="color:#ef4444">${e.message}</td></tr>`; }
 }
 
 async function loadCounts() {
   try {
-    const res = await fetch('/api/counts');
-    const data = await res.json();
+    const data = await (await fetch('/api/counts')).json();
     if (data.error) throw new Error(data.error);
     document.getElementById('counts').innerHTML = data.map(r => `
-      <div class="count-card">
-        <div class="count-val">${parseInt(r['筆數']).toLocaleString()}</div>
-        <div class="count-label">${r['表格']}</div>
-      </div>
-    `).join('');
-  } catch(e) {
-    document.getElementById('counts').innerHTML = `<span style="color:#ef4444;font-size:13px">❌ ${e.message}</span>`;
-  }
+      <div class="count-card"><div class="count-val">${parseInt(r['筆數']).toLocaleString()}</div><div class="count-label">${r['表格']}</div></div>`).join('');
+  } catch(e) { document.getElementById('counts').innerHTML = `<span style="color:#ef4444;font-size:13px">❌ ${e.message}</span>`; }
 }
 
 // ══════════════════════════════════════════════════════════
 // SA 銷售設定 CRUD
 // ══════════════════════════════════════════════════════════
-let configs = [];
-let editingConfigId = null;
-let editingFilters  = [];
-let lookupTimer     = null;
+let configs = [], editingConfigId = null, editingFilters = [], lookupTimer = null;
+const PART_TYPES = ['一般','票劵','內結','保險','延保','保固','善意維修','VSA'];
+const typeLabel = { category_code:'零件類別碼', function_code:'功能碼', part_number:'零件編號', part_type:'付款類別' };
+const STAT_METHOD_INFO = { amount:{label:'金額',badgeClass:'badge-blue'}, quantity:{label:'數量',badgeClass:'badge-green'}, count:{label:'筆數',badgeClass:'badge-purple'} };
 
-const PART_TYPES = ['一般', '票劵', '內結', '保險', '延保', '保固', '善意維修', 'VSA'];
-
-const typeLabel = {
-  category_code: '零件類別碼',
-  function_code:  '功能碼',
-  part_number:    '零件編號',
-  part_type:      '付款類別',
-};
-
-const STAT_METHOD_INFO = {
-  amount:   { label: '金額',  badgeClass: 'badge-blue' },
-  quantity: { label: '數量',  badgeClass: 'badge-green' },
-  count:    { label: '筆數',  badgeClass: 'badge-purple' },
-};
-
-// ── 統計方式選擇 ──
 function selectStatMethod(val) {
-  document.querySelectorAll('input[name="stat_method"]').forEach(el => {
-    el.checked = el.value === val;
-  });
-  ['amount','quantity','count'].forEach(v => {
-    document.getElementById(`smLabel-${v}`)?.classList.toggle('selected', v === val);
-  });
+  document.querySelectorAll('input[name="stat_method"]').forEach(el => el.checked = el.value===val);
+  ['amount','quantity','count'].forEach(v => document.getElementById(`smLabel-${v}`)?.classList.toggle('selected', v===val));
 }
+function getStatMethod() { return document.querySelector('input[name="stat_method"]:checked')?.value||'amount'; }
+function setStatMethod(val) { selectStatMethod(val||'amount'); }
 
-function getStatMethod() {
-  return document.querySelector('input[name="stat_method"]:checked')?.value || 'amount';
-}
-
-function setStatMethod(val) {
-  selectStatMethod(val || 'amount');
-}
-
-// ── 設定列表 ──
 async function loadConfigs() {
   try {
-    const res = await fetch('/api/sa-config');
-    configs = await res.json();
+    configs = await (await fetch('/api/sa-config')).json();
     renderConfigList();
-  } catch(e) {
-    document.getElementById('configList').innerHTML = `<div style="color:#ef4444">${e.message}</div>`;
-  }
+  } catch(e) { document.getElementById('configList').innerHTML = `<div style="color:#ef4444">${e.message}</div>`; }
 }
 
 function renderConfigList() {
   const el = document.getElementById('configList');
-  if (!configs.length) {
-    el.innerHTML = `
-      <div class="empty-state">
-        <div class="big">📋</div>
-        <div>尚無設定，點擊「新增設定」開始建立追蹤項目</div>
-      </div>`;
-    return;
-  }
+  if (!configs.length) { el.innerHTML = `<div class="empty-state"><div class="big">📋</div><div>尚無設定，點擊「新增設定」開始建立追蹤項目</div></div>`; return; }
   el.innerHTML = configs.map(c => {
-    const sm = STAT_METHOD_INFO[c.stat_method] || STAT_METHOD_INFO.amount;
-    return `
-    <div class="config-item">
+    const sm = STAT_METHOD_INFO[c.stat_method]||STAT_METHOD_INFO.amount;
+    return `<div class="config-item">
       <div class="config-item-info">
         <div class="config-item-name">${c.config_name}</div>
         ${c.description ? `<div class="config-item-desc">${c.description}</div>` : ''}
         <div class="config-item-tags">
           <span class="badge ${sm.badgeClass}" style="font-size:11px">統計：${sm.label}</span>
-          ${(c.filters||[]).map(f => `
-            <span class="badge" style="font-size:11px;${typeBadgeStyle(f.type)}">
-              ${typeLabel[f.type]||f.type}: ${f.value}
-            </span>
-          `).join('')}
+          ${(c.filters||[]).map(f => `<span class="badge" style="font-size:11px;${typeBadgeStyle(f.type)}">${typeLabel[f.type]||f.type}: ${f.value}</span>`).join('')}
         </div>
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0">
@@ -629,50 +567,33 @@ function renderConfigList() {
 }
 
 function typeBadgeStyle(type) {
-  const map = {
-    category_code: 'background:rgba(59,130,246,.15);color:#60a5fa',
-    function_code:  'background:rgba(139,92,246,.15);color:#a78bfa',
-    part_number:    'background:rgba(16,185,129,.15);color:#34d399',
-    part_type:      'background:rgba(249,115,22,.15);color:#fb923c',
-  };
-  return map[type] || 'background:rgba(100,116,139,.15);color:#94a3b8';
+  const map = { category_code:'background:rgba(59,130,246,.15);color:#60a5fa', function_code:'background:rgba(139,92,246,.15);color:#a78bfa', part_number:'background:rgba(16,185,129,.15);color:#34d399', part_type:'background:rgba(249,115,22,.15);color:#fb923c' };
+  return map[type]||'background:rgba(100,116,139,.15);color:#94a3b8';
 }
 
 function startNewConfig() {
-  editingConfigId = null;
-  editingFilters  = [];
+  editingConfigId = null; editingFilters = [];
   document.getElementById('editorTitle').textContent = '新增設定';
-  document.getElementById('cfgName').value = '';
-  document.getElementById('cfgDesc').value = '';
-  setStatMethod('amount');
-  renderFilterList();
-  resetAddRow();
-  document.getElementById('editorPanel').style.display = '';
-  document.getElementById('cfgName').focus();
+  document.getElementById('cfgName').value = ''; document.getElementById('cfgDesc').value = '';
+  setStatMethod('amount'); renderFilterList(); resetAddRow();
+  document.getElementById('editorPanel').style.display = ''; document.getElementById('cfgName').focus();
 }
 
 function startEditConfig(id) {
-  const cfg = configs.find(c => c.id === id);
-  editingConfigId = id;
-  editingFilters  = (cfg.filters||[]).map(f => ({...f}));
+  const cfg = configs.find(c => c.id===id);
+  editingConfigId = id; editingFilters = (cfg.filters||[]).map(f=>({...f}));
   document.getElementById('editorTitle').textContent = `編輯設定 — ${cfg.config_name}`;
-  document.getElementById('cfgName').value = cfg.config_name;
-  document.getElementById('cfgDesc').value = cfg.description || '';
-  setStatMethod(cfg.stat_method || 'amount');
-  renderFilterList();
-  resetAddRow();
+  document.getElementById('cfgName').value = cfg.config_name; document.getElementById('cfgDesc').value = cfg.description||'';
+  setStatMethod(cfg.stat_method||'amount'); renderFilterList(); resetAddRow();
   document.getElementById('editorPanel').style.display = '';
-  document.getElementById('editorPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  document.getElementById('editorPanel').scrollIntoView({ behavior:'smooth', block:'nearest' });
 }
 
-function cancelEdit() {
-  document.getElementById('editorPanel').style.display = 'none';
-  editingFilters = [];
-}
+function cancelEdit() { document.getElementById('editorPanel').style.display = 'none'; editingFilters = []; }
 
 async function deleteConfig(id, name) {
   if (!confirm(`確定要刪除「${name}」嗎？`)) return;
-  await fetch(`/api/sa-config/${id}`, { method: 'DELETE' });
+  await fetch(`/api/sa-config/${id}`, { method:'DELETE' });
   await loadConfigs();
 }
 
@@ -682,182 +603,299 @@ async function saveConfig() {
   const stat_method = getStatMethod();
   if (!config_name) { alert('請輸入設定名稱'); return; }
   if (!editingFilters.length) { alert('請至少新增一個篩選條件'); return; }
-
-  const filters = editingFilters.map(({type, value}) => ({type, value}));
-  const btn = document.getElementById('btnSaveCfg');
-  btn.disabled = true;
+  const filters = editingFilters.map(({type,value}) => ({type,value}));
+  const btn = document.getElementById('btnSaveCfg'); btn.disabled = true;
   try {
-    const url    = editingConfigId ? `/api/sa-config/${editingConfigId}` : '/api/sa-config';
+    const url = editingConfigId ? `/api/sa-config/${editingConfigId}` : '/api/sa-config';
     const method = editingConfigId ? 'PUT' : 'POST';
-    const res    = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ config_name, description, filters, stat_method }),
-    });
-    const data = await res.json();
+    const data = await (await fetch(url, { method, headers:{'Content-Type':'application/json'}, body:JSON.stringify({config_name,description,filters,stat_method}) })).json();
     if (data.error) throw new Error(data.error);
-    cancelEdit();
-    await loadConfigs();
-  } catch(e) {
-    alert('儲存失敗：' + e.message);
-  } finally {
-    btn.disabled = false;
-  }
+    cancelEdit(); await loadConfigs();
+  } catch(e) { alert('儲存失敗：'+e.message); } finally { btn.disabled = false; }
 }
 
-// ── 篩選條件增刪 ──
 function renderFilterList() {
   const el = document.getElementById('filterList');
-  if (!editingFilters.length) {
-    el.innerHTML = '<div style="color:#64748b;font-size:12px;padding:4px 0 8px">尚未新增篩選條件</div>';
-    return;
-  }
-  el.innerHTML = editingFilters.map((f, i) => `
+  if (!editingFilters.length) { el.innerHTML = '<div style="color:#64748b;font-size:12px;padding:4px 0 8px">尚未新增篩選條件</div>'; return; }
+  el.innerHTML = editingFilters.map((f,i) => `
     <div class="filter-tag-row">
       <span class="type-badge type-${f.type}">${typeLabel[f.type]||f.type}</span>
-      <span class="filter-val">${f.value}</span>
+      <span style="font-size:13px;font-weight:600;flex:1">${f.value}</span>
       <button class="remove-btn" onclick="removeFilter(${i})" title="移除">×</button>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
-function removeFilter(i) {
-  editingFilters.splice(i, 1);
-  renderFilterList();
-  // 如果目前顯示 part_type 面板，要重新 render chip 狀態
-  if (document.getElementById('addType').value === 'part_type') {
-    renderPartTypeCheckboxes();
-  }
-}
+function removeFilter(i) { editingFilters.splice(i,1); renderFilterList(); if(document.getElementById('addType').value==='part_type') renderPartTypeCheckboxes(); }
 
 function addFilter() {
-  const type  = document.getElementById('addType').value;
+  const type = document.getElementById('addType').value;
   const value = document.getElementById('addValue').value.trim();
-  const hint  = document.getElementById('addHint');
-  if (!value) { hint.textContent = '請輸入值'; return; }
-  if (editingFilters.some(f => f.type === type && f.value === value)) {
-    hint.textContent = '此條件已存在'; return;
-  }
-  editingFilters.push({ type, value });
-  renderFilterList();
-  document.getElementById('addValue').value = '';
-  hint.textContent = '';
-  clearLookup();
+  const hint = document.getElementById('addHint');
+  if (!value) { hint.textContent='請輸入值'; return; }
+  if (editingFilters.some(f=>f.type===type&&f.value===value)) { hint.textContent='此條件已存在'; return; }
+  editingFilters.push({type,value}); renderFilterList();
+  document.getElementById('addValue').value=''; hint.textContent=''; clearLookup();
 }
 
-// ── 付款類別 checkbox ──
 function renderPartTypeCheckboxes() {
-  const existing = editingFilters.filter(f => f.type === 'part_type').map(f => f.value);
+  const existing = editingFilters.filter(f=>f.type==='part_type').map(f=>f.value);
   document.getElementById('partTypeCheckboxes').innerHTML = PART_TYPES.map(pt => {
     const already = existing.includes(pt);
-    return `<label class="part-type-chip ${already ? 'disabled' : ''}" onclick="togglePartTypeChip(this, '${pt}')">
-      <input type="checkbox" value="${pt}" ${already ? 'disabled' : ''}>
-      ${pt}${already ? ' ✓' : ''}
-    </label>`;
+    return `<label class="part-type-chip ${already?'disabled':''}" onclick="togglePartTypeChip(this,'${pt}')"><input type="checkbox" value="${pt}" ${already?'disabled':''}>${pt}${already?' ✓':''}</label>`;
   }).join('');
 }
 
-function togglePartTypeChip(el, val) {
-  if (el.classList.contains('disabled')) return;
-  const cb = el.querySelector('input');
-  cb.checked = !cb.checked;
-  el.classList.toggle('checked', cb.checked);
-}
+function togglePartTypeChip(el,val) { if(el.classList.contains('disabled'))return; const cb=el.querySelector('input'); cb.checked=!cb.checked; el.classList.toggle('checked',cb.checked); }
 
 function addPartTypeFilters() {
   const hint = document.getElementById('addHint');
   const checked = [...document.querySelectorAll('#partTypeCheckboxes input:checked')];
-  if (!checked.length) { hint.textContent = '請至少勾選一個付款類別'; return; }
-  let added = 0;
-  checked.forEach(cb => {
-    const val = cb.value;
-    if (!editingFilters.some(f => f.type === 'part_type' && f.value === val)) {
-      editingFilters.push({ type: 'part_type', value: val });
-      added++;
-    }
-  });
-  renderFilterList();
-  renderPartTypeCheckboxes(); // 重新 render 讓剛加的變成 disabled
+  if (!checked.length) { hint.textContent='請至少勾選一個付款類別'; return; }
+  let added=0;
+  checked.forEach(cb => { if(!editingFilters.some(f=>f.type==='part_type'&&f.value===cb.value)) { editingFilters.push({type:'part_type',value:cb.value}); added++; } });
+  renderFilterList(); renderPartTypeCheckboxes();
   hint.textContent = added ? `已加入 ${added} 個付款類別` : '所選項目已全部存在';
 }
 
-// ── 類型切換 ──
 function onTypeChange() {
   const type = document.getElementById('addType').value;
-  const isPartType = type === 'part_type';
-  document.getElementById('lookupWrap').style.display    = isPartType ? 'none' : '';
-  document.getElementById('btnAddFilter').style.display  = isPartType ? 'none' : '';
-  document.getElementById('partTypePanel').style.display = isPartType ? '' : 'none';
+  const isP = type==='part_type';
+  document.getElementById('lookupWrap').style.display = isP?'none':'';
+  document.getElementById('btnAddFilter').style.display = isP?'none':'';
+  document.getElementById('partTypePanel').style.display = isP?'':'none';
   document.getElementById('addHint').textContent = '';
-  if (isPartType) {
-    renderPartTypeCheckboxes();
-  } else {
-    clearLookup();
-  }
+  if (isP) renderPartTypeCheckboxes(); else clearLookup();
 }
 
 function resetAddRow() {
-  document.getElementById('addType').value = 'category_code';
-  document.getElementById('addValue').value = '';
-  document.getElementById('lookupDropdown').style.display = 'none';
-  document.getElementById('addHint').textContent = '';
-  document.getElementById('lookupWrap').style.display = '';
-  document.getElementById('btnAddFilter').style.display = '';
-  document.getElementById('partTypePanel').style.display = 'none';
+  document.getElementById('addType').value='category_code'; document.getElementById('addValue').value='';
+  document.getElementById('lookupDropdown').style.display='none'; document.getElementById('addHint').textContent='';
+  document.getElementById('lookupWrap').style.display=''; document.getElementById('btnAddFilter').style.display='';
+  document.getElementById('partTypePanel').style.display='none';
 }
 
-// ── 自動完成 ──
-function clearLookup() {
-  document.getElementById('addValue').value = '';
-  document.getElementById('lookupDropdown').style.display = 'none';
-  document.getElementById('addHint').textContent = '';
-}
+function clearLookup() { document.getElementById('addValue').value=''; document.getElementById('lookupDropdown').style.display='none'; document.getElementById('addHint').textContent=''; }
 
-function debounceLookup() {
-  clearTimeout(lookupTimer);
-  lookupTimer = setTimeout(doLookup, 280);
-}
+function debounceLookup() { clearTimeout(lookupTimer); lookupTimer=setTimeout(doLookup,280); }
 
 async function doLookup() {
-  const type = document.getElementById('addType').value;
-  if (type === 'part_type') return;
-  const q    = document.getElementById('addValue').value.trim();
-  const dd   = document.getElementById('lookupDropdown');
-  if (!q) { dd.style.display = 'none'; return; }
+  const type=document.getElementById('addType').value; if(type==='part_type')return;
+  const q=document.getElementById('addValue').value.trim(); const dd=document.getElementById('lookupDropdown');
+  if(!q){dd.style.display='none';return;}
   try {
-    const res  = await fetch(`/api/sa-config/parts-lookup?type=${type}&q=${encodeURIComponent(q)}`);
-    const data = await res.json();
-    if (!data.length) { dd.style.display = 'none'; return; }
-
-    dd.innerHTML = data.map(item => {
-      if (type === 'part_number') {
-        return `<div class="lookup-item" onclick="pickLookup('${esc(item.value)}')">
-          <div class="lookup-item-val">${item.value}</div>
-          <div class="lookup-item-sub">${item.label||''} 類別:${item.category_code||'-'} 功能:${item.function_code||'-'}</div>
-        </div>`;
-      } else {
-        return `<div class="lookup-item" onclick="pickLookup('${esc(item.value)}')">
-          <div class="lookup-item-val">${item.value}</div>
-          <div class="lookup-item-sub">涵蓋 ${item.part_count} 種零件 — ${(item.sample_names||'').slice(0,60)}</div>
-        </div>`;
-      }
-    }).join('');
-    dd.style.display = 'block';
-  } catch(e) { dd.style.display = 'none'; }
+    const data=await(await fetch(`/api/sa-config/parts-lookup?type=${type}&q=${encodeURIComponent(q)}`)).json();
+    if(!data.length){dd.style.display='none';return;}
+    dd.innerHTML=data.map(item => type==='part_number'
+      ? `<div class="lookup-item" onclick="pickLookup('${esc(item.value)}')"><div class="lookup-item-val">${item.value}</div><div class="lookup-item-sub">${item.label||''} 類別:${item.category_code||'-'} 功能:${item.function_code||'-'}</div></div>`
+      : `<div class="lookup-item" onclick="pickLookup('${esc(item.value)}')"><div class="lookup-item-val">${item.value}</div><div class="lookup-item-sub">涵蓋 ${item.part_count} 種零件 — ${(item.sample_names||'').slice(0,60)}</div></div>`
+    ).join('');
+    dd.style.display='block';
+  } catch(e){dd.style.display='none';}
 }
 
-function pickLookup(value) {
-  document.getElementById('addValue').value = value;
-  document.getElementById('lookupDropdown').style.display = 'none';
-}
-
+function pickLookup(value) { document.getElementById('addValue').value=value; document.getElementById('lookupDropdown').style.display='none'; }
 const esc = s => s.replace(/'/g,"\\'");
-
 document.addEventListener('click', e => {
-  const wrap = document.getElementById('addValue')?.closest('.lookup-wrap');
-  if (wrap && !wrap.contains(e.target))
-    document.getElementById('lookupDropdown').style.display = 'none';
+  const wrap=document.getElementById('addValue')?.closest('.lookup-wrap');
+  if(wrap&&!wrap.contains(e.target)) document.getElementById('lookupDropdown').style.display='none';
 });
+
+// ══════════════════════════════════════════════════════════
+// 工作天數設定
+// ══════════════════════════════════════════════════════════
+let wdWorkDates = new Set(); // 目前選取的工作日期字串集合
+
+async function loadWdPeriods() {
+  try {
+    const periods = await (await fetch('/api/periods')).json();
+    const sel = document.getElementById('wdPeriod');
+    sel.innerHTML = '<option value="">選擇期間...</option>';
+    periods.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p; opt.textContent = `${p.slice(0,4)}年${p.slice(4)}月`;
+      sel.appendChild(opt);
+    });
+    if (periods.length) sel.value = periods[0];
+  } catch(e) {}
+}
+
+async function loadWdList() {
+  const el = document.getElementById('wdExistingList');
+  try {
+    const rows = await (await fetch('/api/working-days')).json();
+    if (!rows.length) {
+      el.innerHTML = '<div style="color:#64748b;font-size:13px;padding:12px 0">尚未設定任何月份，系統將使用自動偵測工作天數</div>';
+      return;
+    }
+    el.innerHTML = `<div class="wd-existing-list">${rows.map(r => {
+      const days = Array.isArray(r.work_dates) ? r.work_dates.length : 0;
+      const period = r.period;
+      return `<div class="wd-existing-item">
+        <div class="info">
+          <div class="name"><span class="badge badge-blue">${r.branch}</span> &nbsp;${period.slice(0,4)}年${period.slice(4)}月</div>
+          <div class="sub">${days} 個營業日${r.note ? ' · ' + r.note : ''}</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="quickEditWd('${r.branch}','${r.period}')">編輯</button>
+        <button class="btn btn-danger btn-sm" onclick="quickDeleteWd('${r.branch}','${r.period}')">刪除</button>
+      </div>`;
+    }).join('')}</div>`;
+  } catch(e) { el.innerHTML = `<div style="color:#ef4444;font-size:13px">${e.message}</div>`; }
+}
+
+function quickEditWd(branch, period) {
+  document.getElementById('wdBranch').value = branch;
+  document.getElementById('wdPeriod').value = period;
+  loadWdCalendar();
+  document.getElementById('section-working-days').scrollTop = 0;
+}
+
+async function quickDeleteWd(branch, period) {
+  if (!confirm(`確定刪除 ${branch} ${period.slice(0,4)}年${period.slice(4)}月 的工作天數設定嗎？\n刪除後將回到自動偵測。`)) return;
+  await fetch(`/api/working-days?branch=${branch}&period=${period}`, { method:'DELETE' });
+  loadWdList();
+}
+
+async function loadWdCalendar() {
+  const branch  = document.getElementById('wdBranch').value;
+  const period  = document.getElementById('wdPeriod').value;
+  const statusEl = document.getElementById('wdConfigStatus');
+
+  if (!period) { statusEl.textContent = '請選擇期間'; return; }
+
+  const year  = parseInt(period.slice(0,4));
+  const month = parseInt(period.slice(4)) - 1; // 0-indexed
+
+  // 取得已存設定
+  try {
+    const data = await (await fetch(`/api/working-days?branch=${branch}&period=${period}`)).json();
+    wdWorkDates = new Set(Array.isArray(data.work_dates) ? data.work_dates : []);
+    const isConfigured = wdWorkDates.size > 0 || (data.updated_at && data.work_dates !== undefined && data.work_dates !== null);
+    statusEl.textContent = wdWorkDates.size > 0 ? `✅ 已設定 ${wdWorkDates.size} 天` : '⚠️ 尚未設定（將使用自動偵測）';
+    document.getElementById('btnWdDelete').style.display = (data.work_dates !== undefined && data.period === period) ? '' : 'none';
+  } catch(e) {
+    wdWorkDates = new Set();
+    statusEl.textContent = '載入失敗';
+  }
+
+  // 建立月曆
+  document.getElementById('wdMonthTitle').textContent = `${year}年${month+1}月 — ${branch}`;
+  document.getElementById('wdCalendarWrap').style.display = '';
+
+  renderWdCalendar(year, month);
+}
+
+function renderWdCalendar(year, month) {
+  const cal = document.getElementById('wdCalendar');
+  const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+
+  let html = '';
+  // 前置空格
+  for (let i = 0; i < firstDay; i++) {
+    html += `<div class="wd-day-cell empty"></div>`;
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dow = (firstDay + d - 1) % 7;
+    const isWork = wdWorkDates.has(dateStr);
+    const cls = [
+      'wd-day-cell',
+      isWork ? 'work' : '',
+      dow === 0 ? 'sun-col' : '',
+      dow === 6 ? 'sat-col' : '',
+    ].filter(Boolean).join(' ');
+    html += `<div class="${cls}" data-date="${dateStr}" onclick="toggleWdDay('${dateStr}')">${d}</div>`;
+  }
+  cal.innerHTML = html;
+  updateWdCount();
+}
+
+function toggleWdDay(dateStr) {
+  if (wdWorkDates.has(dateStr)) {
+    wdWorkDates.delete(dateStr);
+  } else {
+    wdWorkDates.add(dateStr);
+  }
+  // 更新 cell 樣式
+  const cell = document.querySelector(`.wd-day-cell[data-date="${dateStr}"]`);
+  if (cell) cell.classList.toggle('work', wdWorkDates.has(dateStr));
+  updateWdCount();
+}
+
+function updateWdCount() {
+  document.getElementById('wdWorkCount').textContent = wdWorkDates.size;
+}
+
+function wdSelectWeekdays() {
+  // 選週一到週五
+  document.querySelectorAll('.wd-day-cell:not(.empty)').forEach(cell => {
+    const date = new Date(cell.dataset.date);
+    const dow = date.getDay();
+    if (dow >= 1 && dow <= 5) {
+      wdWorkDates.add(cell.dataset.date);
+      cell.classList.add('work');
+    } else {
+      wdWorkDates.delete(cell.dataset.date);
+      cell.classList.remove('work');
+    }
+  });
+  updateWdCount();
+}
+
+function wdSelectAll() {
+  document.querySelectorAll('.wd-day-cell:not(.empty)').forEach(cell => {
+    wdWorkDates.add(cell.dataset.date);
+    cell.classList.add('work');
+  });
+  updateWdCount();
+}
+
+function wdClearAll() {
+  wdWorkDates.clear();
+  document.querySelectorAll('.wd-day-cell:not(.empty)').forEach(cell => cell.classList.remove('work'));
+  updateWdCount();
+}
+
+async function saveWdConfig() {
+  const branch = document.getElementById('wdBranch').value;
+  const period = document.getElementById('wdPeriod').value;
+  const msgEl  = document.getElementById('wdMsg');
+  const btn    = document.getElementById('btnWdSave');
+  if (!period) { msgEl.textContent = '請先選擇期間'; msgEl.style.color='#ef4444'; return; }
+
+  btn.disabled = true;
+  msgEl.textContent = '儲存中...'; msgEl.style.color='#64748b';
+  try {
+    const work_dates = [...wdWorkDates].sort();
+    const res = await fetch('/api/working-days', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ branch, period, work_dates }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '儲存失敗');
+    msgEl.textContent = `✅ 已儲存 ${data.count} 個營業日`;
+    msgEl.style.color = '#10b981';
+    document.getElementById('wdConfigStatus').textContent = `✅ 已設定 ${data.count} 天`;
+    document.getElementById('btnWdDelete').style.display = '';
+    loadWdList();
+  } catch(e) {
+    msgEl.textContent = '❌ ' + e.message;
+    msgEl.style.color = '#ef4444';
+  } finally { btn.disabled = false; }
+}
+
+async function deleteWdConfig() {
+  const branch = document.getElementById('wdBranch').value;
+  const period = document.getElementById('wdPeriod').value;
+  if (!confirm(`確定刪除 ${branch} ${period.slice(0,4)}年${period.slice(4)}月 的工作天數設定？`)) return;
+  await fetch(`/api/working-days?branch=${branch}&period=${period}`, { method:'DELETE' });
+  wdClearAll();
+  document.getElementById('wdConfigStatus').textContent = '⚠️ 已刪除（將使用自動偵測）';
+  document.getElementById('btnWdDelete').style.display = 'none';
+  document.getElementById('wdMsg').textContent = '';
+  loadWdList();
+}
 
 // ══════════════════════════════════════════════════════════
 // 密碼驗證 & 鎖定畫面
@@ -868,85 +906,43 @@ async function checkAuth() {
   const token = sessionStorage.getItem(SETTINGS_TOKEN_KEY);
   if (!token) { showLock(); return; }
   try {
-    const res  = await fetch(`/api/auth/settings/check?token=${token}`);
-    const data = await res.json();
+    const data = await (await fetch(`/api/auth/settings/check?token=${token}`)).json();
     if (data.valid) hideLock();
     else { sessionStorage.removeItem(SETTINGS_TOKEN_KEY); showLock(); }
   } catch(e) { showLock(); }
 }
 
-function showLock() {
-  document.getElementById('lockScreen').style.display = 'flex';
-  setTimeout(() => document.getElementById('lockInput').focus(), 60);
-}
+function showLock() { document.getElementById('lockScreen').style.display='flex'; setTimeout(()=>document.getElementById('lockInput').focus(),60); }
 
-function hideLock() {
-  document.getElementById('lockScreen').style.display = 'none';
-  loadHistory();
-}
+function hideLock() { document.getElementById('lockScreen').style.display='none'; loadHistory(); }
 
 async function doLogin() {
-  const pwd    = document.getElementById('lockInput').value;
-  const errEl  = document.getElementById('lockError');
-  const btn    = document.getElementById('lockBtn');
-  if (!pwd) { errEl.textContent = '請輸入密碼'; return; }
-  btn.disabled = true; btn.textContent = '驗證中...'; errEl.textContent = '';
+  const pwd=document.getElementById('lockInput').value; const errEl=document.getElementById('lockError'); const btn=document.getElementById('lockBtn');
+  if (!pwd) { errEl.textContent='請輸入密碼'; return; }
+  btn.disabled=true; btn.textContent='驗證中...'; errEl.textContent='';
   try {
-    const res  = await fetch('/api/auth/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: pwd }),
-    });
-    const data = await res.json();
-    if (res.ok && data.token) {
-      sessionStorage.setItem(SETTINGS_TOKEN_KEY, data.token);
-      document.getElementById('lockInput').value = '';
-      hideLock();
-    } else {
-      errEl.textContent = data.error || '密碼錯誤';
-      document.getElementById('lockInput').value = '';
-      document.getElementById('lockInput').focus();
-    }
-  } catch(e) { errEl.textContent = '連線失敗，請重試'; }
-  finally { btn.disabled = false; btn.textContent = '進入設定'; }
+    const res=await fetch('/api/auth/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pwd})});
+    const data=await res.json();
+    if (res.ok&&data.token) { sessionStorage.setItem(SETTINGS_TOKEN_KEY,data.token); document.getElementById('lockInput').value=''; hideLock(); }
+    else { errEl.textContent=data.error||'密碼錯誤'; document.getElementById('lockInput').value=''; document.getElementById('lockInput').focus(); }
+  } catch(e) { errEl.textContent='連線失敗，請重試'; }
+  finally { btn.disabled=false; btn.textContent='進入設定'; }
 }
 
-// ══════════════════════════════════════════════════════════
-// 修改密碼
-// ══════════════════════════════════════════════════════════
 async function changePassword() {
-  const current  = document.getElementById('pwdCurrent').value;
-  const newPwd   = document.getElementById('pwdNew').value;
-  const confirm  = document.getElementById('pwdConfirm').value;
-  const msgEl    = document.getElementById('pwdMsg');
-  const btn      = document.getElementById('pwdBtn');
-  const token    = sessionStorage.getItem(SETTINGS_TOKEN_KEY);
-
-  msgEl.textContent = ''; msgEl.style.color = '#ef4444';
-  if (!current) { msgEl.textContent = '請輸入目前密碼'; return; }
-  if (!newPwd)  { msgEl.textContent = '請輸入新密碼'; return; }
-  if (newPwd.length < 4) { msgEl.textContent = '新密碼至少需要 4 個字元'; return; }
-  if (newPwd !== confirm) { msgEl.textContent = '兩次輸入的新密碼不一致'; return; }
-
-  btn.disabled = true; btn.textContent = '儲存中...';
+  const current=document.getElementById('pwdCurrent').value; const newPwd=document.getElementById('pwdNew').value;
+  const confirm=document.getElementById('pwdConfirm').value; const msgEl=document.getElementById('pwdMsg');
+  const btn=document.getElementById('pwdBtn'); const token=sessionStorage.getItem(SETTINGS_TOKEN_KEY);
+  msgEl.textContent=''; msgEl.style.color='#ef4444';
+  if (!current){msgEl.textContent='請輸入目前密碼';return;} if(!newPwd){msgEl.textContent='請輸入新密碼';return;}
+  if(newPwd.length<4){msgEl.textContent='新密碼至少需要 4 個字元';return;} if(newPwd!==confirm){msgEl.textContent='兩次輸入的新密碼不一致';return;}
+  btn.disabled=true; btn.textContent='儲存中...';
   try {
-    const res  = await fetch('/api/auth/settings/password', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, currentPassword: current, newPassword: newPwd }),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      msgEl.style.color = '#10b981';
-      msgEl.textContent = '✅ 密碼已修改，請用新密碼重新登入';
-      ['pwdCurrent','pwdNew','pwdConfirm'].forEach(id => document.getElementById(id).value = '');
-      sessionStorage.removeItem(SETTINGS_TOKEN_KEY);
-      setTimeout(() => { showLock(); msgEl.textContent = ''; }, 1800);
-    } else {
-      msgEl.textContent = data.error || '修改失敗';
-    }
-  } catch(e) { msgEl.textContent = '連線失敗，請重試'; }
-  finally { btn.disabled = false; btn.textContent = '儲存新密碼'; }
+    const res=await fetch('/api/auth/settings/password',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,currentPassword:current,newPassword:newPwd})});
+    const data=await res.json();
+    if (res.ok) { msgEl.style.color='#10b981'; msgEl.textContent='✅ 密碼已修改，請用新密碼重新登入'; ['pwdCurrent','pwdNew','pwdConfirm'].forEach(id=>document.getElementById(id).value=''); sessionStorage.removeItem(SETTINGS_TOKEN_KEY); setTimeout(()=>{showLock();msgEl.textContent='';},1800); }
+    else { msgEl.textContent=data.error||'修改失敗'; }
+  } catch(e){msgEl.textContent='連線失敗，請重試';} finally{btn.disabled=false;btn.textContent='儲存新密碼';}
 }
 
 // ══════════════════════════════════════════════════════════
