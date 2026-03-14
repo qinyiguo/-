@@ -810,42 +810,43 @@ app.get('/api/stats/boutique-accessories', async (req, res) => {
     const { period, branch } = req.query;
     const params = []; let idx = 1;
 
-    const conds = [
-      `COALESCE(NULLIF(pc.part_type,''), NULLIF(ps.part_type,'')) IN ('精品','配件')`
-    ];
+    // 以 parts_catalog.part_type 判斷品項類型（精品/配件/零件）
+    // parts_sales 本身的 part_type 欄是 Paycode（付款類別），不是品項類型，不用於此處篩選
+    const conds = [`pc.part_type IN ('精品','配件')`];
     if (period) { conds.push(`ps.period=$${idx++}`); params.push(period); }
     if (branch) { conds.push(`ps.branch=$${idx++}`); params.push(branch); }
+    const where = conds.join(' AND ');
 
     const r = await pool.query(`
       SELECT
         ps.branch,
-        COALESCE(NULLIF(ps.sales_person,''), '（未知）')                      AS sales_person,
-        COALESCE(NULLIF(pc.part_type,''), NULLIF(ps.part_type,''), '其他')    AS part_type,
-        COALESCE(NULLIF(ps.department,''), '（未分類）')                      AS department,
+        COALESCE(NULLIF(ps.sales_person,''), '（未知）')  AS sales_person,
+        pc.part_type                                       AS part_type,
+        COALESCE(NULLIF(ps.department,''), '（未分類）')  AS department,
         SUM(ps.sale_price_untaxed)  AS total_sales,
         SUM(ps.cost_untaxed)        AS total_cost,
         SUM(ps.sale_qty)            AS total_qty,
         COUNT(*)                    AS cnt
       FROM parts_sales ps
-      LEFT JOIN parts_catalog pc ON ps.part_number = pc.part_number
-      WHERE ${conds.join(' AND ')}
-      GROUP BY ps.branch, sales_person, part_type, department
-      ORDER BY ps.branch, part_type, total_sales DESC
+      INNER JOIN parts_catalog pc ON ps.part_number = pc.part_number
+      WHERE ${where}
+      GROUP BY ps.branch, ps.sales_person, pc.part_type, ps.department
+      ORDER BY ps.branch, pc.part_type, SUM(ps.sale_price_untaxed) DESC
     `, params);
 
     const kpi = await pool.query(`
       SELECT
         ps.branch,
-        COALESCE(NULLIF(pc.part_type,''), NULLIF(ps.part_type,''), '其他') AS part_type,
-        SUM(ps.sale_price_untaxed) AS total_sales,
-        SUM(ps.cost_untaxed)       AS total_cost,
-        SUM(ps.sale_qty)           AS total_qty,
+        pc.part_type                AS part_type,
+        SUM(ps.sale_price_untaxed)  AS total_sales,
+        SUM(ps.cost_untaxed)        AS total_cost,
+        SUM(ps.sale_qty)            AS total_qty,
         COUNT(DISTINCT ps.order_no) AS order_count
       FROM parts_sales ps
-      LEFT JOIN parts_catalog pc ON ps.part_number = pc.part_number
-      WHERE ${conds.join(' AND ')}
-      GROUP BY ps.branch, part_type
-      ORDER BY ps.branch, part_type
+      INNER JOIN parts_catalog pc ON ps.part_number = pc.part_number
+      WHERE ${where}
+      GROUP BY ps.branch, pc.part_type
+      ORDER BY ps.branch, pc.part_type
     `, params);
 
     res.json({ rows: r.rows, kpi: kpi.rows });
