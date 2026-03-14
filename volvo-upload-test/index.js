@@ -133,8 +133,6 @@ const initDatabase = async () => {
       VALUES ('external_sales_category','外賣','外賣收入對應 parts_sales.category 值')
       ON CONFLICT (config_key) DO NOTHING`);
 
-    // ── 工作天數設定表 ────────────────────────────────────
-    // work_dates: JSONB 陣列，存該月實際營業日期字串 ["2026-03-01","2026-03-03",...]
     await client.query(`
       CREATE TABLE IF NOT EXISTS working_days_config (
         id         SERIAL PRIMARY KEY,
@@ -494,9 +492,6 @@ app.put('/api/income-config/:key', async (req, res) => {
 // ============================================================
 // 工作天數設定 API
 // ============================================================
-
-// GET /api/working-days?branch=AMA&period=202503  → 單筆
-// GET /api/working-days                            → 全部清單
 app.get('/api/working-days', async (req, res) => {
   const { branch, period } = req.query;
   try {
@@ -514,8 +509,6 @@ app.get('/api/working-days', async (req, res) => {
     }
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-
-// PUT /api/working-days  body: { branch, period, work_dates: ["2026-03-01",...], note }
 app.put('/api/working-days', async (req, res) => {
   const { branch, period, work_dates, note } = req.body;
   if (!branch || !period) return res.status(400).json({ error: 'branch 和 period 為必填' });
@@ -530,8 +523,6 @@ app.put('/api/working-days', async (req, res) => {
     res.json({ ok: true, count: work_dates.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-
-// DELETE /api/working-days?branch=AMA&period=202503  → 回到自動計算
 app.delete('/api/working-days', async (req, res) => {
   const { branch, period } = req.query;
   if (!branch || !period) return res.status(400).json({ error: 'branch 和 period 為必填' });
@@ -698,7 +689,7 @@ app.get('/api/stats/trend', async (req, res) => {
 });
 
 // ============================================================
-// 統計 API — 每日進廠台數（使用管理員設定工作天數）
+// 統計 API — 每日進廠台數
 // ============================================================
 app.get('/api/stats/daily', async (req, res) => {
   try {
@@ -722,7 +713,6 @@ app.get('/api/stats/daily', async (req, res) => {
       pool.query(`SELECT "${branchCol}" AS branch,SUM(daily_cnt) AS total_cars,COUNT(DISTINCT "${dateCol}"::date) AS auto_working_days,MAX(daily_cnt) AS max_day,MIN(daily_cnt) AS min_day FROM (SELECT "${branchCol}","${dateCol}"::date,COUNT(*) AS daily_cnt FROM business_query ${where} GROUP BY "${branchCol}","${dateCol}"::date) sub GROUP BY "${branchCol}" ORDER BY "${branchCol}"`,params),
     ]);
 
-    // 查詢管理員設定的工作天數
     const wdMap = {};
     if (period) {
       for (const row of autoSummary.rows) {
@@ -746,7 +736,7 @@ app.get('/api/stats/daily', async (req, res) => {
         total_cars: totalCars,
         working_days: workingDays,
         auto_working_days: parseInt(r.auto_working_days || 0),
-        configured_working_days: configuredDays,   // null=未設定
+        configured_working_days: configuredDays,
         daily_avg: workingDays > 0 ? (totalCars / workingDays).toFixed(1) : '0',
         max_day: r.max_day,
         min_day: r.min_day,
@@ -809,6 +799,56 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
       colTotals[cfg.id] = rows.reduce((s,row) => { const c=row.configs[cfg.id]||{qty:0,sales:0,cnt:0}; return {qty:s.qty+c.qty,sales:s.sales+c.sales,cnt:s.cnt+c.cnt}; },{qty:0,sales:0,cnt:0});
     }
     res.json({ configs, rows, colTotals });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============================================================
+// ★ 精品 & 配件銷售分析 API
+// ============================================================
+app.get('/api/stats/boutique-accessories', async (req, res) => {
+  try {
+    const { period, branch } = req.query;
+    const params = []; let idx = 1;
+
+    const conds = [
+      `COALESCE(NULLIF(pc.part_type,''), NULLIF(ps.part_type,'')) IN ('精品','配件')`
+    ];
+    if (period) { conds.push(`ps.period=$${idx++}`); params.push(period); }
+    if (branch) { conds.push(`ps.branch=$${idx++}`); params.push(branch); }
+
+    const r = await pool.query(`
+      SELECT
+        ps.branch,
+        COALESCE(NULLIF(ps.sales_person,''), '（未知）')                      AS sales_person,
+        COALESCE(NULLIF(pc.part_type,''), NULLIF(ps.part_type,''), '其他')    AS part_type,
+        COALESCE(NULLIF(ps.department,''), '（未分類）')                      AS department,
+        SUM(ps.sale_price_untaxed)  AS total_sales,
+        SUM(ps.cost_untaxed)        AS total_cost,
+        SUM(ps.sale_qty)            AS total_qty,
+        COUNT(*)                    AS cnt
+      FROM parts_sales ps
+      LEFT JOIN parts_catalog pc ON ps.part_number = pc.part_number
+      WHERE ${conds.join(' AND ')}
+      GROUP BY ps.branch, sales_person, part_type, department
+      ORDER BY ps.branch, part_type, total_sales DESC
+    `, params);
+
+    const kpi = await pool.query(`
+      SELECT
+        ps.branch,
+        COALESCE(NULLIF(pc.part_type,''), NULLIF(ps.part_type,''), '其他') AS part_type,
+        SUM(ps.sale_price_untaxed) AS total_sales,
+        SUM(ps.cost_untaxed)       AS total_cost,
+        SUM(ps.sale_qty)           AS total_qty,
+        COUNT(DISTINCT ps.order_no) AS order_count
+      FROM parts_sales ps
+      LEFT JOIN parts_catalog pc ON ps.part_number = pc.part_number
+      WHERE ${conds.join(' AND ')}
+      GROUP BY ps.branch, part_type
+      ORDER BY ps.branch, part_type
+    `, params);
+
+    res.json({ rows: r.rows, kpi: kpi.rows });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
