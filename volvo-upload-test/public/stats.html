@@ -107,6 +107,7 @@
   .income-cat-card.type-voucher::before   { background: #f59e0b; }
   .income-cat-card.type-external::before  { background: #14b8a6; }
   .income-cat-card.type-paid::before      { background: #f97316; }
+  .income-cat-card.type-grand::before     { background: #e2e8f0; }
   .income-cat-card.type-internal::before  { background: #64748b; }
   .income-cat-card.type-warranty::before  { background: #6366f1; }
   .income-cat-card.type-vsa::before       { background: #ec4899; }
@@ -120,6 +121,7 @@
   .income-cat-card.type-voucher .income-cat-value   { color: #f59e0b; }
   .income-cat-card.type-external .income-cat-value  { color: #14b8a6; }
   .income-cat-card.type-paid .income-cat-value      { color: #f97316; font-size: 26px; }
+  .income-cat-card.type-grand .income-cat-value     { color: #e2e8f0; font-size: 26px; }
   .income-cat-card.type-internal .income-cat-value  { color: #94a3b8; }
   .income-cat-card.type-warranty .income-cat-value  { color: #818cf8; }
   .income-cat-card.type-vsa .income-cat-value       { color: #f472b6; }
@@ -187,10 +189,14 @@
         💰 收入分類分析（未稅）
         <span class="card-title-note">各收入欄位÷1.05換算未稅｜零件成本已為未稅｜外賣來自零件銷售</span>
       </div>
+
+      <!-- 有費收入摘要 -->
       <div class="income-section-title">📊 有費收入摘要</div>
       <div id="incomeCategoryCards" class="income-category-grid">
         <div style="color:#64748b;font-size:13px;grid-column:1/-1"><span class="spinner"></span>載入中</div>
       </div>
+
+      <!-- 有費明細 -->
       <div class="divider-label">有費收入明細（未稅）</div>
       <div class="table-wrap" style="margin-bottom:16px">
         <table>
@@ -204,21 +210,34 @@
           <tbody id="tbIncomeRevenue"><tr><td colspan="13" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
         </table>
       </div>
+
+      <!-- 無費成本摘要 -->
       <div class="divider-label">無費工單成本（內結 / 保固 / VSA / 善意維修）</div>
+      <div class="income-section-title" style="margin-top:4px">📋 無費工單成本摘要</div>
+      <div id="incomeCostCards" class="income-category-grid">
+        <div style="color:#64748b;font-size:13px;grid-column:1/-1"><span class="spinner"></span>載入中</div>
+      </div>
+
+      <!-- 無費成本明細 -->
       <div class="table-wrap">
         <table>
           <thead><tr>
-                  <th>據點</th><th>帳類</th><th class="num">台數</th>
-                  <th class="num">引擎工資</th><th class="num">鈑金</th><th class="num">烤漆</th>
-                  <th class="num">洗車美容</th><th class="num">外包</th><th class="num">附加服務</th>
-                  <th class="num">工資小計</th>
-                  <th class="num">零件成本(未稅)</th>
-                  <th class="num" style="color:#f59e0b">合計成本</th><th>附註</th>
+            <th>據點</th><th>帳類</th><th class="num">台數</th>
+            <th class="num" style="color:#3b82f6">零件銷售</th>
+            <th class="num" style="color:#10b981">配件銷售</th>
+            <th class="num" style="color:#f59e0b">精品銷售</th>
+            <th class="num" style="color:#94a3b8">銷售小計</th>
+            <th class="num">引擎工資</th><th class="num">鈑金</th><th class="num">烤漆</th>
+            <th class="num">洗車美容</th><th class="num">外包</th><th class="num">附加服務</th>
+            <th class="num">工資小計</th>
+            <th class="num">零件成本(未稅)</th>
+            <th class="num" style="color:#f59e0b">合計成本</th><th>附註</th>
           </tr></thead>
-          <tbody id="tbIncomeCost"><tr><td colspan="6" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
+          <tbody id="tbIncomeCost"><tr><td colspan="17" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
         </table>
       </div>
     </div>
+
     <div class="card">
       <div class="card-title">📋 SA 業績排名</div>
       <div class="table-wrap">
@@ -362,15 +381,9 @@
 </div>
 
 <script>
-// ══════════════════════════════════════════════════════════
-// 全域狀態
-// ══════════════════════════════════════════════════════════
 let currentTab = 'repair';
 let saConfigs  = [];
 
-// ══════════════════════════════════════════════════════════
-// 工具函式
-// ══════════════════════════════════════════════════════════
 const n   = (v) => parseFloat(v || 0);
 const fmt = (v) => Math.round(n(v)).toLocaleString();
 const fmtK = (v) => Math.round(n(v) / 1000).toLocaleString() + 'K';
@@ -401,6 +414,7 @@ const GROUP_META = {
   voucher:   { label:'票券收入', cls:'type-voucher',   badge:'badge-yellow', icon:'🟡' },
   external:  { label:'外賣收入', cls:'type-external',  badge:'badge-teal',   icon:'🩵' },
   paid:      { label:'有費收入', cls:'type-paid',      badge:'badge-orange', icon:'🔶' },
+  grand:     { label:'總計（有費＋無費成本）', cls:'type-grand', badge:'badge-gray', icon:'📌' },
   internal:  { label:'內結',     cls:'type-internal',  badge:'badge-gray',   icon:'⚙️' },
   warranty:  { label:'保固',     cls:'type-warranty',  badge:'badge-purple', icon:'🛡️' },
   vsa:       { label:'VSA',      cls:'type-vsa',       badge:'badge-red',    icon:'📋' },
@@ -408,9 +422,6 @@ const GROUP_META = {
   other:     { label:'其他',     cls:'type-internal',  badge:'badge-gray',   icon:'❓' },
 };
 
-// ══════════════════════════════════════════════════════════
-// 分頁切換
-// ══════════════════════════════════════════════════════════
 function switchTab(tab) {
   currentTab = tab;
   const tabs = ['repair','tech','parts','boutique','sa-sales','trend','daily'];
@@ -422,9 +433,6 @@ function switchTab(tab) {
   });
 }
 
-// ══════════════════════════════════════════════════════════
-// 初始化 & 全域載入
-// ══════════════════════════════════════════════════════════
 async function loadPeriods() {
   try {
     const periods = await (await fetch('/api/periods')).json();
@@ -456,9 +464,7 @@ async function loadAll() {
   document.getElementById('lastUpdate').textContent = `更新於 ${new Date().toLocaleTimeString('zh-TW')}`;
 }
 
-// ══════════════════════════════════════════════════════════
-// 維修收入
-// ══════════════════════════════════════════════════════════
+// ══════ 維修收入 ══════
 async function loadRepair(period, branch) {
   try {
     const params = new URLSearchParams();
@@ -466,14 +472,12 @@ async function loadRepair(period, branch) {
     if (branch) params.set('branch', branch);
     const data = await (await fetch(`/api/stats/repair?${params}`)).json();
     if (data.error) throw new Error(data.error);
-
     const totals       = data.totals;
     const totalRevenue = totals.reduce((s,r) => s + n(r.total_untaxed), 0);
     const totalCars    = totals.reduce((s,r) => s + parseInt(r.car_count||0), 0);
     const totalEngine  = totals.reduce((s,r) => s + n(r.engine_wage), 0);
     const totalParts   = totals.reduce((s,r) => s + n(r.parts_income), 0);
     const totalCost    = totals.reduce((s,r) => s + n(r.parts_cost), 0);
-
     document.getElementById('repairKPI').innerHTML = `
       <div class="kpi-card"><div class="kpi-label">總營收（未稅）</div><div class="kpi-value kpi-green">${fmtK(totalRevenue)}</div><div class="kpi-sub">元（千）</div></div>
       <div class="kpi-card"><div class="kpi-label">出廠台數</div><div class="kpi-value kpi-blue">${totalCars.toLocaleString()}</div><div class="kpi-sub">台</div></div>
@@ -482,7 +486,6 @@ async function loadRepair(period, branch) {
       <div class="kpi-card"><div class="kpi-label">零件成本</div><div class="kpi-value kpi-yellow">${fmtK(totalCost)}</div><div class="kpi-sub">K</div></div>
       ${totals.map(t => `<div class="kpi-card"><div class="kpi-label">${t.branch} 營收</div><div class="kpi-value">${fmtK(t.total_untaxed)}</div><div class="kpi-sub">${parseInt(t.car_count||0)}台 | 引擎${fmtK(t.engine_wage)}</div></div>`).join('')}
     `;
-
     const saRows = data.bySA;
     const maxRev = Math.max(...saRows.map(r => n(r.total_untaxed)), 1);
     document.getElementById('tbSA').innerHTML = saRows.length
@@ -502,7 +505,6 @@ async function loadRepair(period, branch) {
           </td>
         </tr>`).join('')
       : '<tr><td colspan="8" class="empty">無資料</td></tr>';
-
     document.getElementById('tbAccount').innerHTML = data.summary.length
       ? data.summary.map(r => `<tr>
           <td><span class="badge badge-blue">${r.branch}</span></td>
@@ -520,13 +522,12 @@ async function loadRepair(period, branch) {
   }
 }
 
-// ══════════════════════════════════════════════════════════
-// 收入分類分析
-// ══════════════════════════════════════════════════════════
+// ══════ 收入分類分析 ══════
 async function loadIncomeSummary(period, branch) {
-  const cardsEl = document.getElementById('incomeCategoryCards');
-  const revenueEl = document.getElementById('tbIncomeRevenue');
-  const costEl = document.getElementById('tbIncomeCost');
+  const cardsEl    = document.getElementById('incomeCategoryCards');
+  const costCardsEl= document.getElementById('incomeCostCards');
+  const revenueEl  = document.getElementById('tbIncomeRevenue');
+  const costEl     = document.getElementById('tbIncomeCost');
   try {
     const params = new URLSearchParams();
     if (period) params.set('period', period);
@@ -535,23 +536,62 @@ async function loadIncomeSummary(period, branch) {
     if (data.error) throw new Error(data.error);
     const { byType, externalSales, techByType, externalCategory } = data;
 
+    // ── 彙整有費分組 ──
     const grouped = {};
     byType.forEach(r => {
       const gk = ACCOUNT_GROUP(r.account_type);
       if (!grouped[gk]) grouped[gk] = { total_untaxed:0, car_count:0, engine_wage:0, parts_income:0, accessories_income:0, boutique_income:0, bodywork_income:0, paint_income:0, carwash_income:0, outsource_income:0, addon_income:0, parts_cost:0 };
       const g = grouped[gk];
-      g.total_untaxed += n(r.total_untaxed); g.car_count += n(r.car_count);
-      g.engine_wage += n(r.engine_wage_nt); g.parts_income += n(r.parts_income_nt);
-      g.accessories_income += n(r.accessories_income_nt); g.boutique_income += n(r.boutique_income_nt);
-      g.bodywork_income += n(r.bodywork_income_nt); g.paint_income += n(r.paint_income_nt);
-      g.carwash_income += n(r.carwash_income_nt); g.outsource_income += n(r.outsource_income_nt);
-      g.addon_income += n(r.addon_income_nt); g.parts_cost += n(r.parts_cost_nt);
+      g.total_untaxed       += n(r.total_untaxed);
+      g.car_count           += n(r.car_count);
+      g.engine_wage         += n(r.engine_wage_nt);
+      g.parts_income        += n(r.parts_income_nt);
+      g.accessories_income  += n(r.accessories_income_nt);
+      g.boutique_income     += n(r.boutique_income_nt);
+      g.bodywork_income     += n(r.bodywork_income_nt);
+      g.paint_income        += n(r.paint_income_nt);
+      g.carwash_income      += n(r.carwash_income_nt);
+      g.outsource_income    += n(r.outsource_income_nt);
+      g.addon_income        += n(r.addon_income_nt);
+      g.parts_cost          += n(r.parts_cost_nt);
     });
 
     const extTotal  = externalSales.reduce((s,r) => s + n(r.total_sales), 0);
     const extOrders = externalSales.reduce((s,r) => s + parseInt(r.order_count||0), 0);
     const paidTotal = (grouped['general']?.total_untaxed||0) + (grouped['insurance']?.total_untaxed||0) + (grouped['extended']?.total_untaxed||0) + extTotal;
 
+    // ── 預算無費成本合計（用於 總計 card）──
+    const preCost = { total:0, cars:0, partsCost:0, engine:0, bodywork:0, paint:0, carwash:0, outsource:0, addon:0, wage:0,
+                      parts_sales:0, acc_sales:0, boutique_sales:0 };
+    byType.forEach(r => {
+      const gk = ACCOUNT_GROUP(r.account_type);
+      if (!COST_GROUPS.has(gk)) return;
+      const partsCost  = n(r.parts_cost_nt);
+      const engineWage = n(r.engine_wage_nt);
+      const bodywork   = n(r.bodywork_income_nt);
+      const paint      = n(r.paint_income_nt);
+      const carwash    = n(r.carwash_income_nt);
+      const outsource  = n(r.outsource_income_nt);
+      const addon      = n(r.addon_income_nt);
+      const wageTotal  = engineWage + bodywork + paint + carwash + outsource + addon;
+      preCost.cars         += n(r.car_count);
+      preCost.partsCost    += partsCost;
+      preCost.engine       += engineWage;
+      preCost.bodywork     += bodywork;
+      preCost.paint        += paint;
+      preCost.carwash      += carwash;
+      preCost.outsource    += outsource;
+      preCost.addon        += addon;
+      preCost.wage         += wageTotal;
+      preCost.total        += partsCost + wageTotal;
+      preCost.parts_sales  += n(r.parts_income_nt);
+      preCost.acc_sales    += n(r.accessories_income_nt);
+      preCost.boutique_sales += n(r.boutique_income_nt);
+    });
+
+    const grandRevenue = paidTotal + preCost.total;
+
+    // ── 有費收入摘要 cards ──
     let cardsHtml = '';
     ['general','insurance','extended','voucher','external','paid'].forEach(gk => {
       const meta = GROUP_META[gk] || GROUP_META.other;
@@ -565,23 +605,50 @@ async function loadIncomeSummary(period, branch) {
         cardsHtml += `<div class="income-cat-card ${meta.cls}"><div class="income-cat-label">${meta.icon} ${meta.label}</div><div class="income-cat-value">${fmtK(g?.total_untaxed||0)}</div><div class="income-cat-sub">${g?.car_count||0} 台</div></div>`;
       }
     });
+    // 總計 card
+    cardsHtml += `<div class="income-cat-card type-grand" style="border-color:#475569"><div class="income-cat-label">📌 總計（有費＋無費成本）</div><div class="income-cat-value">${fmtK(grandRevenue)}</div><div class="income-cat-sub">有費 ${fmtK(paidTotal)} + 無費成本 ${fmtK(preCost.total)}</div></div>`;
     cardsEl.innerHTML = cardsHtml || '<div style="color:#64748b;font-size:13px;grid-column:1/-1">無資料</div>';
 
+    // ── 無費成本摘要 cards ──
+    const COST_GROUP_ORDER = ['internal','warranty','vsa','goodwill'];
+    let costCardsHtml = '';
+    COST_GROUP_ORDER.forEach(gk => {
+      const meta = GROUP_META[gk];
+      const g = grouped[gk];
+      if (!g) return;
+      const gPartsCost = g.parts_cost;
+      const gWage = g.engine_wage + g.bodywork_income + g.paint_income + g.carwash_income + g.outsource_income + g.addon_income;
+      const gTotal = gPartsCost + gWage;
+      costCardsHtml += `<div class="income-cat-card ${meta.cls}">
+        <div class="income-cat-label">${meta.icon} ${meta.label}</div>
+        <div class="income-cat-value">${fmtK(gTotal)}</div>
+        <div class="income-cat-sub">${parseInt(g.car_count)} 台 · 零件成本 ${fmtK(gPartsCost)} · 工資 ${fmtK(gWage)}</div>
+      </div>`;
+    });
+    // 無費合計 card
+    costCardsHtml += `<div class="income-cat-card" style="background:#0f172a;border:1px solid #f59e0b">
+      <div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:#f59e0b;border-radius:3px 0 0 3px"></div>
+      <div class="income-cat-label" style="color:#f59e0b">⚠️ 無費工單成本合計</div>
+      <div class="income-cat-value" style="color:#f59e0b;font-size:26px">${fmtK(preCost.total)}</div>
+      <div class="income-cat-sub">${parseInt(preCost.cars)} 台 · 零件成本 ${fmtK(preCost.partsCost)} · 工資 ${fmtK(preCost.wage)}</div>
+    </div>`;
+    costCardsEl.innerHTML = costCardsHtml || '<div style="color:#64748b;font-size:13px;grid-column:1/-1">無無費工單資料</div>';
+
+    // ── 有費收入明細 ──
     const REVENUE_GROUPS = ['general','insurance','extended','voucher'];
     let revRows = '';
     let revSub = { cars:0, engine:0, parts:0, acc:0, boutique:0, bodywork:0, paint:0, carwash:0, out:0, addon:0, total:0 };
-
     byType.forEach(r => {
       const gk = ACCOUNT_GROUP(r.account_type);
       if (!REVENUE_GROUPS.includes(gk)) return;
       const meta = GROUP_META[gk] || GROUP_META.other;
       const total = n(r.total_untaxed);
-      revSub.cars += n(r.car_count); revSub.engine += n(r.engine_wage_nt);
-      revSub.parts += n(r.parts_income_nt); revSub.acc += n(r.accessories_income_nt);
-      revSub.boutique += n(r.boutique_income_nt); revSub.bodywork += n(r.bodywork_income_nt);
-      revSub.paint += n(r.paint_income_nt); revSub.carwash += n(r.carwash_income_nt);
-      revSub.out += n(r.outsource_income_nt); revSub.addon += n(r.addon_income_nt);
-      revSub.total += total;
+      revSub.cars    += n(r.car_count);  revSub.engine  += n(r.engine_wage_nt);
+      revSub.parts   += n(r.parts_income_nt);  revSub.acc += n(r.accessories_income_nt);
+      revSub.boutique+= n(r.boutique_income_nt); revSub.bodywork += n(r.bodywork_income_nt);
+      revSub.paint   += n(r.paint_income_nt); revSub.carwash  += n(r.carwash_income_nt);
+      revSub.out     += n(r.outsource_income_nt); revSub.addon += n(r.addon_income_nt);
+      revSub.total   += total;
       revRows += `<tr>
         <td><span class="badge badge-blue">${r.branch}</span></td>
         <td><span class="badge ${meta.badge}">${r.account_type}</span></td>
@@ -610,18 +677,20 @@ async function loadIncomeSummary(period, branch) {
       <td class="num" style="color:#f97316;font-size:14px">${fmt(paidTotal)}</td></tr>`;
     revenueEl.innerHTML = revRows || '<tr><td colspan="13" class="empty">無資料</td></tr>';
 
-    const techMap = {};
-    techByType.forEach(r => {
-      const gk = ACCOUNT_GROUP(r.account_type);
-      if (!techMap[gk]) techMap[gk] = { wage:0, cars:0, hours:0 };
-      techMap[gk].wage += n(r.total_wage); techMap[gk].cars += n(r.car_count); techMap[gk].hours += n(r.total_hours);
-    });
+    // ── 無費成本明細 ──
     let costRows = '';
-    let costTotal = { cars:0, partsCost:0, engine:0, bodywork:0, paint:0, carwash:0, outsource:0, addon:0, wage:0, total:0 };
+    let costTotal = { cars:0, partsCost:0, engine:0, bodywork:0, paint:0, carwash:0, outsource:0, addon:0, wage:0, total:0,
+                      parts_sales:0, acc_sales:0, boutique_sales:0, sales_sub:0 };
     byType.forEach(r => {
       const gk = ACCOUNT_GROUP(r.account_type);
       if (!COST_GROUPS.has(gk)) return;
       const meta = GROUP_META[gk] || GROUP_META.other;
+      // 實際銷售
+      const partsSales    = n(r.parts_income_nt);
+      const accSales      = n(r.accessories_income_nt);
+      const boutiqueSales = n(r.boutique_income_nt);
+      const salesSub      = partsSales + accSales + boutiqueSales;
+      // 成本
       const partsCost  = n(r.parts_cost_nt);
       const engineWage = n(r.engine_wage_nt);
       const bodywork   = n(r.bodywork_income_nt);
@@ -631,20 +700,31 @@ async function loadIncomeSummary(period, branch) {
       const addon      = n(r.addon_income_nt);
       const wageTotal  = engineWage + bodywork + paint + carwash + outsource + addon;
       const rowTotal   = partsCost + wageTotal;
-      costTotal.cars      += n(r.car_count);
-      costTotal.partsCost += partsCost;
-      costTotal.engine    += engineWage;
-      costTotal.bodywork  += bodywork;
-      costTotal.paint     += paint;
-      costTotal.carwash   += carwash;
-      costTotal.outsource += outsource;
-      costTotal.addon     += addon;
-      costTotal.wage      += wageTotal;
-      costTotal.total     += rowTotal;
+
+      costTotal.cars         += n(r.car_count);
+      costTotal.parts_sales  += partsSales;
+      costTotal.acc_sales    += accSales;
+      costTotal.boutique_sales += boutiqueSales;
+      costTotal.sales_sub    += salesSub;
+      costTotal.partsCost    += partsCost;
+      costTotal.engine       += engineWage;
+      costTotal.bodywork     += bodywork;
+      costTotal.paint        += paint;
+      costTotal.carwash      += carwash;
+      costTotal.outsource    += outsource;
+      costTotal.addon        += addon;
+      costTotal.wage         += wageTotal;
+      costTotal.total        += rowTotal;
+
+      const salesStyle = salesSub > 0 ? 'color:#94a3b8' : 'color:#334155';
       costRows += `<tr class="cost-row">
         <td><span class="badge badge-blue">${r.branch||'—'}</span></td>
         <td><span class="badge ${meta.badge}">${r.account_type}</span></td>
         <td class="num">${parseInt(r.car_count||0)}</td>
+        <td class="num" style="color:#3b82f6">${partsSales>0?fmt(partsSales):'—'}</td>
+        <td class="num" style="color:#10b981">${accSales>0?fmt(accSales):'—'}</td>
+        <td class="num" style="color:#f59e0b">${boutiqueSales>0?fmt(boutiqueSales):'—'}</td>
+        <td class="num" style="${salesStyle};font-weight:600">${salesSub>0?fmt(salesSub):'—'}</td>
         <td class="num">${engineWage>0?fmt(engineWage):'—'}</td>
         <td class="num">${bodywork>0?fmt(bodywork):'—'}</td>
         <td class="num">${paint>0?fmt(paint):'—'}</td>
@@ -662,6 +742,10 @@ async function loadIncomeSummary(period, branch) {
         <td></td>
         <td style="color:#3b82f6">無費合計</td>
         <td class="num">${parseInt(costTotal.cars)}</td>
+        <td class="num" style="color:#3b82f6">${fmt(costTotal.parts_sales)}</td>
+        <td class="num" style="color:#10b981">${fmt(costTotal.acc_sales)}</td>
+        <td class="num" style="color:#f59e0b">${fmt(costTotal.boutique_sales)}</td>
+        <td class="num" style="color:#94a3b8;font-weight:700">${fmt(costTotal.sales_sub)}</td>
         <td class="num">${fmt(costTotal.engine)}</td>
         <td class="num">${fmt(costTotal.bodywork)}</td>
         <td class="num">${fmt(costTotal.paint)}</td>
@@ -674,17 +758,16 @@ async function loadIncomeSummary(period, branch) {
         <td></td>
       </tr>`;
     }
-    costEl.innerHTML = costRows || '<tr><td colspan="6" class="empty">無無費工單資料</td></tr>';
+    costEl.innerHTML = costRows || '<tr><td colspan="17" class="empty">無無費工單資料</td></tr>';
   } catch(e) {
     cardsEl.innerHTML = `<div style="color:#ef4444;grid-column:1/-1">${e.message}</div>`;
+    costCardsEl.innerHTML = '';
     revenueEl.innerHTML = `<tr><td colspan="13" style="color:#ef4444;padding:16px">${e.message}</td></tr>`;
-    costEl.innerHTML = `<tr><td colspan="6" style="color:#ef4444;padding:16px">${e.message}</td></tr>`;
+    costEl.innerHTML = `<tr><td colspan="17" style="color:#ef4444;padding:16px">${e.message}</td></tr>`;
   }
 }
 
-// ══════════════════════════════════════════════════════════
-// 技師工資
-// ══════════════════════════════════════════════════════════
+// ══════ 技師工資 ══════
 async function loadTech(period, branch) {
   try {
     const params = new URLSearchParams();
@@ -723,9 +806,7 @@ async function loadTech(period, branch) {
   }
 }
 
-// ══════════════════════════════════════════════════════════
-// 零件銷售
-// ══════════════════════════════════════════════════════════
+// ══════ 零件銷售 ══════
 async function loadParts(period, branch) {
   try {
     const params = new URLSearchParams();
@@ -772,17 +853,13 @@ async function loadParts(period, branch) {
   }
 }
 
-// ══════════════════════════════════════════════════════════
-// ★ 精品 & 配件銷售矩陣
-// ══════════════════════════════════════════════════════════
+// ══════ 精品 & 配件銷售矩陣 ══════
 async function loadBoutiqueAccessories(period, branch) {
   const kpiEl    = document.getElementById('boutiqueKPI');
   const matrixEl = document.getElementById('boutiqueMatrix');
   if (!kpiEl || !matrixEl) return;
-
   kpiEl.innerHTML    = '<div style="padding:12px;color:#64748b;font-size:13px"><span class="spinner"></span>載入中</div>';
   matrixEl.innerHTML = '<div style="padding:40px;text-align:center;color:#64748b"><span class="spinner"></span>載入中...</div>';
-
   try {
     const params = new URLSearchParams();
     if (period) params.set('period', period);
@@ -790,18 +867,15 @@ async function loadBoutiqueAccessories(period, branch) {
     const data = await (await fetch(`/api/stats/boutique-accessories?${params}`)).json();
     if (data.error) throw new Error(data.error);
     const { rows, kpi } = data;
-
     if (!rows.length) {
       kpiEl.innerHTML    = `<div style="color:#64748b;padding:12px;font-size:13px;grid-column:1/-1">無精品或配件資料。請確認已上傳<strong>零件型錄（零配件比對）</strong>，並且零件銷售明細中有精品 / 配件品項。</div>`;
       matrixEl.innerHTML = '';
       return;
     }
-
     const PART_TYPES   = ['精品', '配件'];
     const DEPT_ORDER   = ['一般','保險','延保','票券','內結','保固','VSA','善意維修'];
     const branchColors = { AMA:'#3b82f6', AMC:'#10b981', AMD:'#f59e0b' };
     const typeColors   = { '精品':'#8b5cf6', '配件':'#14b8a6' };
-
     const deptSet = new Set(rows.map(r => r.account_type));
     const depts   = [...deptSet].sort((a, b) => {
       const ai = DEPT_ORDER.indexOf(a), bi = DEPT_ORDER.indexOf(b);
@@ -809,11 +883,9 @@ async function loadBoutiqueAccessories(period, branch) {
       if (ai >= 0) return -1; if (bi >= 0) return 1;
       return a.localeCompare(b, 'zh-TW');
     });
-
     const totalB = kpi.filter(r => r.part_type==='精品').reduce((s,r)=>s+n(r.total_sales),0);
     const totalA = kpi.filter(r => r.part_type==='配件').reduce((s,r)=>s+n(r.total_sales),0);
     const branches = [...new Set(rows.map(r => r.branch))].sort();
-
     let kpiHtml = `
       <div class="kpi-card"><div class="kpi-label">精品銷售合計</div><div class="kpi-value kpi-purple">${fmtK(totalB)}</div><div class="kpi-sub">K 元（未稅）</div></div>
       <div class="kpi-card"><div class="kpi-label">配件銷售合計</div><div class="kpi-value kpi-teal">${fmtK(totalA)}</div><div class="kpi-sub">K 元（未稅）</div></div>
@@ -825,8 +897,6 @@ async function loadBoutiqueAccessories(period, branch) {
       kpiHtml += `<div class="kpi-card"><div class="kpi-label" style="color:${col}">${br} 精品＋配件</div><div class="kpi-value" style="color:${col}">${fmtK(brB+brA)}</div><div class="kpi-sub">精 ${fmtK(brB)} ／ 配 ${fmtK(brA)}</div></div>`;
     });
     kpiEl.innerHTML = kpiHtml;
-
-    // Pivot
     const pivotMap = {};
     rows.forEach(r => {
       const key = `${r.branch}|||${r.sales_person}`;
@@ -838,20 +908,15 @@ async function loadBoutiqueAccessories(period, branch) {
       if (a.branch !== b.branch) return a.branch < b.branch ? -1 : 1;
       return getRowTotal(b) - getRowTotal(a);
     });
-
     const thB = 'padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#64748b;background:#0f172a;border-bottom:1px solid #2d3f56;white-space:nowrap;';
     const thN = thB + 'text-align:right;';
     const tdB = 'padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.4);font-size:12px;vertical-align:middle;border-top:0;';
     const tdN = tdB + 'text-align:right;font-variant-numeric:tabular-nums;';
-    // 水平 sticky（左欄固定）
     const sTh = (l,e='') => `position:sticky;left:${l}px;z-index:5;background:#0f172a;${e}`;
     const sTd = (l,bg='#111827',e='') => `position:sticky;left:${l}px;z-index:2;background:${bg};${e}`;
-    // 左+上同時固定（左上角固定欄）― top 由 thead sticky 處理，只需固定 left
     const sThTop0 = 'background:#0f172a;';
     const sThTop1 = 'background:#0f172a;';
     const sThCorner = (l,e='') => `position:sticky;left:${l}px;z-index:3;background:#0f172a;${e}`;
-
-    // thead 整體 sticky，比逐一設定 th.top 更穩定（display:none 時不會算出高度 0）
     let html = `<table style="width:100%;border-collapse:separate;border-spacing:0;font-size:12px"><thead style="position:sticky;top:0;z-index:4;"><tr>`;
     html += `<th rowspan="2" style="${thB}${sThCorner(0,'border-right:1px solid #2d3f56;width:36px')}">#</th>`;
     html += `<th rowspan="2" style="${thB}${sThCorner(36,'border-right:1px solid #2d3f56;width:60px')}">據點</th>`;
@@ -869,16 +934,13 @@ async function loadBoutiqueAccessories(period, branch) {
       html += `<th style="${thN}${sThTop1}color:${typeColors[pt]||'#94a3b8'};font-size:10px;border-right:${bdr}">小計</th>`;
     });
     html += `</tr></thead><tbody>`;
-
     let rowIdx = 0, grandTotal = 0;
     const colGT = {};
-
     branches.forEach(br => {
       const bCol   = branchColors[br]||'#64748b';
       const brRows = pivotRows.filter(r => r.branch===br);
       const brSub  = {};
       let   brTotal = 0;
-
       brRows.forEach(row => {
         rowIdx++;
         const bg = rowIdx%2===0 ? '#0e1a29' : '#111827';
@@ -905,8 +967,6 @@ async function loadBoutiqueAccessories(period, branch) {
         grandTotal += rowTotal; brTotal += rowTotal;
         html += `<td style="${tdN}color:#10b981;font-weight:800;border-left:2px solid #374151">${rowTotal>0?fmt(rowTotal):'—'}</td></tr>`;
       });
-
-      // Branch subtotal
       const subAlpha = br==='AMA'?'59,130,246':br==='AMC'?'16,185,129':'245,158,11';
       html += `<tr style="background:rgba(${subAlpha},.07);border-top:1px solid ${bCol}44">`;
       html += `<td style="${tdB}${sTd(0,'transparent','border-right:1px solid #2d3f56')}"></td>`;
@@ -924,8 +984,6 @@ async function loadBoutiqueAccessories(period, branch) {
       });
       html += `<td style="${tdN}color:${bCol};font-weight:800;border-left:2px solid #374151">${brTotal>0?fmt(brTotal):'—'}</td></tr>`;
     });
-
-    // Grand total
     html += `<tr style="background:#1e293b;border-top:2px solid #3b82f6">`;
     html += `<td style="${tdB}${sTd(0,'#1e293b','border-right:1px solid #2d3f56')}"></td>`;
     html += `<td style="${tdB}${sTd(36,'#1e293b','border-right:1px solid #2d3f56')}"></td>`;
@@ -943,16 +1001,13 @@ async function loadBoutiqueAccessories(period, branch) {
     html += `<td style="${tdN}color:#10b981;font-weight:800;font-size:13px;border-left:2px solid #374151">${grandTotal>0?fmt(grandTotal):'—'}</td></tr>`;
     html += `</tbody></table>`;
     matrixEl.innerHTML = html;
-
   } catch(e) {
     kpiEl.innerHTML    = `<div style="color:#ef4444;padding:12px;grid-column:1/-1">${e.message}</div>`;
     matrixEl.innerHTML = '';
   }
 }
 
-// ══════════════════════════════════════════════════════════
-// SA 銷售統計矩陣
-// ══════════════════════════════════════════════════════════
+// ══════ SA 銷售統計矩陣 ══════
 async function loadConfigs() {
   try { const res = await fetch('/api/sa-config'); saConfigs = await res.json(); } catch(e) {}
 }
@@ -986,8 +1041,6 @@ async function loadSASales() {
     const tdNum  = tdBase + 'text-align:right;font-variant-numeric:tabular-nums;';
     const stTh   = (l, e='') => `position:sticky;left:${l}px;z-index:5;background:#0f172a;${e}`;
     const stTd   = (l, bg='#111827', e='') => `position:sticky;left:${l}px;z-index:2;background:${bg};${e}`;
-    const saThTop0 = 'background:#0f172a;';
-    const saThTop1 = 'background:#0f172a;';
     const saCorner = (l,e='') => `position:sticky;left:${l}px;z-index:3;background:#0f172a;${e}`;
     let html = `<table style="width:100%;border-collapse:separate;border-spacing:0;font-size:13px"><thead style="position:sticky;top:0;z-index:4;"><tr>`;
     html += `<th style="${thBase}${saCorner(0,'border-right:1px solid #2d3f56;width:40px')}" rowspan="2">#</th>`;
@@ -995,11 +1048,11 @@ async function loadSASales() {
     html += `<th style="${thBase}${saCorner(110,'border-right:2px solid #374151;min-width:130px')}" rowspan="2">銷售人員</th>`;
     configs.forEach((cfg, ci) => {
       const col = cfgColors[ci % cfgColors.length];
-      html += `<th colspan="1" style="${thBase}${saThTop0}text-align:center;color:${col};border-right:${ci<configs.length-1?'2px solid #2d3f56':'1px solid #2d3f56'};border-bottom:1px solid #1e293b">${cfg.config_name}</th>`;
+      html += `<th colspan="1" style="${thBase}background:#0f172a;text-align:center;color:${col};border-right:${ci<configs.length-1?'2px solid #2d3f56':'1px solid #2d3f56'};border-bottom:1px solid #1e293b">${cfg.config_name}</th>`;
     });
     html += `</tr><tr>`;
     configs.forEach((cfg, ci) => {
-      html += `<th style="${thNum}${saThTop1}border-right:${ci<configs.length-1?'2px solid #2d3f56':'1px solid #2d3f56'};font-size:11px">${methodUnitMap[cfg.stat_method]||'金額(元)'}</th>`;
+      html += `<th style="${thNum}background:#0f172a;border-right:${ci<configs.length-1?'2px solid #2d3f56':'1px solid #2d3f56'};font-size:11px">${methodUnitMap[cfg.stat_method]||'金額(元)'}</th>`;
     });
     html += `</tr></thead><tbody>`;
     let rowIdx = 0;
@@ -1064,9 +1117,7 @@ async function loadSASales() {
   } catch(e) { matrixEl.innerHTML = `<div style="padding:24px;color:#ef4444">${e.message}</div>`; }
 }
 
-// ══════════════════════════════════════════════════════════
-// 月份趨勢
-// ══════════════════════════════════════════════════════════
+// ══════ 月份趨勢 ══════
 async function loadTrend(branch) {
   try {
     const params = new URLSearchParams();
@@ -1093,9 +1144,7 @@ async function loadTrend(branch) {
   } catch(e) { document.getElementById('tbTrend').innerHTML = `<tr><td colspan="7" style="color:#ef4444;padding:16px">${e.message}</td></tr>`; }
 }
 
-// ══════════════════════════════════════════════════════════
-// 每日進廠台數
-// ══════════════════════════════════════════════════════════
+// ══════ 每日進廠台數 ══════
 async function loadDaily(period, branch) {
   try {
     const params = new URLSearchParams();
@@ -1139,9 +1188,7 @@ async function loadDaily(period, branch) {
   } catch(e) { document.getElementById('dailyKPI').innerHTML=`<div style="color:#ef4444;padding:16px">${e.message}</div>`; }
 }
 
-// ══════════════════════════════════════════════════════════
-// 初始化
-// ══════════════════════════════════════════════════════════
+// ══════ 初始化 ══════
 (async () => {
   await loadPeriods();
   await Promise.all([loadAll(), loadConfigs()]);
