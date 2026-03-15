@@ -397,8 +397,8 @@
       <div class="card">
         <div class="card-title">📥 Excel 批次匯入</div>
         <div class="hint" style="margin-bottom:14px">
-          📋 <strong>Excel 格式說明</strong>：每列代表一個據點一個月份，系統依「<code>期間</code>」（YYYYMM）和「<code>據點</code>」（AMA/AMC/AMD）自動識別。
-          一個 Excel 可以包含多個月份和多個據點。<br>
+          📋 <strong>Excel 格式說明</strong>：每列代表一個據點一個月份，系統依「<code>期間</code>」（YYYYMM）和「<code>據點</code>」（AMA/AMC/AMD）自動識別。<br>
+          ✅ <strong>下載的範本已包含當年 1～12 月、三站共 36 列</strong>，填入數字後一次上傳即可完成全年設定。<br>
           金額單位：<strong>元（不需要除以 1000）</strong>，例如目標 36,000,000 就填 36000000
         </div>
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
@@ -1052,20 +1052,31 @@ async function deleteRevRow(branch, period) {
 }
 
 function downloadRevTemplate() {
-  // 產生 CSV 範本讓使用者下載（不需要 xlsx library 在前端）
   const header = ['期間','據點','有費營收_目標','有費營收_去年','鈑烤營收_目標','鈑烤營收_去年','一般營收_目標','一般營收_去年','延保營收_目標','延保營收_去年'];
   const now = new Date();
-  const y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,'0');
-  const rows = [
-    [y+''+m, 'AMA', 36000000, 37000000, 8000000, 7500000, 21000000, 22000000, 800000, 750000],
-    [y+''+m, 'AMC', 10000000, 11000000, 2000000, 1800000,  5700000,  6000000, 200000, 180000],
-    [y+''+m, 'AMD', 16000000, 17000000, 2500000, 2300000,  8800000,  9500000, 300000, 280000],
-  ];
+  const y = now.getFullYear();
+
+  // 預設數字（供參考，使用者自行修改）
+  const defaults = {
+    AMA: [36000000, 37000000, 8000000, 7500000, 21000000, 22000000,  800000,  750000],
+    AMC: [10000000, 11000000, 2000000, 1800000,  5700000,  6000000,  200000,  180000],
+    AMD: [16000000, 17000000, 2500000, 2300000,  8800000,  9500000,  300000,  280000],
+  };
+
+  const rows = [];
+  // 產生 1～12 月，每月三個據點
+  for (let mo = 1; mo <= 12; mo++) {
+    const period = `${y}${String(mo).padStart(2,'0')}`;
+    ['AMA','AMC','AMD'].forEach(br => {
+      rows.push([period, br, ...defaults[br]]);
+    });
+  }
+
   const csv = [header, ...rows].map(r => r.join(',')).join('\r\n');
-  const bom = '\uFEFF'; // UTF-8 BOM for Excel
+  const bom = '\uFEFF';
   const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = `營收目標範本_${y}${m}.csv`; a.click();
+  const a = document.createElement('a'); a.href = url; a.download = `營收目標範本_${y}全年.csv`; a.click();
   URL.revokeObjectURL(url);
 }
 
