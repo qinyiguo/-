@@ -1405,6 +1405,140 @@ app.get('/api/stats/income-breakdown', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// 解析「橫式分區」零配精品銷售目標 Excel
+app.post('/api/upload-performance-targets-native', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: '請選擇檔案' });
+  const year = String(req.body.year || '').trim();
+  const dataType = String(req.body.dataType || 'target').trim(); // 'target' or 'last_year'
+  if (!year.match(/^\d{4}$/)) return res.status(400).json({ error: '請指定正確的年份（4位數）' });
+  const valueField = dataType === 'last_year' ? 'last_year_value' : 'target_value';
+  try {
+    // 取得目前所有指標（用來對應 Excel 區塊標題）
+    const metricsRes = await pool.query(`SELECT id, metric_name FROM performance_metrics ORDER BY id`);
+    const metrics = metricsRes.rows;
+    if (!metrics.length) return res.status(400).json({ error: '尚未建立任何指標，請先至指標定義新增' });
+
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: false, cellNF: true, cellText: false });
+    const SHEET_KWS = ['目標','年度','營收','實績','指標','銷售'];
+    let sheetName = workbook.SheetNames[0];
+    for (const sn of workbook.SheetNames) {
+      if (SHEET_KWS.some(kw => sn.includes(kw))) { sheetName = sn; break; }
+    }
+    const sheet = workbook.Sheets[sheetName];
+    const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
+
+    const BRANCHES = ['AMA','AMC','AMD'];
+    const toMonthIndex = (cell) => {
+      const s = String(cell ?? '').trim();
+      const m1 = s.match(/^([1-9]|1[0-2])月$/);
+      if (m1) return parseInt(m1[1]);
+      if (typeof cell === 'number' && cell >= 1 && cell <= 12 && Number.isInteger(cell)) return cell;
+      const m2 = s.match(/^([1-9]|1[0-2])$/);
+      if (m2) return parseInt(m2[1]);
+      return -1;
+    };
+
+    // 找指標對應：區塊標題包含指標名稱關鍵字
+    const matchMetric = (rowStr) => {
+      for (const m of metrics) {
+        if (rowStr.includes(m.metric_name)) return m;
+        // 也嘗試只取前幾個字元
+        const shortName = m.metric_name.slice(0, 3);
+        if (shortName.length >= 2 && rowStr.includes(shortName)) return m;
+      }
+      return null;
+    };
+
+    const data = {}; // { metric_id: { branch: { month: value } } }
+    let curMetricId = null;
+    let monthColIdx = {};
+
+    for (let ri = 0; ri < raw.length; ri++) {
+      const row = raw[ri];
+      if (!row || row.every(c => c === '' || c === null)) continue;
+      const rowStr = row.map(c => String(c ?? '')).join('|');
+
+      // 偵測月份 header 行
+      const monthCells = row.map((c, ci) => ({ mo: toMonthIndex(c), ci })).filter(x => x.mo > 0);
+      if (monthCells.length >= 6) {
+        monthColIdx = {};
+        monthCells.forEach(({ mo, ci }) => { monthColIdx[mo] = ci; });
+        continue;
+      }
+
+      // 偵測區塊標題（指標名稱）
+      const matched = matchMetric(rowStr);
+      if (matched && Object.keys(monthColIdx).length === 0) {
+        curMetricId = matched.id;
+        monthColIdx = {};
+        if (!data[curMetricId]) data[curMetricId] = {};
+        continue;
+      }
+      if (matched && monthCells.length < 3) {
+        curMetricId = matched.id;
+        if (!data[curMetricId]) data[curMetricId] = {};
+        continue;
+      }
+
+      if (!curMetricId || Object.keys(monthColIdx).length === 0) continue;
+
+      // 據點資料行
+      const branchRaw = String(row[0] ?? row[1] ?? '').trim().toUpperCase();
+      const matchedBranch = BRANCHES.find(b => branchRaw === b || branchRaw.endsWith(b));
+      if (!matchedBranch) continue;
+
+      if (!data[curMetricId][matchedBranch]) data[curMetricId][matchedBranch] = {};
+      for (const [mo, ci] of Object.entries(monthColIdx)) {
+        const v = parseFloat(String(row[ci] ?? '').replace(/,/g, ''));
+        if (!isNaN(v) && v > 0) data[curMetricId][matchedBranch][parseInt(mo)] = v;
+      }
+    }
+
+    // 組成 entries
+    const entries = [];
+    for (const [metricId, branchData] of Object.entries(data)) {
+      for (const [branch, monthData] of Object.entries(branchData)) {
+        for (const [mo, val] of Object.entries(monthData)) {
+          const period = `${year}${String(mo).padStart(2,'0')}`;
+          entries.push({ metric_id: parseInt(metricId), branch, period, value: Math.round(val) });
+        }
+      }
+    }
+
+    if (!entries.length) {
+      const detected = metrics.filter(m => data[m.id]).map(m => m.metric_name);
+      return res.status(400).json({
+        error: `找不到有效資料。已識別指標：${detected.length ? detected.join('、') : '無'}。請確認 Excel 區塊標題包含指標名稱`,
+        debug: { sheetName, totalRows: raw.length, metricsAvailable: metrics.map(m=>m.metric_name) }
+      });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const e of entries) {
+        await client.query(`
+          INSERT INTO performance_targets (metric_id,branch,period,${valueField},updated_at)
+          VALUES ($1,$2,$3,$4,NOW())
+          ON CONFLICT (metric_id,branch,period) DO UPDATE SET ${valueField}=$4, updated_at=NOW()
+        `, [e.metric_id, e.branch, e.period, e.value]);
+      }
+      await client.query('COMMIT');
+
+      const summary = {};
+      entries.forEach(e => {
+        const m = metrics.find(x => x.id === e.metric_id);
+        const name = m?.metric_name || `id:${e.metric_id}`;
+        if (!summary[name]) summary[name] = new Set();
+        summary[name].add(e.period);
+      });
+      const summaryStr = Object.entries(summary).map(([n, ps]) => `${n}(${[...ps].sort().join('/')})`).join('、');
+      res.json({ ok: true, count: entries.length, year, dataType, summary: summaryStr });
+    } catch(err) { await client.query('ROLLBACK'); throw err; }
+    finally { client.release(); }
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 // ============================================================
 // 業績統計 API
 // ============================================================
