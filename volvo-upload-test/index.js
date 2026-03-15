@@ -190,6 +190,19 @@ const initDatabase = async () => {
         UNIQUE(branch, period)
       )`);
 
+    // ── 工資代碼設定 ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tech_wage_configs (
+        id          SERIAL PRIMARY KEY,
+        config_name VARCHAR(100) NOT NULL,
+        description TEXT DEFAULT '',
+        work_codes  JSONB NOT NULL DEFAULT '[]',
+        account_types JSONB NOT NULL DEFAULT '[]',
+        stat_method VARCHAR(20) NOT NULL DEFAULT 'count',
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        updated_at  TIMESTAMPTZ DEFAULT NOW()
+      )`);
+
     // ── 業績預估（各據點主管輸入本月預估）──
     await client.query(`
       CREATE TABLE IF NOT EXISTS revenue_estimates (
@@ -1013,6 +1026,117 @@ app.put('/api/performance-targets/batch', async (req, res) => {
 });
 
 // ============================================================
+// 工資代碼設定 API
+// ============================================================
+app.get('/api/tech-wage-config', async (req, res) => {
+  try { res.json((await pool.query(`SELECT * FROM tech_wage_configs ORDER BY id`)).rows); }
+  catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/tech-wage-config', async (req, res) => {
+  const { config_name, description, work_codes, account_types, stat_method } = req.body;
+  if (!config_name) return res.status(400).json({ error: '名稱為必填' });
+  if (!Array.isArray(work_codes) || !work_codes.length) return res.status(400).json({ error: '至少需要一個工資代碼' });
+  const method = ['count','amount','hours'].includes(stat_method) ? stat_method : 'count';
+  try {
+    const r = await pool.query(
+      `INSERT INTO tech_wage_configs (config_name,description,work_codes,account_types,stat_method)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [config_name.trim(), description||'', JSON.stringify(work_codes), JSON.stringify(account_types||[]), method]
+    );
+    res.json(r.rows[0]);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/tech-wage-config/:id', async (req, res) => {
+  const { config_name, description, work_codes, account_types, stat_method } = req.body;
+  if (!config_name) return res.status(400).json({ error: '名稱為必填' });
+  const method = ['count','amount','hours'].includes(stat_method) ? stat_method : 'count';
+  try {
+    const r = await pool.query(
+      `UPDATE tech_wage_configs SET config_name=$1,description=$2,work_codes=$3,account_types=$4,stat_method=$5,updated_at=NOW()
+       WHERE id=$6 RETURNING *`,
+      [config_name.trim(), description||'', JSON.stringify(work_codes||[]), JSON.stringify(account_types||[]), method, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: '找不到設定' });
+    res.json(r.rows[0]);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/tech-wage-config/:id', async (req, res) => {
+  try { await pool.query(`DELETE FROM tech_wage_configs WHERE id=$1`, [req.params.id]); res.json({ ok:true }); }
+  catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// 工資代碼矩陣統計 API
+app.get('/api/stats/tech-wage-matrix', async (req, res) => {
+  const { period, branch } = req.query;
+  try {
+    const configs = (await pool.query(`SELECT * FROM tech_wage_configs ORDER BY id`)).rows;
+    if (!configs.length) return res.json({ configs:[], rows:[], colTotals:{} });
+
+    // 建立 work_code SQL 條件
+    const buildWorkCodeCond = (workCodes, startIdx) => {
+      const conds = []; const params = [];
+      let idx = startIdx;
+      for (const wc of workCodes) {
+        if (wc.type === 'range') {
+          conds.push(`work_code BETWEEN $${idx++} AND $${idx++}`);
+          params.push(wc.from, wc.to);
+        } else {
+          conds.push(`work_code=$${idx++}`);
+          params.push(wc.value);
+        }
+      }
+      return { cond: conds.length ? `(${conds.join(' OR ')})` : '1=1', params };
+    };
+
+    const saMap = {};
+    for (const cfg of configs) {
+      const workCodes = cfg.work_codes || [];
+      const acTypes = cfg.account_types || [];
+      if (!workCodes.length) continue;
+
+      let p = []; let idx = 1;
+      const baseConds = [];
+      if (period) { baseConds.push(`period=$${idx++}`); p.push(period); }
+      if (branch) { baseConds.push(`branch=$${idx++}`); p.push(branch); }
+      if (acTypes.length) { baseConds.push(`account_type=ANY($${idx++})`); p.push(acTypes); }
+
+      const wcResult = buildWorkCodeCond(workCodes, idx);
+      baseConds.push(wcResult.cond);
+      p = p.concat(wcResult.params);
+
+      const where = baseConds.length ? 'WHERE ' + baseConds.join(' AND ') : '';
+      const statExpr = cfg.stat_method === 'amount' ? 'SUM(wage)' :
+                       cfg.stat_method === 'hours'  ? 'SUM(standard_hours)' :
+                       'COUNT(DISTINCT work_order)';
+      const r = await pool.query(
+        `SELECT branch, tech_name_clean AS name, ${statExpr} AS val FROM tech_performance ${where} GROUP BY branch, tech_name_clean`,
+        p
+      );
+      for (const row of r.rows) {
+        const key = `${row.branch}|||${row.name}`;
+        if (!saMap[key]) saMap[key] = { branch:row.branch, name:row.name, configs:{} };
+        saMap[key].configs[cfg.id] = parseFloat(row.val || 0);
+      }
+    }
+
+    const rows = Object.values(saMap).sort((a,b) => {
+      if (a.branch !== b.branch) return a.branch < b.branch ? -1 : 1;
+      const aSum = Object.values(a.configs).reduce((s,v) => s+v, 0);
+      const bSum = Object.values(b.configs).reduce((s,v) => s+v, 0);
+      return bSum - aSum;
+    });
+    const colTotals = {};
+    for (const cfg of configs) {
+      colTotals[cfg.id] = rows.reduce((s,row) => s + (row.configs[cfg.id]||0), 0);
+    }
+    res.json({ configs, rows, colTotals });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============================================================
 // 營收目標 API
 // ============================================================
 app.get('/api/revenue-targets', async (req, res) => {
@@ -1656,6 +1780,35 @@ app.get('/api/stats/performance', async (req, res) => {
               `SELECT COALESCE(SUM(ps.sale_price_untaxed),0) as v
                FROM parts_sales ps JOIN parts_catalog pc ON ps.part_number=pc.part_number
                WHERE ${c.join(' AND ')}`, p
+            )).rows[0]?.v || 0);
+
+          } else if (metric.metric_type === 'tech_wage') {
+            // 工資代碼統計：依work_code範圍/精確碼，統計台數/金額/工時，可篩帳類
+            const buildWCcond = (workCodes, startIdx) => {
+              const conds = []; const ps = []; let i = startIdx;
+              for (const wc of workCodes) {
+                if (wc.type === 'range') { conds.push(`work_code BETWEEN $${i++} AND $${i++}`); ps.push(wc.from, wc.to); }
+                else { conds.push(`work_code=$${i++}`); ps.push(wc.value); }
+              }
+              return { cond: conds.length ? `(${conds.join(' OR ')})` : '1=1', ps };
+            };
+            const workCodes = filters.filter(f => f.type === 'work_code');
+            const acTypes   = filters.filter(f => f.type === 'account_type').map(f => f.value);
+            const conds = [`period=$1`, `branch=$2`]; const p = [period, br]; let i = 3;
+            if (acTypes.length) { conds.push(`account_type=ANY($${i++})`); p.push(acTypes); }
+            if (workCodes.length) {
+              const wcs = workCodes.map(f => {
+                if (f.value.includes('-')) { const [from,to]=f.value.split('-'); return {type:'range',from,to}; }
+                return {type:'exact',value:f.value};
+              });
+              const { cond, ps } = buildWCcond(wcs, i);
+              conds.push(cond); p.push(...ps);
+            }
+            const statExpr = metric.stat_field === 'amount' ? 'SUM(wage)' :
+                             metric.stat_field === 'hours'  ? 'SUM(standard_hours)' :
+                             'COUNT(DISTINCT work_order)';
+            actual = parseFloat((await pool.query(
+              `SELECT COALESCE(${statExpr},0) as v FROM tech_performance WHERE ${conds.join(' AND ')}`, p
             )).rows[0]?.v || 0);
 
           } else if (metric.metric_type === 'repair_subfield') {
