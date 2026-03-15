@@ -515,6 +515,10 @@ app.post('/api/sa-config', async (req, res) => {
   if (!Array.isArray(filters)||!filters.length) return res.status(400).json({ error:'至少需要一個篩選條件' });
   const method = ['amount','quantity','count'].includes(stat_method) ? stat_method : 'amount';
   const ptype  = ['sales_person','pickup_person','both'].includes(person_type) ? person_type : 'sales_person';
+  try {
+    res.json((await pool.query(
+      `INSERT INTO sa_sales_config (config_name,description,filters,stat_method,person_type)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
       [config_name.trim(), description||'', JSON.stringify(filters), method, ptype]
     )).rows[0]);
   }
