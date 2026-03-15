@@ -288,6 +288,22 @@
           <div class="stat-radio-info"><span class="stat-radio-name">🧾 筆數</span><span class="stat-radio-desc">計算銷售單數</span></div>
         </label>
       </div>
+
+      <div class="modal-section-label">人員分類</div>
+      <div style="font-size:12px;color:#64748b;background:#0f172a;border:1px solid #2d3f56;border-radius:6px;padding:8px 12px;margin-bottom:10px;line-height:1.7">
+        <strong>銷售人員</strong>：依 parts_sales.sales_person 統計，對應 SA / 業務員<br>
+        <strong>技師施工</strong>：依 parts_sales.pickup_person 統計，對應領料 / 施工技師
+      </div>
+      <div class="stat-method-options">
+        <label class="stat-radio-item selected" id="ptLabel-sales_person" onclick="selectPersonType('sales_person')">
+          <input type="radio" name="person_type" value="sales_person" checked>
+          <div class="stat-radio-info"><span class="stat-radio-name">👤 銷售人員</span><span class="stat-radio-desc">SA / 業務員（sales_person）</span></div>
+        </label>
+        <label class="stat-radio-item" id="ptLabel-pickup_person" onclick="selectPersonType('pickup_person')">
+          <input type="radio" name="person_type" value="pickup_person">
+          <div class="stat-radio-info"><span class="stat-radio-name">🔧 技師施工</span><span class="stat-radio-desc">領料 / 施工技師（pickup_person）</span></div>
+        </label>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="cancelEdit()">取消</button>
@@ -536,7 +552,7 @@
     <div class="sidebar-section">
       <div class="sidebar-label">統計設定</div>
       <div class="sidebar-item" onclick="showSection('sa-config')" id="menu-sa-config">
-        <span class="icon">📋</span> 指標銷售
+        <span class="icon">📋</span> 指標銷售與施工
       </div>
       <div class="sidebar-item" onclick="showSection('working-days')" id="menu-working-days">
         <span class="icon">📅</span> 工作天數
@@ -610,10 +626,10 @@
       </div>
     </div>
 
-    <!-- ── 指標銷售設定 ── -->
+    <!-- ── 指標銷售與施工設定 ── -->
     <div class="section-page" id="section-sa-config">
-      <div class="page-title">👤 指標銷售設定</div>
-      <p class="page-sub">設定追蹤哪些零件的銷售量，統計頁可依設定查看各 SA 業績</p>
+      <div class="page-title">📋 指標銷售與施工設定</div>
+      <p class="page-sub">設定追蹤哪些零件的銷售量或施工台數，可分別統計「銷售人員」或「技師施工」業績</p>
       <div class="card">
         <div class="card-title">
           設定清單
@@ -995,9 +1011,12 @@ let configs = [], editingConfigId = null, editingFilters = [], lookupTimer = nul
 const PART_TYPES = ['一般','票劵','內結','保險','延保','保固','善意維修','VSA'];
 const typeLabel = { category_code:'零件類別碼', function_code:'功能碼', part_number:'零件編號', part_type:'付款類別', work_code:'工資代碼' };
 const STAT_METHOD_INFO = { amount:{label:'金額',badgeClass:'badge-blue'}, quantity:{label:'數量',badgeClass:'badge-green'}, count:{label:'筆數',badgeClass:'badge-gray'} };
+const PERSON_TYPE_INFO = { sales_person:{label:'👤 銷售人員',badgeStyle:'background:rgba(59,130,246,.15);color:#60a5fa'}, pickup_person:{label:'🔧 技師施工',badgeStyle:'background:rgba(245,158,11,.15);color:#f59e0b'} };
 function selectStatMethod(val) { document.querySelectorAll('input[name="stat_method"]').forEach(el => el.checked = el.value===val); ['amount','quantity','count'].forEach(v => document.getElementById(`smLabel-${v}`)?.classList.toggle('selected', v===val)); }
 function getStatMethod() { return document.querySelector('input[name="stat_method"]:checked')?.value||'amount'; }
 function setStatMethod(val) { selectStatMethod(val||'amount'); }
+function selectPersonType(val) { document.querySelectorAll('input[name="person_type"]').forEach(el => el.checked = el.value===val); ['sales_person','pickup_person'].forEach(v => document.getElementById(`ptLabel-${v}`)?.classList.toggle('selected', v===val)); }
+function getPersonType() { return document.querySelector('input[name="person_type"]:checked')?.value||'sales_person'; }
 async function loadConfigs() {
   try { configs = await (await fetch('/api/sa-config')).json(); renderConfigList(); }
   catch(e) { document.getElementById('configList').innerHTML = `<div style="color:#ef4444">${e.message}</div>`; }
@@ -1007,12 +1026,14 @@ function renderConfigList() {
   if (!configs.length) { el.innerHTML = `<div class="empty-state"><div class="big">📋</div><div>尚無設定，點擊「新增設定」開始建立追蹤項目</div></div>`; return; }
   el.innerHTML = configs.map(c => {
     const sm = STAT_METHOD_INFO[c.stat_method]||STAT_METHOD_INFO.amount;
+    const pt = PERSON_TYPE_INFO[c.person_type||'sales_person']||PERSON_TYPE_INFO.sales_person;
     return `<div class="config-item">
       <div class="config-item-info">
         <div class="config-item-name">${c.config_name}</div>
         ${c.description ? `<div class="config-item-desc">${c.description}</div>` : ''}
         <div class="config-item-tags">
           <span class="badge ${sm.badgeClass}" style="font-size:11px">統計：${sm.label}</span>
+          <span class="badge" style="font-size:11px;${pt.badgeStyle}">${pt.label}</span>
           ${(c.filters||[]).map(f => `<span class="badge" style="font-size:11px;${typeBadgeStyle(f.type)}">${typeLabel[f.type]||f.type}: ${f.value}</span>`).join('')}
         </div>
       </div>
@@ -1031,7 +1052,7 @@ function startNewConfig() {
   editingConfigId=null; editingFilters=[];
   document.getElementById('editorTitle').textContent='新增設定';
   document.getElementById('cfgName').value=''; document.getElementById('cfgDesc').value='';
-  setStatMethod('amount'); renderFilterList(); resetAddRow();
+  setStatMethod('amount'); selectPersonType('sales_person'); renderFilterList(); resetAddRow();
   openModal('saModal');
   setTimeout(()=>document.getElementById('cfgName').focus(),100);
 }
@@ -1039,16 +1060,16 @@ function startEditConfig(id) {
   const cfg=configs.find(c=>c.id===id); editingConfigId=id; editingFilters=(cfg.filters||[]).map(f=>({...f}));
   document.getElementById('editorTitle').textContent=`編輯設定 — ${cfg.config_name}`;
   document.getElementById('cfgName').value=cfg.config_name; document.getElementById('cfgDesc').value=cfg.description||'';
-  setStatMethod(cfg.stat_method||'amount'); renderFilterList(); resetAddRow();
+  setStatMethod(cfg.stat_method||'amount'); selectPersonType(cfg.person_type||'sales_person'); renderFilterList(); resetAddRow();
   openModal('saModal');
 }
 function cancelEdit() { closeModal('saModal'); editingFilters=[]; }
 async function deleteConfig(id,name) { if(!confirm(`確定要刪除「${name}」嗎？`))return; await fetch(`/api/sa-config/${id}`,{method:'DELETE'}); await loadConfigs(); }
 async function saveConfig() {
-  const config_name=document.getElementById('cfgName').value.trim(), description=document.getElementById('cfgDesc').value.trim(), stat_method=getStatMethod();
+  const config_name=document.getElementById('cfgName').value.trim(), description=document.getElementById('cfgDesc').value.trim(), stat_method=getStatMethod(), person_type=getPersonType();
   if(!config_name){alert('請輸入設定名稱');return;} if(!editingFilters.length){alert('請至少新增一個篩選條件');return;}
   const filters=editingFilters.map(({type,value})=>({type,value})); const btn=document.getElementById('btnSaveCfg'); btn.disabled=true;
-  try { const url=editingConfigId?`/api/sa-config/${editingConfigId}`:'/api/sa-config'; const method=editingConfigId?'PUT':'POST'; const data=await(await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify({config_name,description,filters,stat_method})})).json(); if(data.error)throw new Error(data.error); cancelEdit(); await loadConfigs(); }
+  try { const url=editingConfigId?`/api/sa-config/${editingConfigId}`:'/api/sa-config'; const method=editingConfigId?'PUT':'POST'; const data=await(await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify({config_name,description,filters,stat_method,person_type})})).json(); if(data.error)throw new Error(data.error); cancelEdit(); await loadConfigs(); }
   catch(e){alert('儲存失敗：'+e.message);} finally{btn.disabled=false;}
 }
 function renderFilterList() { const el=document.getElementById('filterList'); if(!editingFilters.length){el.innerHTML='<div style="color:#64748b;font-size:12px;padding:4px 0 8px">尚未新增篩選條件</div>';return;} el.innerHTML=editingFilters.map((f,i)=>`<div class="filter-tag-row"><span class="type-badge type-${f.type}">${typeLabel[f.type]||f.type}</span><span style="font-size:13px;font-weight:600;flex:1">${f.value}</span><button class="remove-btn" onclick="removeFilter(${i})" title="移除">×</button></div>`).join(''); }
