@@ -999,10 +999,28 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
       }
     }
 
-    const rows = Object.values(saMap).sort((a,b) => {
-      if (a.branch!==b.branch) return a.branch<b.branch?-1:1;
-      return Object.values(b.configs).reduce((s,c)=>s+c.sales,0) - Object.values(a.configs).reduce((s,c)=>s+c.sales,0);
-    });
+    // ★ 技師施工分頁：排除已出現在「銷售人員」名單的人名
+    // 原因：parts_sales 中 pickup_person 有時是 SA 本人，會造成重複
+    let excludeNames = new Set();
+    if (viewParam === 'pickup_person') {
+      const exConds = []; const exParams = []; let exIdx = 1;
+      if (period) { exConds.push(`period=$${exIdx++}`); exParams.push(period); }
+      if (branch) { exConds.push(`branch=$${exIdx++}`); exParams.push(branch); }
+      const exWhere = exConds.length ? 'WHERE ' + exConds.join(' AND ') : '';
+      const exRes = await pool.query(
+        `SELECT DISTINCT COALESCE(NULLIF(sales_person,''), '（未知）') AS name
+         FROM parts_sales ${exWhere}`,
+        exParams
+      );
+      excludeNames = new Set(exRes.rows.map(r => r.name));
+    }
+
+    const rows = Object.values(saMap)
+      .filter(row => !excludeNames.has(row.sa_name))  // ★ 過濾掉銷售人員名單中的人
+      .sort((a,b) => {
+        if (a.branch!==b.branch) return a.branch<b.branch?-1:1;
+        return Object.values(b.configs).reduce((s,c)=>s+c.sales,0) - Object.values(a.configs).reduce((s,c)=>s+c.sales,0);
+      });
     const colTotals = {};
     for (const cfg of configs) {
       colTotals[cfg.id] = rows.reduce((s,row) => {
