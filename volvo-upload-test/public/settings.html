@@ -406,6 +406,79 @@
             💡 <strong>目標</strong>和<strong>去年實績</strong>用同一個格式，上傳時選擇類型即可，可分兩次上傳。
           </div>
 
+          <!-- 格式說明（可展開） -->
+          <div style="margin-bottom:14px">
+            <button onclick="toggleRevFormat()" id="revFormatToggle"
+              style="background:#1e293b;border:1px solid #2d3f56;color:#94a3b8;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px">
+              <span id="revFormatArrow">▶</span> 查看 Excel 格式範例
+            </button>
+            <div id="revFormatPanel" style="display:none;margin-top:10px;overflow-x:auto">
+              <div style="font-size:12px;color:#64748b;margin-bottom:8px">Excel 中每個營收類型獨立一個區塊，格式如下（以有效營收為例）：</div>
+              <!-- 格式預覽表 -->
+              <table style="border-collapse:collapse;font-size:12px;margin-bottom:16px;min-width:700px">
+                <thead>
+                  <tr>
+                    <td colspan="14" style="background:rgba(59,130,246,.15);color:#60a5fa;font-weight:800;padding:7px 12px;border:1px solid #2d3f56;border-radius:4px 4px 0 0">
+                      每月有效營收目標(k) &nbsp;<span style="font-weight:400;color:#475569">← 區塊標題列（含「有效營收」或「有費營收」關鍵字）</span>
+                    </td>
+                  </tr>
+                  <tr style="background:#1e293b">
+                    <th style="padding:6px 10px;border:1px solid #2d3f56;color:#64748b;min-width:100px;text-align:left">經銷商代碼</th>
+                    ${[1,2,3,4,5,6,7,8,9,10,11,12].map(m=>`<th style="padding:6px 10px;border:1px solid #2d3f56;color:#64748b;min-width:60px;text-align:right">${m}月</th>`).join('')}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style="padding:6px 10px;border:1px solid #2d3f56;font-weight:700;color:#3b82f6">AMA</td>
+                    <td style="padding:6px 10px;border:1px solid #2d3f56;text-align:right;color:#94a3b8">37,353</td>
+                    <td style="padding:6px 10px;border:1px solid #2d3f56;text-align:right;color:#94a3b8">25,141</td>
+                    <td style="padding:6px 10px;border:1px solid #2d3f56;text-align:right;color:#94a3b8">36,621</td>
+                    <td colspan="9" style="padding:6px 10px;border:1px solid #2d3f56;text-align:center;color:#475569">… 4月～12月</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 10px;border:1px solid #2d3f56;font-weight:700;color:#10b981">AMC</td>
+                    <td style="padding:6px 10px;border:1px solid #2d3f56;text-align:right;color:#94a3b8">11,100</td>
+                    <td style="padding:6px 10px;border:1px solid #2d3f56;text-align:right;color:#94a3b8">7,222</td>
+                    <td style="padding:6px 10px;border:1px solid #2d3f56;text-align:right;color:#94a3b8">10,519</td>
+                    <td colspan="9" style="padding:6px 10px;border:1px solid #2d3f56;text-align:center;color:#475569">…</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 10px;border:1px solid #2d3f56;font-weight:700;color:#f59e0b">AMD</td>
+                    <td style="padding:6px 10px;border:1px solid #2d3f56;text-align:right;color:#94a3b8">15,458</td>
+                    <td style="padding:6px 10px;border:1px solid #2d3f56;text-align:right;color:#94a3b8">10,569</td>
+                    <td style="padding:6px 10px;border:1px solid #2d3f56;text-align:right;color:#94a3b8">16,165</td>
+                    <td colspan="9" style="padding:6px 10px;border:1px solid #2d3f56;text-align:center;color:#475569">…</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div style="display:flex;flex-direction:column;gap:6px;font-size:12px">
+                <div style="display:flex;gap:20px;flex-wrap:wrap">
+                  <div style="background:#1e293b;border:1px solid #2d3f56;border-radius:8px;padding:10px 14px;flex:1;min-width:200px">
+                    <div style="font-weight:700;color:#94a3b8;margin-bottom:6px">✅ 系統識別的區塊標題關鍵字</div>
+                    <div style="display:flex;flex-direction:column;gap:4px">
+                      <div><span style="background:rgba(249,115,22,.15);color:#fb923c;padding:2px 8px;border-radius:4px;font-weight:700">有費/有效營收</span> → 有費營收目標</div>
+                      <div><span style="background:rgba(139,92,246,.15);color:#a78bfa;padding:2px 8px;border-radius:4px;font-weight:700">鈑烤</span> → 鈑烤營收目標</div>
+                      <div><span style="background:rgba(59,130,246,.15);color:#60a5fa;padding:2px 8px;border-radius:4px;font-weight:700">一般營收</span> → 一般營收目標</div>
+                      <div><span style="background:rgba(16,185,129,.15);color:#34d399;padding:2px 8px;border-radius:4px;font-weight:700">延保</span> → 延保營收目標</div>
+                    </div>
+                  </div>
+                  <div style="background:#1e293b;border:1px solid #2d3f56;border-radius:8px;padding:10px 14px;flex:1;min-width:200px">
+                    <div style="font-weight:700;color:#94a3b8;margin-bottom:6px">📌 注意事項</div>
+                    <div style="color:#64748b;line-height:2">
+                      • 據點欄只要包含 AMA / AMC / AMD 即可<br>
+                      • 月份欄需為「1月」～「12月」格式<br>
+                      • SUM、Avg 等合計欄自動忽略<br>
+                      • 數值單位為 <strong style="color:#94a3b8">K（千元）</strong><br>
+                      • 四個區塊可以放在同一張工作表<br>
+                      • 不需要的區塊可省略
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- 類型選擇 -->
           <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
             <label id="revTypeLabel-target" onclick="selectRevType('target')"
@@ -1069,6 +1142,17 @@ function selectRevType(val) {
     const radio = lbl?.querySelector('input[type=radio]');
     if (radio) radio.checked = isSelected;
   });
+}
+
+function toggleRevFormat() {
+  const panel = document.getElementById('revFormatPanel');
+  const arrow = document.getElementById('revFormatArrow');
+  const btn   = document.getElementById('revFormatToggle');
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : '';
+  arrow.textContent = isOpen ? '▶' : '▼';
+  btn.style.color = isOpen ? '#94a3b8' : '#3b82f6';
+  btn.style.borderColor = isOpen ? '#2d3f56' : '#3b82f6';
 }
 
 async function loadRevManual() {
