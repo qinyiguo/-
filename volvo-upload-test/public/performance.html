@@ -263,9 +263,28 @@ async function loadIncomeBreakdown(period, branch) {
     }
     html += `</tr></thead><tbody>`;
 
+    // 先蒐集無費細項 html
+    const allOtherDetail = [];
+    BRANCHES.forEach(br => {
+      (bdata[br]?.other_detail || []).forEach(od => {
+        if (!allOtherDetail.find(x => x.account_type === od.account_type)) allOtherDetail.push(od);
+      });
+    });
+    const otherDetailHtml = allOtherDetail.map(od => {
+      let r = `<tr><td style="padding:6px 16px 6px 36px;border-bottom:1px solid rgba(45,63,86,.2)"><div style="display:flex;align-items:center;gap:6px"><div style="width:3px;height:12px;background:#1e293b;border-radius:2px;flex-shrink:0"></div><span style="font-size:12px;color:#475569">${od.account_type}</span></div></td>`;
+      BRANCHES.forEach(br => {
+        const match = (bdata[br]?.other_detail || []).find(x => x.account_type === od.account_type);
+        r += `<td style="text-align:right;padding:6px 16px;border-bottom:1px solid rgba(45,63,86,.2);font-size:12px;color:#475569;font-variant-numeric:tabular-nums">${match?.total > 0 ? fmtK(match.total) : '—'}</td>`;
+      });
+      if (BRANCHES.length > 1) r += `<td style="border-bottom:1px solid rgba(45,63,86,.2);border-left:1px solid #374151"></td>`;
+      return r + `</tr>`;
+    }).join('');
+
     ROWS.forEach(row => {
       const rowBg = row.bold ? 'rgba(255,255,255,.03)' : 'transparent';
       const borderTop = row.border ? 'border-top:2px solid #374151;' : '';
+      // 無費細項插在「無費成本」列的上方
+      if (row.key === 'other_total') html += otherDetailHtml;
       html += `<tr style="background:${rowBg}">
         <td style="padding:10px 16px;border-bottom:1px solid rgba(45,63,86,.3);${borderTop}">
           <div style="display:flex;align-items:center;gap:8px;padding-left:${row.indent ? 20 : 0}px">
@@ -287,29 +306,6 @@ async function loadIncomeBreakdown(period, branch) {
         </td>`;
       }
       html += `</tr>`;
-
-      // 無費細項：插在「無費成本」列的正下方
-      if (row.key === 'other_total') {
-        const allOtherDetail = [];
-        BRANCHES.forEach(br => {
-          (bdata[br]?.other_detail || []).forEach(od => {
-            if (!allOtherDetail.find(x => x.account_type === od.account_type)) allOtherDetail.push(od);
-          });
-        });
-        allOtherDetail.forEach(od => {
-          html += `<tr><td style="padding:6px 16px 6px 36px;border-bottom:1px solid rgba(45,63,86,.2)">
-            <div style="display:flex;align-items:center;gap:6px">
-              <div style="width:3px;height:12px;background:#1e293b;border-radius:2px;flex-shrink:0"></div>
-              <span style="font-size:12px;color:#475569">${od.account_type}</span>
-            </div></td>`;
-          BRANCHES.forEach(br => {
-            const match = (bdata[br]?.other_detail || []).find(x => x.account_type === od.account_type);
-            html += `<td style="text-align:right;padding:6px 16px;border-bottom:1px solid rgba(45,63,86,.2);font-size:12px;color:#475569;font-variant-numeric:tabular-nums">${match?.total > 0 ? fmtK(match.total) : '—'}</td>`;
-          });
-          if (BRANCHES.length > 1) html += `<td style="border-bottom:1px solid rgba(45,63,86,.2);border-left:1px solid #374151"></td>`;
-          html += `</tr>`;
-        });
-      }
     });
 
     html += `</tbody></table></div>
