@@ -408,7 +408,8 @@
           <div class="form-row">
             <label>類型</label>
             <select id="perfType" class="form-select" onchange="onPerfTypeChange()" style="flex:none">
-              <option value="repair_income">🔧 維修收入（total_untaxed）</option>
+              <option value="repair_income">🔧 維修收入（合計未稅）</option>
+              <option value="repair_subfield">🔨 維修收入（子欄位）— 鈑烤/工資等</option>
               <option value="parts">🔩 零件銷售（依篩選條件）</option>
               <option value="boutique">💎 精品 / 配件銷售（需型錄）</option>
             </select>
@@ -473,6 +474,19 @@
             <div class="part-type-grid" id="perfBoutiqueTypeChips"></div>
             <div style="font-size:12px;font-weight:700;color:#64748b;margin:14px 0 8px">帳類篩選（Paycode，留空=全部）</div>
             <div class="part-type-grid" id="perfBoutiqueAccountChips"></div>
+          </div>
+
+          <!-- 維修收入子欄位選項 -->
+          <div id="perfSubfieldOptions" style="display:none">
+            <div class="hint" style="margin:8px 0 12px">
+              選擇要加總的<strong>收入子欄位</strong>，並篩選帳類。可用於設定鈑烤、工資等分項指標。<br>
+              💡 範例：<strong>自費鈑烤</strong> → 帳類=一般，勾選「鈑金收入 ＋ 烤漆收入」<br>
+              💡 範例：<strong>保險鈑烤</strong> → 帳類=保險，勾選「合計（未稅）」
+            </div>
+            <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:8px">📊 加總欄位（可多選）</div>
+            <div class="part-type-grid" id="perfSubfieldChips" style="margin-bottom:14px"></div>
+            <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:8px">帳類篩選（可多選，留空=全部）</div>
+            <div class="part-type-grid" id="perfSubfieldAccountChips"></div>
           </div>
 
           <div class="form-row" style="margin-top:14px">
@@ -709,8 +723,26 @@ async function deleteWdConfig(){const branch=document.getElementById('wdBranch')
 let perfMetrics=[], perfEditingId=null, perfFilters=[], perfLookupTimer=null;
 const PERF_ALL_ACCOUNT=['一般','票劵','內結','保險','延保','保固','善意維修','VSA'];
 const PERF_BOUTIQUE=['精品','配件'];
-const PERF_TYPE_LABEL={repair_income:'🔧 維修收入',parts:'🔩 零件銷售',boutique:'💎 精品配件'};
+const PERF_TYPE_LABEL={repair_income:'🔧 維修收入(合計)',repair_subfield:'🔨 維修收入(子欄位)',parts:'🔩 零件銷售',boutique:'💎 精品配件'};
 const PERF_FIELD_UNIT={amount:'元',qty:'件',count:'筆'};
+const PERF_SUBFIELDS=[
+  {value:'bodywork_income',  label:'鈑金收入'},
+  {value:'paint_income',     label:'烤漆收入'},
+  {value:'engine_wage',      label:'引擎工資'},
+  {value:'parts_income',     label:'零件收入'},
+  {value:'accessories_income',label:'配件收入'},
+  {value:'boutique_income',  label:'精品收入'},
+  {value:'carwash_income',   label:'洗車美容'},
+  {value:'outsource_income', label:'外包收入'},
+  {value:'addon_income',     label:'附加服務'},
+  {value:'total_untaxed',    label:'合計（未稅）'},
+];
+function _buildSubfieldChips(selectedVals){
+  document.getElementById('perfSubfieldChips').innerHTML=PERF_SUBFIELDS.map(sf=>{
+    const on=selectedVals.includes(sf.value);
+    return`<label class="part-type-chip ${on?'checked':''}" onclick="toggleGenericChip(this)" style="min-width:100px"><input type="checkbox" value="${sf.value}" ${on?'checked':''}>${sf.label}</label>`;
+  }).join('');
+}
 
 async function loadPerfMetrics(){try{perfMetrics=await(await fetch('/api/performance-metrics')).json();renderPerfMetricList();updatePerfTgtSelect();}catch(e){document.getElementById('perfMetricList').innerHTML=`<div style="color:#ef4444">${e.message}</div>`;}}
 
@@ -738,15 +770,15 @@ function renderPerfMetricList(){
 
 function updatePerfTgtSelect(){const sel=document.getElementById('perfTgtMetric');const cur=sel.value;sel.innerHTML='<option value="">選擇指標...</option>';perfMetrics.forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.metric_name;sel.appendChild(o);});if(cur)sel.value=cur;}
 
-function onPerfTypeChange(){const t=document.getElementById('perfType').value;document.getElementById('perfRepairOptions').style.display=t==='repair_income'?'':'none';document.getElementById('perfPartsOptions').style.display=t==='parts'?'':'none';document.getElementById('perfBoutiqueOptions').style.display=t==='boutique'?'':'none';}
+function onPerfTypeChange(){const t=document.getElementById('perfType').value;document.getElementById('perfRepairOptions').style.display=t==='repair_income'?'':'none';document.getElementById('perfPartsOptions').style.display=t==='parts'?'':'none';document.getElementById('perfBoutiqueOptions').style.display=t==='boutique'?'':'none';document.getElementById('perfSubfieldOptions').style.display=t==='repair_subfield'?'':'none';if(t==='repair_subfield'){_buildSubfieldChips([]);_buildChips('perfSubfieldAccountChips',PERF_ALL_ACCOUNT,[]);}}
 
 function _buildChips(containerId,values,selectedVals){document.getElementById(containerId).innerHTML=values.map(v=>{const on=selectedVals.includes(v);return`<label class="part-type-chip ${on?'checked':''}" onclick="toggleGenericChip(this)"><input type="checkbox" value="${v}" ${on?'checked':''}>${v}</label>`;}).join('');}
 function toggleGenericChip(el){const cb=el.querySelector('input');cb.checked=!cb.checked;el.classList.toggle('checked',cb.checked);}
 function _getCheckedValues(containerId){return[...document.querySelectorAll(`#${containerId} input:checked`)].map(cb=>cb.value);}
 
-function perfStartNew(){perfEditingId=null;perfFilters=[];document.getElementById('perfEditorTitle').textContent='新增指標';['perfName','perfDesc','perfUnit'].forEach(id=>document.getElementById(id).value='');document.getElementById('perfType').value='repair_income';onPerfTypeChange();_buildChips('perfRepairAccountTypes',PERF_ALL_ACCOUNT,[]);_buildChips('perfBoutiqueTypeChips',PERF_BOUTIQUE,['精品','配件']);_buildChips('perfBoutiqueAccountChips',PERF_ALL_ACCOUNT,[]);selectPerfStatMethod('amount');renderPerfFilterList();document.getElementById('perfEditorPanel').style.display='';document.getElementById('perfName').focus();}
+function perfStartNew(){perfEditingId=null;perfFilters=[];document.getElementById('perfEditorTitle').textContent='新增指標';['perfName','perfDesc','perfUnit'].forEach(id=>document.getElementById(id).value='');document.getElementById('perfType').value='repair_income';onPerfTypeChange();_buildChips('perfRepairAccountTypes',PERF_ALL_ACCOUNT,[]);_buildChips('perfBoutiqueTypeChips',PERF_BOUTIQUE,['精品','配件']);_buildChips('perfBoutiqueAccountChips',PERF_ALL_ACCOUNT,[]);_buildSubfieldChips([]);_buildChips('perfSubfieldAccountChips',PERF_ALL_ACCOUNT,[]);selectPerfStatMethod('amount');renderPerfFilterList();document.getElementById('perfEditorPanel').style.display='';document.getElementById('perfName').focus();}
 
-function perfStartEdit(id){const m=perfMetrics.find(x=>x.id===id);if(!m)return;perfEditingId=id;perfFilters=(m.filters||[]).map(f=>({...f}));document.getElementById('perfEditorTitle').textContent=`編輯指標 — ${m.metric_name}`;document.getElementById('perfName').value=m.metric_name;document.getElementById('perfDesc').value=m.description||'';document.getElementById('perfUnit').value=m.unit||'';document.getElementById('perfType').value=m.metric_type;onPerfTypeChange();if(m.metric_type==='repair_income'){_buildChips('perfRepairAccountTypes',PERF_ALL_ACCOUNT,perfFilters.filter(f=>f.type==='account_type').map(f=>f.value));}if(m.metric_type==='boutique'){const bt=perfFilters.filter(f=>f.type==='boutique_type').map(f=>f.value);const ac=perfFilters.filter(f=>f.type==='account_type').map(f=>f.value);_buildChips('perfBoutiqueTypeChips',PERF_BOUTIQUE,bt.length?bt:['精品','配件']);_buildChips('perfBoutiqueAccountChips',PERF_ALL_ACCOUNT,ac);}if(m.metric_type==='parts'){selectPerfStatMethod(m.stat_field||'amount');renderPerfFilterList();}document.getElementById('perfEditorPanel').style.display='';document.getElementById('perfEditorPanel').scrollIntoView({behavior:'smooth',block:'nearest'});}
+function perfStartEdit(id){const m=perfMetrics.find(x=>x.id===id);if(!m)return;perfEditingId=id;perfFilters=(m.filters||[]).map(f=>({...f}));document.getElementById('perfEditorTitle').textContent=`編輯指標 — ${m.metric_name}`;document.getElementById('perfName').value=m.metric_name;document.getElementById('perfDesc').value=m.description||'';document.getElementById('perfUnit').value=m.unit||'';document.getElementById('perfType').value=m.metric_type;onPerfTypeChange();if(m.metric_type==='repair_income'){_buildChips('perfRepairAccountTypes',PERF_ALL_ACCOUNT,perfFilters.filter(f=>f.type==='account_type').map(f=>f.value));}if(m.metric_type==='repair_subfield'){const sf=perfFilters.filter(f=>f.type==='subfield').map(f=>f.value);const ac=perfFilters.filter(f=>f.type==='account_type').map(f=>f.value);_buildSubfieldChips(sf);_buildChips('perfSubfieldAccountChips',PERF_ALL_ACCOUNT,ac);}if(m.metric_type==='boutique'){const bt=perfFilters.filter(f=>f.type==='boutique_type').map(f=>f.value);const ac=perfFilters.filter(f=>f.type==='account_type').map(f=>f.value);_buildChips('perfBoutiqueTypeChips',PERF_BOUTIQUE,bt.length?bt:['精品','配件']);_buildChips('perfBoutiqueAccountChips',PERF_ALL_ACCOUNT,ac);}if(m.metric_type==='parts'){selectPerfStatMethod(m.stat_field||'amount');renderPerfFilterList();}document.getElementById('perfEditorPanel').style.display='';document.getElementById('perfEditorPanel').scrollIntoView({behavior:'smooth',block:'nearest'});}
 
 function perfCancelEdit(){document.getElementById('perfEditorPanel').style.display='none';perfFilters=[];}
 function selectPerfStatMethod(val){document.querySelectorAll('input[name="perf_stat_method"]').forEach(el=>el.checked=el.value===val);['amount','qty','count'].forEach(v=>document.getElementById(`perfSmLabel-${v}`)?.classList.toggle('selected',v===val));}
@@ -770,6 +802,13 @@ async function perfSave(){
   if(!metric_name){alert('請輸入指標名稱');return;}
   let filters=[],stat_field='amount';
   if(metric_type==='repair_income'){filters=_getCheckedValues('perfRepairAccountTypes').map(v=>({type:'account_type',value:v}));}
+  else if(metric_type==='repair_subfield'){
+    const sf=_getCheckedValues('perfSubfieldChips');
+    const ac=_getCheckedValues('perfSubfieldAccountChips');
+    if(!sf.length){alert('請至少勾選一個加總欄位');return;}
+    filters=[...sf.map(v=>({type:'subfield',value:v})),...ac.map(v=>({type:'account_type',value:v}))];
+    stat_field='amount';
+  }
   else if(metric_type==='parts'){if(!perfFilters.length){alert('請至少新增一個篩選條件');return;}filters=perfFilters.map(({type,value})=>({type,value}));stat_field=getPerfStatMethod();}
   else if(metric_type==='boutique'){const bt=_getCheckedValues('perfBoutiqueTypeChips'),ac=_getCheckedValues('perfBoutiqueAccountChips');filters=[...bt.map(v=>({type:'boutique_type',value:v})),...ac.map(v=>({type:'account_type',value:v}))];stat_field='amount';}
   const btn=document.getElementById('perfBtnSave');btn.disabled=true;
