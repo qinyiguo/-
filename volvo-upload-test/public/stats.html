@@ -110,6 +110,38 @@
   tr.subtotal-row:hover td { background: rgba(249,115,22,.1); }
   tr.total-row td { background: rgba(59,130,246,.08); font-weight: 800; }
   tr.total-row:hover td { background: rgba(59,130,246,.12); }
+
+  /* ══ Custom Period Selector ══ */
+  .period-selector { position: relative; }
+  .period-btn { display: flex; align-items: center; gap: 8px; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; padding: 7px 12px 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .15s; user-select: none; min-width: 148px; justify-content: space-between; outline: none; }
+  .period-btn:hover, .period-btn.open { border-color: #3b82f6; background: #141f33; }
+  .period-btn .pb-year { font-size: 11px; font-weight: 600; color: #64748b; margin-right: 2px; }
+  .period-btn .pb-month { font-size: 15px; font-weight: 800; color: #e2e8f0; }
+  .period-btn .pb-arrow { font-size: 9px; color: #475569; transition: transform .2s; line-height: 1; margin-left: 4px; }
+  .period-btn.open .pb-arrow { transform: rotate(180deg); color: #3b82f6; }
+  .period-dropdown { position: absolute; top: calc(100% + 6px); left: 0; background: #1a2740; border: 1px solid #334155; border-radius: 12px; box-shadow: 0 16px 48px rgba(0,0,0,.8); z-index: 9999; width: 260px; overflow: hidden; display: none; flex-direction: column; }
+  .period-dropdown.open { display: flex; }
+  .period-dd-header { padding: 12px 14px 10px; border-bottom: 1px solid #2d3f56; flex-shrink: 0; }
+  .period-dd-search input { width: 100%; background: #0f172a; border: 1px solid #2d3f56; color: #e2e8f0; padding: 7px 12px; border-radius: 7px; font-size: 12px; outline: none; transition: border-color .15s; }
+  .period-dd-search input:focus { border-color: #3b82f6; }
+  .period-dd-list { overflow-y: auto; max-height: 340px; padding: 6px 0; }
+  .period-dd-list::-webkit-scrollbar { width: 4px; }
+  .period-dd-list::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+  .period-dd-year-label { font-size: 11px; font-weight: 700; color: #374151; letter-spacing: .06em; padding: 8px 14px 4px; display: flex; align-items: center; gap: 8px; }
+  .period-dd-year-label::after { content: ''; flex: 1; height: 1px; background: #1e3050; }
+  .period-dd-months { display: grid; grid-template-columns: repeat(3,1fr); gap: 4px; padding: 0 10px 8px; }
+  .period-dd-mo { display: flex; flex-direction: column; align-items: center; padding: 8px 6px; border-radius: 8px; cursor: pointer; transition: all .12s; border: 1px solid transparent; }
+  .period-dd-mo:hover { background: rgba(59,130,246,.1); border-color: rgba(59,130,246,.3); }
+  .period-dd-mo.selected { background: rgba(59,130,246,.18); border-color: #3b82f6; }
+  .period-dd-mo.current-month:not(.selected) { background: rgba(16,185,129,.06); border-color: rgba(16,185,129,.4); }
+  .period-dd-mo .mo-num { font-size: 15px; font-weight: 800; color: #94a3b8; line-height: 1; }
+  .period-dd-mo.selected .mo-num { color: #3b82f6; }
+  .period-dd-mo.current-month:not(.selected) .mo-num { color: #10b981; }
+  .period-dd-mo .mo-label { font-size: 10px; color: #475569; margin-top: 2px; }
+  .period-dd-mo .mo-dot { width: 4px; height: 4px; border-radius: 50%; background: transparent; margin-top: 3px; }
+  .period-dd-mo.has-data .mo-dot { background: #10b981; }
+  .period-dd-mo.selected .mo-dot { background: #3b82f6; }
+
 </style>
 </head>
 <body>
@@ -125,7 +157,7 @@
   <div class="header-inner">
     <div class="filter-bar">
       <label>期間</label>
-      <select id="selPeriod"><option value="">全部期間</option></select>
+      <div id="periodSelectorWrap"></div>
       <label>據點</label>
       <select id="selBranch">
         <option value="">全部</option>
@@ -294,6 +326,30 @@
 </div>
 
 <script>
+
+let _currentPeriod='',_allPeriods=[];
+function getPeriod(){return _currentPeriod;}
+function renderPeriodSelectorStats(filterQ){
+  const wrap=document.getElementById('periodSelectorWrap');if(!wrap)return;
+  const now=new Date(),thisMonth=String(now.getFullYear())+String(now.getMonth()+1).padStart(2,'0');
+  const groups={};_allPeriods.forEach(p=>{const yr=p.slice(0,4);if(!groups[yr])groups[yr]=[];groups[yr].push(p);});
+  const btnContent=_currentPeriod?`<span class="pb-year">${_currentPeriod.slice(0,4)}</span><span class="pb-month">${parseInt(_currentPeriod.slice(4))}月</span>`:`<span class="pb-month" style="color:#64748b">全部期間</span>`;
+  let listHtml='';
+  Object.keys(groups).sort((a,b)=>b-a).forEach(yr=>{
+    listHtml+=`<div class="period-dd-year-label">${yr}</div><div class="period-dd-months">`;
+    for(let mo=12;mo>=1;mo--){
+      const p=yr+String(mo).padStart(2,'0'),exists=groups[yr].includes(p);
+      if(filterQ&&!p.includes(filterQ.replace(/[^0-9]/g,'')))continue;
+      const isSel=p===_currentPeriod,isCur=p===thisMonth;
+      listHtml+=`<div class="period-dd-mo ${isSel?'selected':''} ${isCur?'current-month':''} ${exists?'has-data':''}" onclick="window._sPD('${p}')"><span class="mo-num">${mo}</span><span class="mo-label">月</span><span class="mo-dot"></span></div>`;
+    }
+    listHtml+='</div>';
+  });
+  wrap.innerHTML=`<div class="period-selector"><button class="period-btn" id="ps-btn" type="button" onclick="window._tPD(event)">${btnContent}<span class="pb-arrow">▼</span></button><div class="period-dropdown" id="ps-dd"><div class="period-dd-header"><div class="period-dd-year-label" style="padding:0 0 6px;color:#475569">選擇期間</div><div class="period-dd-search"><input type="text" placeholder="🔍 搜尋..." id="ps-search" oninput="renderPeriodSelectorStats(this.value)" onclick="event.stopPropagation()"></div></div><div class="period-dd-list">${listHtml}</div></div></div>`;
+}
+window._tPD=function(e){e.stopPropagation();const btn=document.getElementById('ps-btn'),dd=document.getElementById('ps-dd');if(!btn||!dd)return;const isOpen=dd.classList.contains('open');document.querySelectorAll('.period-btn.open').forEach(b=>b.classList.remove('open'));document.querySelectorAll('.period-dropdown.open').forEach(d=>d.classList.remove('open'));if(!isOpen){btn.classList.add('open');dd.classList.add('open');setTimeout(()=>document.getElementById('ps-search')?.focus(),50);}};
+window._sPD=function(val){_currentPeriod=val;document.querySelectorAll('.period-btn.open').forEach(b=>b.classList.remove('open'));document.querySelectorAll('.period-dropdown.open').forEach(d=>d.classList.remove('open'));renderPeriodSelectorStats('');};
+document.addEventListener('click',()=>{document.querySelectorAll('.period-btn.open').forEach(b=>b.classList.remove('open'));document.querySelectorAll('.period-dropdown.open').forEach(d=>d.classList.remove('open'));});
 let currentTab='repair', saConfigs=[];
 const n=(v)=>parseFloat(v||0), fmt=(v)=>Math.round(n(v)).toLocaleString(), fmtK=(v)=>Math.round(n(v)/1000).toLocaleString()+'K';
 const badgeType=(t)=>({零件:'badge-blue',配件:'badge-green',精品:'badge-yellow'}[t]||'badge-purple');
