@@ -181,6 +181,9 @@
       <div class="sidebar-item" onclick="showSection('working-days')" id="menu-working-days">
         <span class="icon">📅</span> 工作天數
       </div>
+      <div class="sidebar-item" onclick="showSection('revenue-targets')" id="menu-revenue-targets">
+        <span class="icon">📈</span> 營收目標
+      </div>
       <div class="sidebar-item" onclick="showSection('performance')" id="menu-performance">
         <span class="icon">🎯</span> 業績目標
       </div>
@@ -385,6 +388,74 @@
         </div>
       </div>
     </div>
+    <!-- ── 營收目標 ── -->
+    <div class="section-page" id="section-revenue-targets">
+      <div class="page-title">📈 營收目標設定</div>
+      <p class="page-sub">設定四大營收（有費/鈑烤/一般/延保）的月目標與去年實績，用於業績指標頁顯示達成率</p>
+
+      <!-- Excel 範本下載 + 上傳 -->
+      <div class="card">
+        <div class="card-title">📥 Excel 批次匯入</div>
+        <div class="hint" style="margin-bottom:14px">
+          📋 <strong>Excel 格式說明</strong>：每列代表一個據點一個月份，系統依「<code>期間</code>」（YYYYMM）和「<code>據點</code>」（AMA/AMC/AMD）自動識別。
+          一個 Excel 可以包含多個月份和多個據點。<br>
+          金額單位：<strong>元（不需要除以 1000）</strong>，例如目標 36,000,000 就填 36000000
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+          <button class="btn btn-secondary" onclick="downloadRevTemplate()">⬇️ 下載 Excel 範本</button>
+          <span style="font-size:12px;color:#64748b">下載後填寫數字，再上傳匯入</span>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <input type="file" id="revFileInput" accept=".xlsx,.xls" style="display:none" onchange="uploadRevFile(this)">
+          <button class="btn btn-primary" onclick="document.getElementById('revFileInput').click()">📤 上傳 Excel 匯入</button>
+          <span id="revUploadStatus" style="font-size:13px;color:#64748b"></span>
+        </div>
+        <div id="revUploadResult" style="margin-top:12px"></div>
+      </div>
+
+      <!-- 手動設定 -->
+      <div class="card">
+        <div class="card-title">
+          ✏️ 手動設定
+          <span class="card-title-note">
+            <select id="revPeriodSel" class="form-select" style="font-size:12px" onchange="loadRevManual()">
+              <option value="">選擇期間...</option>
+            </select>
+          </span>
+        </div>
+        <div id="revManualGrid" style="display:none">
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th style="min-width:80px">據點</th>
+                  <th class="num">有費營收<br><span style="font-weight:400;color:#64748b">目標</span></th>
+                  <th class="num">有費營收<br><span style="font-weight:400;color:#64748b">去年</span></th>
+                  <th class="num">鈑烤營收<br><span style="font-weight:400;color:#64748b">目標</span></th>
+                  <th class="num">鈑烤營收<br><span style="font-weight:400;color:#64748b">去年</span></th>
+                  <th class="num">一般營收<br><span style="font-weight:400;color:#64748b">目標</span></th>
+                  <th class="num">一般營收<br><span style="font-weight:400;color:#64748b">去年</span></th>
+                  <th class="num">延保營收<br><span style="font-weight:400;color:#64748b">目標</span></th>
+                  <th class="num">延保營收<br><span style="font-weight:400;color:#64748b">去年</span></th>
+                </tr>
+              </thead>
+              <tbody id="revManualBody"></tbody>
+            </table>
+          </div>
+          <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:14px">
+            <div id="revManualMsg" style="font-size:13px;flex:1"></div>
+            <button class="btn btn-primary" onclick="saveRevManual()">💾 儲存</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 已設定清單 -->
+      <div class="card">
+        <div class="card-title">已設定月份 <span class="card-title-note"><button class="btn btn-secondary btn-sm" onclick="loadRevList()">重新整理</button></span></div>
+        <div id="revList"><div style="color:#64748b;font-size:13px"><span class="spinner"></span>載入中</div></div>
+      </div>
+    </div>
+
     <!-- ── 業績目標 ── -->
     <div class="section-page" id="section-performance">
       <div class="page-title">🎯 業績目標</div>
@@ -589,7 +660,7 @@
 </div><!-- /layout -->
 <script>
 // ══ 側欄切換 ══
-const sections = ['upload','dbstatus','sa-config','working-days','performance','password'];
+const sections = ['upload','dbstatus','sa-config','working-days','revenue-targets','performance','password'];
 function showSection(id) {
   sections.forEach(s => {
     document.getElementById(`section-${s}`).classList.toggle('active', s === id);
@@ -598,6 +669,7 @@ function showSection(id) {
   if (id === 'dbstatus') loadCounts();
   if (id === 'sa-config') loadConfigs();
   if (id === 'working-days') { loadWdPeriods(); loadWdList(); }
+  if (id === 'revenue-targets') { loadRevPeriods(); loadRevList(); }
   if (id === 'performance') { loadPerfMetrics(); loadPerfTgtPeriods(); }
 }
 
@@ -877,6 +949,146 @@ async function savePerfTargets(){
   const btn=document.getElementById('perfBtnSaveTgt');btn.disabled=true;const msgEl=document.getElementById('perfTgtMsg');msgEl.textContent='儲存中...';msgEl.style.color='#64748b';
   try{const res=await(await fetch('/api/performance-targets/batch',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({metric_id:metricId,period,entries})})).json();if(res.error)throw new Error(res.error);msgEl.textContent='✅ 目標已儲存';msgEl.style.color='#10b981';}
   catch(e){msgEl.textContent='❌ '+e.message;msgEl.style.color='#ef4444';}finally{btn.disabled=false;}
+}
+
+// ══ 營收目標 ══
+const REV_COLS = [
+  { key:'paid',     label:'有費營收' },
+  { key:'bodywork', label:'鈑烤營收' },
+  { key:'general',  label:'一般營收' },
+  { key:'extended', label:'延保營收' },
+];
+
+async function loadRevPeriods() {
+  try {
+    const periods = await (await fetch('/api/periods')).json();
+    const sel = document.getElementById('revPeriodSel');
+    sel.innerHTML = '<option value="">選擇期間...</option>';
+    periods.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p; o.textContent = `${p.slice(0,4)}年${p.slice(4)}月`;
+      sel.appendChild(o);
+    });
+    if (periods.length) { sel.value = periods[0]; loadRevManual(); }
+  } catch(e) {}
+}
+
+async function loadRevManual() {
+  const period = document.getElementById('revPeriodSel').value;
+  const grid = document.getElementById('revManualGrid');
+  if (!period) { grid.style.display = 'none'; return; }
+  try {
+    const rows = await (await fetch(`/api/revenue-targets?period=${period}`)).json();
+    const tMap = {}; rows.forEach(r => { tMap[r.branch] = r; });
+    document.getElementById('revManualBody').innerHTML = ['AMA','AMC','AMD'].map(br => {
+      const t = tMap[br] || {};
+      const bCol = br==='AMA'?'#3b82f6':br==='AMC'?'#10b981':'#f59e0b';
+      const inp = (field) => `<input type="number" id="rev-${br}-${field}" value="${t[field]||''}" placeholder="—" step="any" class="form-input" style="width:100%;min-width:110px;text-align:right">`;
+      return `<tr>
+        <td><span style="display:inline-block;padding:3px 10px;border-radius:6px;font-size:12px;font-weight:700;background:${bCol}22;color:${bCol}">${br}</span></td>
+        ${REV_COLS.map(c => `<td style="padding:6px 8px">${inp(c.key+'_target')}</td><td style="padding:6px 8px">${inp(c.key+'_last_year')}</td>`).join('')}
+      </tr>`;
+    }).join('');
+    grid.style.display = '';
+    document.getElementById('revManualMsg').textContent = '';
+  } catch(e) { document.getElementById('revManualMsg').textContent = '載入失敗: '+e.message; }
+}
+
+async function saveRevManual() {
+  const period = document.getElementById('revPeriodSel').value;
+  if (!period) return;
+  const entries = ['AMA','AMC','AMD'].map(br => {
+    const e = { branch: br, period };
+    REV_COLS.forEach(c => {
+      e[c.key+'_target']    = parseFloat(document.getElementById(`rev-${br}-${c.key}_target`)?.value) || null;
+      e[c.key+'_last_year'] = parseFloat(document.getElementById(`rev-${br}-${c.key}_last_year`)?.value) || null;
+    });
+    return e;
+  });
+  const msgEl = document.getElementById('revManualMsg');
+  msgEl.textContent = '儲存中...'; msgEl.style.color = '#64748b';
+  try {
+    const res = await (await fetch('/api/revenue-targets/batch', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ entries }) })).json();
+    if (res.error) throw new Error(res.error);
+    msgEl.textContent = '✅ 已儲存'; msgEl.style.color = '#10b981';
+    loadRevList();
+  } catch(e) { msgEl.textContent = '❌ '+e.message; msgEl.style.color = '#ef4444'; }
+}
+
+async function loadRevList() {
+  const el = document.getElementById('revList');
+  try {
+    const rows = await (await fetch('/api/revenue-targets')).json();
+    if (!rows.length) { el.innerHTML = '<div style="color:#64748b;font-size:13px;padding:8px 0">尚無設定</div>'; return; }
+    // Group by period
+    const byPeriod = {};
+    rows.forEach(r => { if (!byPeriod[r.period]) byPeriod[r.period] = []; byPeriod[r.period].push(r); });
+    const periods = Object.keys(byPeriod).sort().reverse();
+    el.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;font-size:12px;border-collapse:collapse">
+      <thead><tr>
+        <th style="text-align:left;padding:8px 12px;background:#0f172a;color:#64748b;font-size:11px;border-bottom:1px solid #2d3f56">期間</th>
+        <th style="text-align:left;padding:8px 12px;background:#0f172a;color:#64748b;font-size:11px;border-bottom:1px solid #2d3f56">據點</th>
+        ${REV_COLS.map(c => `<th style="text-align:right;padding:8px 12px;background:#0f172a;color:#64748b;font-size:11px;border-bottom:1px solid #2d3f56">${c.label}<br>目標/去年</th>`).join('')}
+        <th style="padding:8px 12px;background:#0f172a;border-bottom:1px solid #2d3f56"></th>
+      </tr></thead>
+      <tbody>${periods.map(p => byPeriod[p].map(r => {
+        const bCol = r.branch==='AMA'?'#3b82f6':r.branch==='AMC'?'#10b981':'#f59e0b';
+        const fk = v => v ? (parseInt(v)/1000).toLocaleString()+'K' : '—';
+        return `<tr>
+          <td style="padding:8px 12px;border-bottom:1px solid rgba(45,63,86,.3)">${p.slice(0,4)}年${p.slice(4)}月</td>
+          <td style="padding:8px 12px;border-bottom:1px solid rgba(45,63,86,.3)"><span style="background:${bCol}22;color:${bCol};padding:2px 8px;border-radius:5px;font-weight:700">${r.branch}</span></td>
+          ${REV_COLS.map(c => `<td style="text-align:right;padding:8px 12px;border-bottom:1px solid rgba(45,63,86,.3);color:#94a3b8">${fk(r[c.key+'_target'])} / ${fk(r[c.key+'_last_year'])}</td>`).join('')}
+          <td style="padding:8px 12px;border-bottom:1px solid rgba(45,63,86,.3)"><button class="btn btn-danger btn-sm" onclick="deleteRevRow('${r.branch}','${p}')">刪除</button></td>
+        </tr>`;
+      }).join('')).join('')}</tbody>
+    </table></div>`;
+  } catch(e) { el.innerHTML = `<div style="color:#ef4444">${e.message}</div>`; }
+}
+
+async function deleteRevRow(branch, period) {
+  if (!confirm(`確定刪除 ${branch} ${period.slice(0,4)}年${period.slice(4)}月 的目標設定？`)) return;
+  await fetch(`/api/revenue-targets?branch=${branch}&period=${period}`, { method:'DELETE' });
+  loadRevList();
+}
+
+function downloadRevTemplate() {
+  // 產生 CSV 範本讓使用者下載（不需要 xlsx library 在前端）
+  const header = ['期間','據點','有費營收_目標','有費營收_去年','鈑烤營收_目標','鈑烤營收_去年','一般營收_目標','一般營收_去年','延保營收_目標','延保營收_去年'];
+  const now = new Date();
+  const y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,'0');
+  const rows = [
+    [y+''+m, 'AMA', 36000000, 37000000, 8000000, 7500000, 21000000, 22000000, 800000, 750000],
+    [y+''+m, 'AMC', 10000000, 11000000, 2000000, 1800000,  5700000,  6000000, 200000, 180000],
+    [y+''+m, 'AMD', 16000000, 17000000, 2500000, 2300000,  8800000,  9500000, 300000, 280000],
+  ];
+  const csv = [header, ...rows].map(r => r.join(',')).join('\r\n');
+  const bom = '\uFEFF'; // UTF-8 BOM for Excel
+  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `營收目標範本_${y}${m}.csv`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function uploadRevFile(input) {
+  const file = input.files[0]; if (!file) return;
+  const statusEl = document.getElementById('revUploadStatus');
+  const resultEl = document.getElementById('revUploadResult');
+  statusEl.textContent = '上傳中...'; resultEl.innerHTML = '';
+  const formData = new FormData(); formData.append('file', file);
+  try {
+    const res = await (await fetch('/api/upload-revenue-targets', { method:'POST', body: formData })).json();
+    if (res.error) throw new Error(res.error);
+    statusEl.textContent = '';
+    resultEl.innerHTML = `<div style="background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;padding:12px 16px;font-size:13px;color:#10b981">
+      ✅ 成功匯入 <strong>${res.count}</strong> 筆資料
+      <div style="font-size:12px;color:#64748b;margin-top:6px">${res.entries?.map(e=>`${e.branch} ${e.period}`).join('、')}</div>
+    </div>`;
+    loadRevList();
+    input.value = '';
+  } catch(e) {
+    statusEl.textContent = '';
+    resultEl.innerHTML = `<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:12px 16px;font-size:13px;color:#ef4444">❌ ${e.message}</div>`;
+  }
 }
 
 // ══ 密碼驗證 & 鎖定畫面 ══
