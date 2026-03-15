@@ -1,1222 +1,833 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const multer = require('multer');
-const XLSX = require('xlsx');
-const { Pool } = require('pg');
-const path = require('path');
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Volvo 營運統計</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+  .nav { background: #1e293b; border-bottom: 1px solid #2d3f56; padding: 0 24px; display: flex; align-items: center; }
+  .nav-brand { font-size: 15px; font-weight: 700; color: #fff; padding: 16px 0; margin-right: 24px; }
+  .nav-link { padding: 16px 16px; color: #64748b; font-size: 13px; font-weight: 600; text-decoration: none; border-bottom: 2px solid transparent; }
+  .nav-link:hover { color: #e2e8f0; }
+  .nav-link.active { color: #3b82f6; border-bottom-color: #3b82f6; }
+  .container { padding: 24px; max-width: 1400px; margin: 0 auto; }
+  .filter-bar { display: flex; gap: 10px; align-items: center; background: #1e293b; border: 1px solid #2d3f56; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .filter-bar label { font-size: 12px; color: #64748b; font-weight: 600; }
+  .filter-bar select { background: #0f172a; border: 1px solid #2d3f56; color: #e2e8f0; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+  .btn { padding: 7px 16px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
+  .btn-primary { background: #3b82f6; color: #fff; }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-secondary { background: #253347; color: #cbd5e1; border: 1px solid #2d3f56; }
+  .btn-secondary:hover { background: #2d3f56; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .tabs { display: flex; gap: 2px; background: #1e293b; border-radius: 8px; padding: 3px; margin-bottom: 20px; flex-wrap: wrap; }
+  .tab { padding: 8px 16px; border: none; background: transparent; color: #64748b; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px; white-space: nowrap; }
+  .tab:hover { color: #e2e8f0; background: #253347; }
+  .tab.active { background: #3b82f6; color: #fff; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .kpi-card { background: #1e293b; border: 1px solid #2d3f56; border-radius: 10px; padding: 18px; }
+  .kpi-label { font-size: 12px; color: #64748b; margin-bottom: 6px; }
+  .kpi-value { font-size: 26px; font-weight: 800; color: #fff; }
+  .kpi-sub { font-size: 12px; color: #64748b; margin-top: 4px; }
+  .kpi-green  { color: #10b981; }
+  .kpi-blue   { color: #3b82f6; }
+  .kpi-yellow { color: #f59e0b; }
+  .kpi-purple { color: #8b5cf6; }
+  .kpi-red    { color: #ef4444; }
+  .kpi-teal   { color: #14b8a6; }
+  .kpi-orange { color: #f97316; }
+  .card { background: #1a2332; border: 1px solid #2d3f56; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .card-title { font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .card-title-note { font-size: 11px; font-weight: 400; color: #64748b; margin-left: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #0f172a; color: #64748b; font-size: 12px; font-weight: 600; text-align: left; padding: 10px 12px; border-bottom: 1px solid #2d3f56; white-space: nowrap; }
+  td { padding: 9px 12px; border-bottom: 1px solid rgba(45,63,86,.4); vertical-align: middle; }
+  tr:hover td { background: rgba(37,51,71,.5); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid #2d3f56; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .badge-blue   { background: rgba(59,130,246,.15); color: #3b82f6; }
+  .badge-green  { background: rgba(16,185,129,.15); color: #10b981; }
+  .badge-yellow { background: rgba(245,158,11,.15); color: #f59e0b; }
+  .badge-purple { background: rgba(139,92,246,.15); color: #8b5cf6; }
+  .badge-red    { background: rgba(239,68,68,.15); color: #ef4444; }
+  .badge-teal   { background: rgba(20,184,166,.15); color: #14b8a6; }
+  .badge-orange { background: rgba(249,115,22,.15); color: #f97316; }
+  .badge-gray   { background: rgba(100,116,139,.15); color: #94a3b8; }
+  .empty { text-align: center; padding: 48px; color: #64748b; font-size: 14px; }
+  .loading { text-align: center; padding: 48px; color: #64748b; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #2d3f56; border-top-color: #3b82f6; border-radius: 50%; animation: spin .7s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .rank-no { font-weight: 800; color: #64748b; width: 30px; }
+  .rank-1 { color: #f59e0b; }
+  .rank-2 { color: #94a3b8; }
+  .rank-3 { color: #b45309; }
+  .bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .bar-bg { flex: 1; background: #0f172a; border-radius: 4px; height: 6px; min-width: 60px; }
+  .bar-fill { height: 6px; border-radius: 4px; background: #3b82f6; }
+  .bar-fill.green  { background: #10b981; }
+  .bar-fill.yellow { background: #f59e0b; }
+  .up   { color: #10b981; }
+  .down { color: #ef4444; }
+  .income-section-title { font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: .06em; padding: 0 0 10px; margin-bottom: 12px; border-bottom: 1px solid #2d3f56; display: flex; align-items: center; gap: 8px; }
+  .income-category-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .income-cat-card { background: #0f172a; border: 1px solid #2d3f56; border-radius: 10px; padding: 14px 16px; position: relative; overflow: hidden; }
+  .income-cat-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 3px 0 0 3px; }
+  .income-cat-card.type-general::before   { background: #3b82f6; }
+  .income-cat-card.type-insurance::before { background: #10b981; }
+  .income-cat-card.type-extended::before  { background: #8b5cf6; }
+  .income-cat-card.type-voucher::before   { background: #f59e0b; }
+  .income-cat-card.type-external::before  { background: #14b8a6; }
+  .income-cat-card.type-paid::before      { background: #f97316; }
+  .income-cat-card.type-grand::before     { background: #e2e8f0; }
+  .income-cat-card.type-internal::before  { background: #64748b; }
+  .income-cat-card.type-warranty::before  { background: #6366f1; }
+  .income-cat-card.type-vsa::before       { background: #ec4899; }
+  .income-cat-card.type-goodwill::before  { background: #06b6d4; }
+  .income-cat-label { font-size: 11px; color: #64748b; margin-bottom: 5px; font-weight: 600; }
+  .income-cat-value { font-size: 22px; font-weight: 800; }
+  .income-cat-sub   { font-size: 11px; color: #64748b; margin-top: 3px; }
+  .income-cat-card.type-general .income-cat-value   { color: #3b82f6; }
+  .income-cat-card.type-insurance .income-cat-value { color: #10b981; }
+  .income-cat-card.type-extended .income-cat-value  { color: #8b5cf6; }
+  .income-cat-card.type-voucher .income-cat-value   { color: #f59e0b; }
+  .income-cat-card.type-external .income-cat-value  { color: #14b8a6; }
+  .income-cat-card.type-paid .income-cat-value      { color: #f97316; font-size: 26px; }
+  .income-cat-card.type-grand .income-cat-value     { color: #e2e8f0; font-size: 26px; }
+  .income-cat-card.type-internal .income-cat-value  { color: #94a3b8; }
+  .income-cat-card.type-warranty .income-cat-value  { color: #818cf8; }
+  .income-cat-card.type-vsa .income-cat-value       { color: #f472b6; }
+  .income-cat-card.type-goodwill .income-cat-value  { color: #22d3ee; }
+  .divider-label { display: flex; align-items: center; gap: 10px; font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: .06em; margin: 20px 0 12px; }
+  .divider-label::after { content: ''; flex: 1; height: 1px; background: #2d3f56; }
+  tr.cost-row td { background: rgba(100,116,139,.04); }
+  tr.cost-row:hover td { background: rgba(100,116,139,.1); }
+  tr.subtotal-row td { background: rgba(249,115,22,.06); font-weight: 700; }
+  tr.subtotal-row:hover td { background: rgba(249,115,22,.1); }
+  tr.total-row td { background: rgba(59,130,246,.08); font-weight: 800; }
+  tr.total-row:hover td { background: rgba(59,130,246,.12); }
+  #boutiqueMatrix thead tr:last-child th, #saMatrix thead tr:last-child th { box-shadow: 0 2px 0 #2d3f56; }
+  /* ── 業績進度 ── */
+  .perf-block { border: 1px solid #2d3f56; border-radius: 10px; margin-bottom: 14px; overflow: hidden; transition: border-color .15s; }
+  .perf-block:hover { border-color: #3b82f6; }
+  .perf-block-header { background: #0f172a; padding: 12px 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid #2d3f56; }
+  .perf-block-body { display: grid; }
+  .perf-cell { padding: 14px 16px; }
+  .perf-cell + .perf-cell { border-left: 1px solid #2d3f56; }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <span class="nav-brand">🚗 Volvo 營運統計</span>
+  <a href="/stats.html" class="nav-link active">📊 統計</a>
+  <a href="/settings.html" class="nav-link">⚙️ 設定</a>
+</nav>
+<div class="container">
+  <div class="filter-bar">
+    <label>期間</label>
+    <select id="selPeriod"><option value="">全部期間</option></select>
+    <label>據點</label>
+    <select id="selBranch">
+      <option value="">全部</option>
+      <option value="AMA">AMA</option>
+      <option value="AMC">AMC</option>
+      <option value="AMD">AMD</option>
+    </select>
+    <button class="btn btn-primary" onclick="loadAll()">查詢</button>
+    <span id="lastUpdate" style="margin-left:auto;font-size:12px;color:#64748b"></span>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('repair')">🔧 維修收入</button>
+    <button class="tab" onclick="switchTab('tech')">👨‍🔧 技師工資</button>
+    <button class="tab" onclick="switchTab('parts')">🔩 零件銷售</button>
+    <button class="tab" onclick="switchTab('boutique')">💎 精品配件銷售</button>
+    <button class="tab" onclick="switchTab('sa-sales')">👤 SA 零件銷售</button>
+    <button class="tab" onclick="switchTab('trend')">📈 月份趨勢</button>
+    <button class="tab" onclick="switchTab('daily')">📅 每日進廠台數</button>
+    <button class="tab" onclick="switchTab('performance')">🎯 業績進度</button>
+  </div>
+  <!-- 維修收入 -->
+  <div id="tab-repair">
+    <div id="repairKPI" class="kpi-grid"></div>
+    <div id="grandKPI"></div>
+    <div class="card">
+      <div class="card-title">💰 收入分類分析（未稅）<span class="card-title-note">各收入欄位÷1.05換算未稅｜零件成本已為未稅｜外賣來自零件銷售</span></div>
+      <div class="income-section-title">📊 有費收入摘要</div>
+      <div id="incomeCategoryCards" class="income-category-grid"><div style="color:#64748b;font-size:13px;grid-column:1/-1"><span class="spinner"></span>載入中</div></div>
+      <div class="divider-label">有費收入明細（未稅）</div>
+      <div class="table-wrap" style="margin-bottom:16px">
+        <table>
+          <thead><tr><th>據點</th><th>帳類</th><th class="num">台數</th><th class="num">引擎工資</th><th class="num">零件</th><th class="num">配件</th><th class="num">精品</th><th class="num">鈑金</th><th class="num">烤漆</th><th class="num">洗車美容</th><th class="num">外包</th><th class="num">附加服務</th><th class="num" style="color:#10b981">合計(未稅)</th></tr></thead>
+          <tbody id="tbIncomeRevenue"><tr><td colspan="13" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
+        </table>
+      </div>
+      <div class="divider-label">無費工單成本（內結 / 保固 / VSA / 善意維修）</div>
+      <div class="income-section-title" style="margin-top:4px">📋 無費工單成本摘要</div>
+      <div id="incomeCostCards" class="income-category-grid"><div style="color:#64748b;font-size:13px;grid-column:1/-1"><span class="spinner"></span>載入中</div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>據點</th><th>帳類</th><th class="num">台數</th><th class="num" style="color:#3b82f6">零件銷售</th><th class="num" style="color:#10b981">配件銷售</th><th class="num" style="color:#f59e0b">精品銷售</th><th class="num">引擎工資</th><th class="num">鈑金</th><th class="num">烤漆</th><th class="num">洗車美容</th><th class="num">外包</th><th class="num">附加服務</th><th class="num">工資小計</th><th class="num">零件成本(未稅)</th><th class="num" style="color:#f59e0b">合計成本</th><th>附註</th></tr></thead>
+          <tbody id="tbIncomeCost"><tr><td colspan="16" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">📋 SA 業績排名</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>據點</th><th>服務顧問</th><th class="num">出廠台數</th><th class="num">總營收(未稅)</th><th class="num">引擎工資</th><th class="num">零件收入</th><th class="num">佔比</th></tr></thead>
+          <tbody id="tbSA"><tr><td colspan="8" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">📂 帳類分析</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>據點</th><th>帳類</th><th class="num">工單數</th><th class="num">總營收</th><th class="num">零件</th><th class="num">引擎工資</th><th class="num">鈑烤</th><th class="num">零件成本</th></tr></thead>
+          <tbody id="tbAccount"><tr><td colspan="8" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
-const app = express();
-const PORT = process.env.PORT || 3001;
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+  <!-- 技師工資 -->
+  <div id="tab-tech" style="display:none">
+    <div id="techKPI" class="kpi-grid"></div>
+    <div class="card">
+      <div class="card-title">🏆 技師工資排名</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>據點</th><th>技師</th><th class="num">台數</th><th class="num">標準工時</th><th class="num">總工資</th><th class="num">美容工資</th><th class="num">淨工資</th><th>工資佔比</th></tr></thead>
+          <tbody id="tbTech"><tr><td colspan="9" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+  <!-- 零件銷售 -->
+  <div id="tab-parts" style="display:none">
+    <div id="partsKPI" class="kpi-grid"></div>
+    <div class="card">
+      <div class="card-title">📦 零件種類彙總</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>據點</th><th>種類</th><th class="num">筆數</th><th class="num">總數量</th><th class="num">銷售金額</th><th class="num">成本</th><th class="num">毛利</th><th class="num">毛利率</th></tr></thead>
+          <tbody id="tbPartsType"><tr><td colspan="8" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">🥇 銷售金額 Top 20 零件</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>零件編號</th><th>零件名稱</th><th>種類</th><th class="num">總數量</th><th class="num">銷售金額</th></tr></thead>
+          <tbody id="tbTopParts"><tr><td colspan="6" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
-const pool = new Pool({
-  connectionString: process.env.POSTGRES_CONNECTION_STRING || process.env.DATABASE_URL,
-  ssl: false,
-  max: 10,
-});
+  <!-- 精品配件銷售 -->
+  <div id="tab-boutique" style="display:none">
+    <div style="background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.25);border-radius:8px;padding:10px 14px;font-size:12px;color:#a78bfa;margin-bottom:14px;line-height:1.8">
+      💡 <strong>資料來源</strong>：零件銷售明細（parts_sales），品項類型透過<strong>零件型錄（parts_catalog）</strong>比對 part_number 判斷。若無型錄資料，則以零件銷售明細中的 Paycode 欄位判斷。「帳類」欄位對應零件銷售的「帳類」（part_type）欄位。
+    </div>
+    <div id="boutiqueKPI" class="kpi-grid"></div>
+    <div class="card" style="padding:0">
+      <div style="padding:16px 20px 0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div style="font-size:14px;font-weight:700">💎 精品 &amp; 配件銷售矩陣（各據點 × 銷售人員 × 帳類）</div>
+        <div style="font-size:12px;color:#64748b">金額單位：元（未稅）</div>
+      </div>
+      <div style="overflow-x:auto;overflow-y:auto;max-height:70vh;padding:0 0 4px">
+        <div id="boutiqueMatrix" style="min-width:700px"><div style="padding:48px;text-align:center;color:#64748b"><span class="spinner"></span>載入中...</div></div>
+      </div>
+    </div>
+  </div>
 
-// ============================================================
-// 自動建表
-// ============================================================
-const initDatabase = async () => {
-  const client = await pool.connect();
-  try {
-    console.log('[initDB] 開始建表...');
+  <!-- SA 零件銷售 -->
+  <div id="tab-sa-sales" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <div id="saMatrixMeta" style="font-size:13px;color:#64748b"></div>
+      <a href="/settings.html" style="font-size:12px;color:#64748b;text-decoration:none;display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border:1px solid #2d3f56;border-radius:6px;background:#1e293b">⚙️ 管理設定</a>
+    </div>
+    <div class="card" style="padding:0">
+      <div style="overflow-x:auto;overflow-y:auto;max-height:70vh">
+        <div id="saMatrix"><div style="padding:48px;text-align:center;color:#64748b"><span class="spinner"></span>載入中...</div></div>
+      </div>
+    </div>
+  </div>
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS upload_history (
-        id SERIAL PRIMARY KEY, file_name VARCHAR(255) NOT NULL,
-        file_type VARCHAR(50), branch VARCHAR(10), period VARCHAR(6),
-        row_count INTEGER DEFAULT 0, status VARCHAR(20) DEFAULT 'success',
-        error_msg TEXT, created_at TIMESTAMPTZ DEFAULT NOW()
-      )`);
+  <!-- 月份趨勢 -->
+  <div id="tab-trend" style="display:none">
+    <div class="card">
+      <div class="card-title">📈 各月份維修收入趨勢</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>期間</th><th>據點</th><th class="num">出廠台數</th><th class="num">總營收</th><th class="num">引擎工資</th><th class="num">零件收入</th><th class="num">環比</th></tr></thead>
+          <tbody id="tbTrend"><tr><td colspan="7" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS repair_income (
-        id SERIAL PRIMARY KEY, period VARCHAR(6), branch VARCHAR(10),
-        work_order VARCHAR(30), settle_date DATE, customer VARCHAR(100), plate_no VARCHAR(20),
-        account_type_code VARCHAR(10), account_type VARCHAR(30),
-        parts_income NUMERIC(12,2) DEFAULT 0, accessories_income NUMERIC(12,2) DEFAULT 0,
-        boutique_income NUMERIC(12,2) DEFAULT 0, engine_wage NUMERIC(12,2) DEFAULT 0,
-        bodywork_income NUMERIC(12,2) DEFAULT 0, paint_income NUMERIC(12,2) DEFAULT 0,
-        carwash_income NUMERIC(12,2) DEFAULT 0, outsource_income NUMERIC(12,2) DEFAULT 0,
-        addon_income NUMERIC(12,2) DEFAULT 0, total_untaxed NUMERIC(12,2) DEFAULT 0,
-        total_taxed NUMERIC(12,2) DEFAULT 0, parts_cost NUMERIC(12,2) DEFAULT 0,
-        service_advisor VARCHAR(50), created_at TIMESTAMPTZ DEFAULT NOW()
-      )`);
+  <!-- 每日進廠台數 -->
+  <div id="tab-daily" style="display:none">
+    <div id="dailyKPI" class="kpi-grid"></div>
+    <div class="card">
+      <div class="card-title">📅 每日進廠台數（已排除 PDI）</div>
+      <div style="overflow-x:auto"><div id="dailyChart" style="min-width:700px;padding:8px 0"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📋 每日明細</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>日期</th><th>據點</th><th class="num">進廠台數</th><th>vs 日均</th></tr></thead>
+          <tbody id="tbDaily"><tr><td colspan="4" class="loading"><span class="spinner"></span>載入中</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS tech_performance (
-        id SERIAL PRIMARY KEY, period VARCHAR(6), branch VARCHAR(10),
-        tech_name_raw VARCHAR(50), tech_name_clean VARCHAR(50), dispatch_date DATE,
-        work_order VARCHAR(30), work_code VARCHAR(30), task_content VARCHAR(200),
-        standard_hours NUMERIC(8,2) DEFAULT 0, wage NUMERIC(12,2) DEFAULT 0,
-        account_type VARCHAR(30), discount NUMERIC(5,2), wage_category VARCHAR(30),
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )`);
+  <!-- ══════ 業績進度 ══════ -->
+  <div id="tab-performance" style="display:none">
+    <div id="perfKPI" class="kpi-grid"></div>
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS parts_sales (
-        id SERIAL PRIMARY KEY, period VARCHAR(6), branch VARCHAR(10),
-        category VARCHAR(20), category_detail VARCHAR(50), order_no VARCHAR(30),
-        work_order VARCHAR(30), part_number VARCHAR(30), part_name VARCHAR(200),
-        part_type VARCHAR(20), category_code VARCHAR(20), function_code VARCHAR(20),
-        sale_qty NUMERIC(10,2) DEFAULT 0, retail_price NUMERIC(12,2) DEFAULT 0,
-        sale_price_untaxed NUMERIC(12,2) DEFAULT 0, cost_untaxed NUMERIC(12,2) DEFAULT 0,
-        discount_rate NUMERIC(5,4), department VARCHAR(20), pickup_person VARCHAR(50),
-        sales_person VARCHAR(50), plate_no VARCHAR(20), created_at TIMESTAMPTZ DEFAULT NOW()
-      )`);
+    <!-- ── 收入明細分解 ── -->
+    <div class="card" id="perfBreakdownCard">
+      <div class="card-title">
+        📊 收入明細分解
+        <span id="perfBreakdownPeriod" class="card-title-note"></span>
+      </div>
+      <div id="perfBreakdown"><div class="loading"><span class="spinner"></span>載入中</div></div>
+    </div>
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS business_query (
-        id SERIAL PRIMARY KEY, period VARCHAR(6), branch VARCHAR(10),
-        work_order VARCHAR(30), open_time TIMESTAMPTZ, settle_date DATE,
-        plate_no VARCHAR(20), vin VARCHAR(30), status VARCHAR(20), repair_item VARCHAR(200),
-        service_advisor VARCHAR(50), assigned_tech VARCHAR(50), repair_tech VARCHAR(50),
-        repair_type VARCHAR(50), car_series VARCHAR(50), car_model VARCHAR(50),
-        model_year VARCHAR(10), owner VARCHAR(100), is_ev VARCHAR(10),
-        mileage_in INTEGER, mileage_out INTEGER, created_at TIMESTAMPTZ DEFAULT NOW()
-      )`);
+    <!-- ── 業績指標 ── -->
+    <div class="card">
+      <div class="card-title">
+        🎯 各指標業績進度
+        <span id="perfPeriodLabel" class="card-title-note"></span>
+        <a href="/settings.html" style="font-size:12px;color:#64748b;text-decoration:none;margin-left:8px;padding:4px 8px;border:1px solid #2d3f56;border-radius:5px;background:#1e293b">⚙️ 設定指標</a>
+      </div>
+      <div id="perfNoConfig" style="display:none;padding:48px;text-align:center;color:#64748b">
+        尚未建立業績指標，請前往 <a href="/settings.html" style="color:#3b82f6">⚙️ 設定 → 業績目標</a> 新增追蹤項目
+      </div>
+      <div id="perfDetail"></div>
+    </div>
+  </div>
 
-    const bqCheck = await client.query(
-      `SELECT column_name FROM information_schema.columns
-       WHERE table_name='business_query' AND column_name='work_order'`
-    );
-    if (!bqCheck.rows.length) {
-      await client.query(`DROP TABLE IF EXISTS business_query`);
-      await client.query(`
-        CREATE TABLE business_query (
-          id SERIAL PRIMARY KEY, period VARCHAR(6), branch VARCHAR(10),
-          work_order VARCHAR(30), open_time TIMESTAMPTZ, settle_date DATE,
-          plate_no VARCHAR(20), vin VARCHAR(30), status VARCHAR(20), repair_item VARCHAR(200),
-          service_advisor VARCHAR(50), assigned_tech VARCHAR(50), repair_tech VARCHAR(50),
-          repair_type VARCHAR(50), car_series VARCHAR(50), car_model VARCHAR(50),
-          model_year VARCHAR(10), owner VARCHAR(100), is_ev VARCHAR(10),
-          mileage_in INTEGER, mileage_out INTEGER, created_at TIMESTAMPTZ DEFAULT NOW()
-        )`);
-    }
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS parts_catalog (
-        part_number VARCHAR(50) PRIMARY KEY, part_name VARCHAR(200),
-        part_category VARCHAR(50), part_type VARCHAR(20), category_code VARCHAR(20),
-        function_code VARCHAR(20), branch VARCHAR(10), updated_at TIMESTAMPTZ DEFAULT NOW()
-      )`);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS sa_sales_config (
-        id SERIAL PRIMARY KEY, config_name VARCHAR(100) NOT NULL,
-        description TEXT, filters JSONB NOT NULL DEFAULT '[]',
-        stat_method VARCHAR(20) NOT NULL DEFAULT 'amount',
-        created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
-      )`);
-    await client.query(`ALTER TABLE sa_sales_config ADD COLUMN IF NOT EXISTS stat_method VARCHAR(20) NOT NULL DEFAULT 'amount'`);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS app_settings (key VARCHAR(100) PRIMARY KEY, value TEXT NOT NULL)`);
-    await client.query(`
-      INSERT INTO app_settings (key, value) VALUES ('settings_password','admin1234')
-      ON CONFLICT (key) DO NOTHING`);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS income_config (
-        id SERIAL PRIMARY KEY, config_key VARCHAR(50) NOT NULL UNIQUE,
-        config_value TEXT NOT NULL, description TEXT, updated_at TIMESTAMPTZ DEFAULT NOW()
-      )`);
-    await client.query(`
-      INSERT INTO income_config (config_key, config_value, description)
-      VALUES ('external_sales_category','外賣','外賣收入對應 parts_sales.category 值')
-      ON CONFLICT (config_key) DO NOTHING`);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS working_days_config (
-        id         SERIAL PRIMARY KEY,
-        branch     VARCHAR(10) NOT NULL,
-        period     VARCHAR(6)  NOT NULL,
-        work_dates JSONB       NOT NULL DEFAULT '[]',
-        note       TEXT,
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE (branch, period)
-      )`);
-
-    // ── 業績指標 ──
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS performance_metrics (
-        id          SERIAL PRIMARY KEY,
-        metric_name VARCHAR(100) NOT NULL,
-        description TEXT    DEFAULT '',
-        metric_type VARCHAR(20) NOT NULL DEFAULT 'repair_income',
-        filters     JSONB   NOT NULL DEFAULT '[]',
-        stat_field  VARCHAR(20) NOT NULL DEFAULT 'amount',
-        unit        VARCHAR(20) DEFAULT '',
-        sort_order  INTEGER DEFAULT 0,
-        created_at  TIMESTAMPTZ DEFAULT NOW()
-      )`);
-
-    // ── 業績目標 ──
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS performance_targets (
-        id              SERIAL PRIMARY KEY,
-        metric_id       INTEGER NOT NULL,
-        branch          VARCHAR(10) NOT NULL,
-        period          VARCHAR(6)  NOT NULL,
-        target_value    NUMERIC(15,2),
-        last_year_value NUMERIC(15,2),
-        note            TEXT DEFAULT '',
-        updated_at      TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE(metric_id, branch, period)
-      )`);
-
-    console.log('[initDB] ✅ 所有表格建立完成');
-  } catch (err) {
-    console.error('[initDB] ❌ 失敗:', err.message);
-    throw err;
-  } finally {
-    client.release();
-  }
+</div>
+<script>
+let currentTab = 'repair';
+let saConfigs  = [];
+const n    = (v) => parseFloat(v || 0);
+const fmt  = (v) => Math.round(n(v)).toLocaleString();
+const fmtK = (v) => Math.round(n(v) / 1000).toLocaleString() + 'K';
+const badgeType = (t) => { const map = { '零件':'badge-blue', '配件':'badge-green', '精品':'badge-yellow' }; return map[t] || 'badge-purple'; };
+const ACCOUNT_GROUP = (s) => {
+  if (!s) return 'other';
+  const t = s.toLowerCase();
+  if (s.includes('一般')) return 'general';
+  if (s.includes('保險')) return 'insurance';
+  if (s.includes('延保')) return 'extended';
+  if (s.includes('票'))   return 'voucher';
+  if (s.includes('內結')) return 'internal';
+  if (s.includes('保固')) return 'warranty';
+  if (t.includes('vsa'))  return 'vsa';
+  if (s.includes('善意')) return 'goodwill';
+  return 'other';
+};
+const PAID_GROUPS = new Set(['general','insurance','extended']);
+const COST_GROUPS = new Set(['internal','warranty','vsa','goodwill']);
+const GROUP_META = {
+  general:   { label:'一般收入', cls:'type-general',   badge:'badge-blue',   icon:'🔵' },
+  insurance: { label:'保險收入', cls:'type-insurance', badge:'badge-green',  icon:'🟢' },
+  extended:  { label:'延保收入', cls:'type-extended',  badge:'badge-purple', icon:'🟣' },
+  voucher:   { label:'票券收入', cls:'type-voucher',   badge:'badge-yellow', icon:'🟡' },
+  external:  { label:'外賣收入', cls:'type-external',  badge:'badge-teal',   icon:'🩵' },
+  paid:      { label:'有費收入', cls:'type-paid',      badge:'badge-orange', icon:'🔶' },
+  grand:     { label:'總計（有費＋無費成本）', cls:'type-grand', badge:'badge-gray', icon:'📌' },
+  internal:  { label:'內結',     cls:'type-internal',  badge:'badge-gray',   icon:'⚙️' },
+  warranty:  { label:'保固',     cls:'type-warranty',  badge:'badge-purple', icon:'🛡️' },
+  vsa:       { label:'VSA',      cls:'type-vsa',       badge:'badge-red',    icon:'📋' },
+  goodwill:  { label:'善意維修', cls:'type-goodwill',  badge:'badge-teal',   icon:'🤝' },
+  other:     { label:'其他',     cls:'type-internal',  badge:'badge-gray',   icon:'❓' },
 };
 
-// ============================================================
-// 工具函式
-// ============================================================
-const pick = (row, ...keys) => {
-  for (const k of keys) {
-    if (row[k] !== undefined && row[k] !== null && row[k] !== '') return row[k];
-  }
-  return '';
-};
-const num = (val) => { const n = parseFloat(val); return isNaN(n) ? 0 : n; };
-const parseDate = (val) => {
-  if (!val) return null;
-  if (val instanceof Date) return val.toISOString().split('T')[0];
-  const m = String(val).trim().match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
-  return m ? `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}` : null;
-};
-const parseDateTime = (val) => {
-  if (!val) return null;
-  if (val instanceof Date) return isNaN(val) ? null : val.toISOString();
-  const s = String(val).trim();
-  const m = s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})[\s T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
-  if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}T${m[4].padStart(2,'0')}:${m[5]}:${m[6]||'00'}+08:00`;
-  const dm = s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
-  return dm ? `${dm[1]}-${dm[2].padStart(2,'0')}-${dm[3].padStart(2,'0')}T00:00:00+08:00` : null;
-};
-const detectFileType = (fn, sheets) => {
-  const f = fn.toLowerCase();
-  if (f.includes('技師績效')||f.includes('工資明細')) return 'tech_performance';
-  if (f.includes('維修收入')||f.includes('收入分類')) return 'repair_income';
-  if (f.includes('零件銷售')||f.includes('零件明細')) return 'parts_sales';
-  if (f.includes('業務查詢')) return 'business_query';
-  if (f.includes('零配件比對')||f.includes('零配件對照')||f.includes('parts_catalog')) return 'parts_catalog';
-  const n = (sheets||[]).join(',');
-  if (n.includes('工資明細')||n.includes('技師績效')) return 'tech_performance';
-  if (n.includes('維修收入')||n.includes('收入分類')) return 'repair_income';
-  if (n.includes('零件銷售')||n.includes('零件明細')) return 'parts_sales';
-  if (n.includes('業務查詢')) return 'business_query';
-  return null;
-};
-const detectBranch = fn => {
-  const f = fn.toUpperCase();
-  if (f.includes('AMA')) return 'AMA';
-  if (f.includes('AMC')) return 'AMC';
-  if (f.includes('AMD')) return 'AMD';
-  return null;
-};
-const detectPeriod = fn => { const m = fn.match(/(\d{6})/); return m ? m[1] : null; };
-
-// ============================================================
-// 各類解析
-// ============================================================
-const isNoteRow = v => { const s = String(v||'').trim(); return !s||s==='undefined'||/[\u4e00-\u9fff]/.test(s); };
-
-const parseRepairIncome = (rows, branch, period) => rows
-  .filter(r => !isNoteRow(pick(r,'工作單號','工單號')))
-  .map(r => ({
-    period, branch,
-    work_order: String(pick(r,'工作單號','工單號')).trim(),
-    settle_date: parseDate(pick(r,'結算日期')),
-    customer: String(pick(r,'客戶名稱','客戶')).trim(),
-    plate_no: String(pick(r,'車牌號碼','車牌')).trim(),
-    account_type_code: String(pick(r,'帳類代碼')).trim(),
-    account_type: String(pick(r,'帳類')).trim(),
-    parts_income: num(pick(r,'零件收入')),
-    accessories_income: num(pick(r,'配件收入')),
-    boutique_income: num(pick(r,'精品收入')),
-    engine_wage: num(pick(r,'引擎工資','工資收入')),
-    bodywork_income: num(pick(r,'鈑金收入')),
-    paint_income: num(pick(r,'烤漆收入')),
-    carwash_income: num(pick(r,'洗車美容收入','洗車收入')),
-    outsource_income: num(pick(r,'外包收入')),
-    addon_income: num(pick(r,'附加服務收入','附加服務')),
-    total_untaxed: num(pick(r,'收入合計（未稅）','收入合計(未稅)','收入合計')),
-    total_taxed: num(pick(r,'收入合計(含稅)','收入合計（含稅）')),
-    parts_cost: num(pick(r,'零件成本（未稅）','零件成本(未稅)','零件成本')),
-    service_advisor: String(pick(r,'服務顧問','接待員')).trim(),
-  }));
-
-const parseTechPerformance = (rows, branch, period) => rows
-  .filter(r => !isNoteRow(pick(r,'工作單號','工單號')))
-  .map(r => ({
-    period, branch,
-    tech_name_raw: String(pick(r,'技師姓名','姓名')).trim(),
-    tech_name_clean: String(pick(r,'技師姓名','姓名')).trim().replace(/\s+/g,''),
-    dispatch_date: parseDate(pick(r,'出廠日期')),
-    work_order: String(pick(r,'工作單號','工單號')).trim(),
-    work_code: String(pick(r,'維修工時代碼','工時代碼')).trim(),
-    task_content: String(pick(r,'作業內容')).trim(),
-    standard_hours: num(pick(r,'標準工時')),
-    wage: num(pick(r,'工資')),
-    account_type: String(pick(r,'帳類')).trim(),
-    discount: num(pick(r,'折扣')),
-    wage_category: String(pick(r,'工資類別')).trim(),
-  }));
-
-const parsePartsSales = (rows, branch, period) => rows.map(r => {
-  const rowBranch = branch || (() => {
-    const b = String(r['據點代碼']||r['據點']||r['點']||r['分店']||'').toUpperCase().trim();
-    return ['AMA','AMC','AMD'].includes(b) ? b : null;
-  })();
-  return {
-    period, branch: rowBranch,
-    category: String(pick(r,'類別')).trim(),
-    category_detail: String(pick(r,'類別細節','類別明細')).trim(),
-    order_no: String(pick(r,'結帳單號')).trim(),
-    work_order: String(pick(r,'工單號','工作單號')).trim(),
-    part_number: String(pick(r,'零件編號')).trim(),
-    part_name: String(pick(r,'零件名稱')).trim(),
-    part_type: String(pick(r,'Paycode','種類','零件種類')).trim(),
-    category_code: String(pick(r,'零件類別')).trim(),
-    function_code: String(pick(r,'功能碼')).trim(),
-    sale_qty: num(pick(r,'銷售數量','數量')),
-    retail_price: num(pick(r,'零售價')),
-    sale_price_untaxed: num(pick(r,'實際售價(稅前)','實際售價(未稅)','實際售價')),
-    cost_untaxed: num(pick(r,'成本總價(稅前)','成本(未稅)','成本')),
-    discount_rate: num(pick(r,'折扣率')),
-    department: String(pick(r,'付款部門','部門')).trim(),
-    pickup_person: String(pick(r,'領料人員','領料人','接待人員')).trim(),
-    sales_person: String(pick(r,'銷售人員','業務員')).trim(),
-    plate_no: String(pick(r,'車牌號碼','車牌')).trim(),
-  };
-});
-
-const parseBusinessQuery = (rows, branch, period) => rows.map(r => {
-  const rowBranch = branch || (() => {
-    const b = String(r['據點代碼']||r['據點']||r['點']||r['分店']||'').toUpperCase().trim();
-    return ['AMA','AMC','AMD'].includes(b) ? b : null;
-  })();
-  return {
-    period, branch: rowBranch,
-    work_order: String(pick(r,'工單號','工作單號')).trim(),
-    open_time: parseDateTime(pick(r,'工單開單時間','開單時間','開工時間','進廠時間','開立時間','開單日期','接車時間')),
-    settle_date: parseDate(pick(r,'結算日期')),
-    plate_no: String(pick(r,'車牌號碼','車牌號','車牌')).trim(),
-    vin: String(pick(r,'車身號碼','VIN')).trim(),
-    status: String(pick(r,'工單狀態','狀態')).trim(),
-    repair_item: String(pick(r,'交修項目')).trim(),
-    service_advisor: String(pick(r,'服務顧問')).trim(),
-    assigned_tech: String(pick(r,'指定技師')).trim(),
-    repair_tech: String(pick(r,'維修技師')).trim(),
-    repair_type: String(pick(r,'維修類型')).trim(),
-    car_series: String(pick(r,'車系')).trim(),
-    car_model: String(pick(r,'車型')).trim(),
-    model_year: String(pick(r,'年式')).trim(),
-    owner: String(pick(r,'車主')).trim(),
-    is_ev: String(pick(r,'電車','油電','動力')).trim(),
-    mileage_in: parseInt(pick(r,'進廠里程'))||null,
-    mileage_out: parseInt(pick(r,'出廠里程'))||null,
-  };
-});
-
-const parsePartsCatalog = (rows) => rows
-  .filter(r => { const p=String(pick(r,'零件編號','料號')||'').trim(); return p&&p!=='undefined'; })
-  .map(r => ({
-    part_number: String(pick(r,'零件編號','料號')).trim(),
-    part_name: String(pick(r,'零件名稱','品名')).trim(),
-    part_category: String(pick(r,'零件類別')).trim(),
-    part_type: String(pick(r,'零件種類','種類')).trim(),
-    category_code: String(pick(r,'零件類別')).trim(),
-    function_code: String(pick(r,'功能碼')).trim(),
-    branch: String(pick(r,'據點')).trim()||null,
-  }));
-
-// ============================================================
-// 批次 INSERT
-// ============================================================
-const batchInsert = async (client, table, cols, rows) => {
-  let total = 0;
-  const BATCH = 500;
-  for (let i = 0; i < rows.length; i += BATCH) {
-    const batch = rows.slice(i, i+BATCH);
-    const values = [];
-    const ph = batch.map((row, ri) =>
-      '(' + cols.map((col, ci) => { values.push(row[col]??null); return `$${ri*cols.length+ci+1}`; }).join(',') + ')'
-    );
-    await client.query(`INSERT INTO ${table} (${cols.join(',')}) VALUES ${ph.join(',')}`, values);
-    total += batch.length;
-  }
-  return total;
-};
-
-const upsertPartsCatalog = async (client, rows) => {
-  let count = 0;
-  for (let i = 0; i < rows.length; i += 200) {
-    for (const r of rows.slice(i, i+200)) {
-      await client.query(`
-        INSERT INTO parts_catalog (part_number,part_name,part_category,part_type,category_code,function_code,branch,updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
-        ON CONFLICT (part_number) DO UPDATE SET
-          part_name=EXCLUDED.part_name,part_category=EXCLUDED.part_category,
-          part_type=EXCLUDED.part_type,category_code=EXCLUDED.category_code,
-          function_code=EXCLUDED.function_code,branch=EXCLUDED.branch,updated_at=NOW()
-      `, [r.part_number,r.part_name,r.part_category,r.part_type,r.category_code,r.function_code,r.branch]);
-      count++;
-    }
-  }
-  return count;
-};
-
-// ============================================================
-// 上傳 API
-// ============================================================
-app.post('/api/upload', upload.array('files', 8), async (req, res) => {
-  const results = [];
-  for (const file of req.files) {
-    let filename = file.originalname;
-    try { filename = Buffer.from(file.originalname,'latin1').toString('utf8'); } catch(e) {}
-    try {
-      const workbook = XLSX.read(file.buffer, { type:'buffer', cellDates:true });
-      const fileType = detectFileType(filename, workbook.SheetNames);
-      const branch = detectBranch(filename);
-      const period = detectPeriod(filename);
-      if (!fileType) throw new Error('無法辨識檔案類型，請確認檔名包含關鍵字（維修收入/技師績效/零件銷售/業務查詢）');
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval:'' });
-      if (rawRows.length > 0) console.log(`[${filename}] 欄位: ${Object.keys(rawRows[0]).join(' | ')}`);
-      const client = await pool.connect();
-      let rowCount = 0;
-      try {
-        await client.query('BEGIN');
-        if (fileType === 'repair_income') {
-          if (!branch||!period) throw new Error('維修收入需要據點和期間');
-          await client.query('DELETE FROM repair_income WHERE period=$1 AND branch=$2',[period,branch]);
-          rowCount = await batchInsert(client,'repair_income',
-            ['period','branch','work_order','settle_date','customer','plate_no','account_type_code','account_type',
-             'parts_income','accessories_income','boutique_income','engine_wage','bodywork_income','paint_income',
-             'carwash_income','outsource_income','addon_income','total_untaxed','total_taxed','parts_cost','service_advisor'],
-            parseRepairIncome(rawRows,branch,period));
-        } else if (fileType === 'tech_performance') {
-          if (!branch||!period) throw new Error('技師績效需要據點和期間');
-          await client.query('DELETE FROM tech_performance WHERE period=$1 AND branch=$2',[period,branch]);
-          rowCount = await batchInsert(client,'tech_performance',
-            ['period','branch','tech_name_raw','tech_name_clean','dispatch_date','work_order','work_code',
-             'task_content','standard_hours','wage','account_type','discount','wage_category'],
-            parseTechPerformance(rawRows,branch,period));
-        } else if (fileType === 'parts_sales') {
-          if (!period) throw new Error('零件銷售需要期間');
-          branch ? await client.query('DELETE FROM parts_sales WHERE period=$1 AND branch=$2',[period,branch])
-                 : await client.query('DELETE FROM parts_sales WHERE period=$1',[period]);
-          rowCount = await batchInsert(client,'parts_sales',
-            ['period','branch','category','category_detail','order_no','work_order','part_number','part_name',
-             'part_type','category_code','function_code','sale_qty','retail_price','sale_price_untaxed',
-             'cost_untaxed','discount_rate','department','pickup_person','sales_person','plate_no'],
-            parsePartsSales(rawRows,branch,period));
-        } else if (fileType === 'business_query') {
-          if (!period) throw new Error('業務查詢需要期間');
-          branch ? await client.query('DELETE FROM business_query WHERE period=$1 AND branch=$2',[period,branch])
-                 : await client.query('DELETE FROM business_query WHERE period=$1',[period]);
-          rowCount = await batchInsert(client,'business_query',
-            ['period','branch','work_order','open_time','settle_date','plate_no','vin','status','repair_item',
-             'service_advisor','assigned_tech','repair_tech','repair_type','car_series','car_model',
-             'model_year','owner','is_ev','mileage_in','mileage_out'],
-            parseBusinessQuery(rawRows,branch,period));
-        } else if (fileType === 'parts_catalog') {
-          rowCount = await upsertPartsCatalog(client, parsePartsCatalog(rawRows));
-        }
-        await client.query(
-          `INSERT INTO upload_history (file_name,file_type,branch,period,row_count,status) VALUES ($1,$2,$3,$4,$5,'success')`,
-          [filename,fileType,branch,period,rowCount]);
-        await client.query('COMMIT');
-        results.push({ filename, status:'success', fileType, branch, period, rowCount });
-      } catch (err) {
-        await client.query('ROLLBACK'); throw err;
-      } finally { client.release(); }
-    } catch (err) {
-      results.push({ filename, status:'error', error:err.message });
-      try { await pool.query(`INSERT INTO upload_history (file_name,file_type,status,error_msg) VALUES ($1,'unknown','error',$2)`,[filename,err.message]); } catch(e) {}
-    }
-  }
-  res.json({ results });
-});
-
-// ============================================================
-// SA 銷售設定 API
-// ============================================================
-app.get('/api/sa-config', async (req, res) => {
-  try { res.json((await pool.query(`SELECT id,config_name,description,filters,stat_method,created_at,updated_at FROM sa_sales_config ORDER BY id`)).rows); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-app.post('/api/sa-config', async (req, res) => {
-  const { config_name, description, filters, stat_method } = req.body;
-  if (!config_name) return res.status(400).json({ error:'名稱為必填' });
-  if (!Array.isArray(filters)||!filters.length) return res.status(400).json({ error:'至少需要一個篩選條件' });
-  const method = ['amount','quantity','count'].includes(stat_method) ? stat_method : 'amount';
-  try { res.json((await pool.query(`INSERT INTO sa_sales_config (config_name,description,filters,stat_method) VALUES ($1,$2,$3,$4) RETURNING *`,[config_name.trim(),description||'',JSON.stringify(filters),method])).rows[0]); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-app.put('/api/sa-config/:id', async (req, res) => {
-  const { config_name, description, filters, stat_method } = req.body;
-  if (!config_name) return res.status(400).json({ error:'名稱為必填' });
-  if (!Array.isArray(filters)||!filters.length) return res.status(400).json({ error:'至少需要一個篩選條件' });
-  const method = ['amount','quantity','count'].includes(stat_method) ? stat_method : 'amount';
-  try {
-    const r = await pool.query(`UPDATE sa_sales_config SET config_name=$1,description=$2,filters=$3,stat_method=$4,updated_at=NOW() WHERE id=$5 RETURNING *`,[config_name.trim(),description||'',JSON.stringify(filters),method,req.params.id]);
-    if (!r.rows.length) return res.status(404).json({ error:'找不到設定' });
-    res.json(r.rows[0]);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-app.delete('/api/sa-config/:id', async (req, res) => {
-  try { await pool.query(`DELETE FROM sa_sales_config WHERE id=$1`,[req.params.id]); res.json({ ok:true }); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-app.get('/api/sa-config/parts-lookup', async (req, res) => {
-  const { type, q } = req.query;
-  if (!['category_code','function_code','part_number'].includes(type)) return res.status(400).json({ error:'無效的 type' });
-  try {
-    const search = `%${(q||'').trim()}%`;
-    let sql, params;
-    if (type === 'part_number') {
-      sql = `SELECT part_number AS value, part_name AS label, category_code, function_code FROM parts_catalog WHERE part_number ILIKE $1 OR part_name ILIKE $1 ORDER BY part_number LIMIT 30`;
-      params = [search];
-    } else {
-      sql = `SELECT ${type} AS value, COUNT(*) AS part_count, STRING_AGG(DISTINCT part_name,'、' ORDER BY part_name) FILTER (WHERE part_name!='') AS sample_names FROM parts_catalog WHERE ${type} ILIKE $1 AND ${type}!='' GROUP BY ${type} ORDER BY part_count DESC LIMIT 30`;
-      params = [search];
-    }
-    res.json((await pool.query(sql, params)).rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ============================================================
-// 收入設定 API
-// ============================================================
-app.get('/api/income-config', async (req, res) => {
-  try {
-    const r = await pool.query(`SELECT config_key, config_value, description FROM income_config ORDER BY id`);
-    const map = {}; r.rows.forEach(row => { map[row.config_key] = row.config_value; });
-    res.json({ rows: r.rows, map });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-app.put('/api/income-config/:key', async (req, res) => {
-  const { value } = req.body;
-  if (!value) return res.status(400).json({ error:'值為必填' });
-  try { await pool.query(`UPDATE income_config SET config_value=$1,updated_at=NOW() WHERE config_key=$2`,[value.trim(),req.params.key]); res.json({ ok:true }); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ============================================================
-// 工作天數設定 API
-// ============================================================
-app.get('/api/working-days', async (req, res) => {
-  const { branch, period } = req.query;
-  try {
-    if (branch && period) {
-      const r = await pool.query(
-        `SELECT branch, period, work_dates, note, updated_at FROM working_days_config WHERE branch=$1 AND period=$2`,
-        [branch, period]
-      );
-      res.json(r.rows[0] || { branch, period, work_dates: [], note: '' });
-    } else {
-      const r = await pool.query(
-        `SELECT branch, period, work_dates, note, updated_at FROM working_days_config ORDER BY period DESC, branch`
-      );
-      res.json(r.rows);
-    }
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-app.put('/api/working-days', async (req, res) => {
-  const { branch, period, work_dates, note } = req.body;
-  if (!branch || !period) return res.status(400).json({ error: 'branch 和 period 為必填' });
-  if (!Array.isArray(work_dates)) return res.status(400).json({ error: 'work_dates 必須為陣列' });
-  try {
-    await pool.query(
-      `INSERT INTO working_days_config (branch, period, work_dates, note, updated_at)
-       VALUES ($1,$2,$3,$4,NOW())
-       ON CONFLICT (branch, period) DO UPDATE SET work_dates=$3, note=$4, updated_at=NOW()`,
-      [branch, period, JSON.stringify(work_dates), note || '']
-    );
-    res.json({ ok: true, count: work_dates.length });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-app.delete('/api/working-days', async (req, res) => {
-  const { branch, period } = req.query;
-  if (!branch || !period) return res.status(400).json({ error: 'branch 和 period 為必填' });
-  try {
-    await pool.query(`DELETE FROM working_days_config WHERE branch=$1 AND period=$2`, [branch, period]);
-    res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ============================================================
-// 查詢 API
-// ============================================================
-app.get('/api/counts', async (req, res) => {
-  try {
-    const r = await pool.query(`
-      SELECT 'repair_income' AS 表格,COUNT(*) AS 筆數 FROM repair_income UNION ALL
-      SELECT 'tech_performance',COUNT(*) FROM tech_performance UNION ALL
-      SELECT 'parts_sales',COUNT(*) FROM parts_sales UNION ALL
-      SELECT 'business_query',COUNT(*) FROM business_query UNION ALL
-      SELECT 'parts_catalog',COUNT(*) FROM parts_catalog UNION ALL
-      SELECT 'upload_history',COUNT(*) FROM upload_history`);
-    res.json(r.rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-app.get('/api/history', async (req, res) => {
-  try { res.json((await pool.query('SELECT * FROM upload_history ORDER BY created_at DESC LIMIT 20')).rows); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-app.get('/api/health', async (req, res) => {
-  try { await pool.query('SELECT 1'); res.json({ status:'ok', db:'connected' }); }
-  catch (err) { res.status(500).json({ status:'error', error:err.message }); }
-});
-
-// ============================================================
-// 統計 API — 維修收入
-// ============================================================
-app.get('/api/stats/repair', async (req, res) => {
-  try {
-    const { period, branch } = req.query;
-    const conds = []; const params = []; let idx = 1;
-    if (period) { conds.push(`period=$${idx++}`); params.push(period); }
-    if (branch) { conds.push(`branch=$${idx++}`); params.push(branch); }
-    const where = conds.length ? 'WHERE '+conds.join(' AND ') : '';
-    const [summary, bySA, totals] = await Promise.all([
-      pool.query(`SELECT branch,account_type,COUNT(*) AS work_order_count,SUM(total_untaxed) AS total_untaxed,SUM(parts_income) AS parts_income,SUM(accessories_income) AS accessories_income,SUM(boutique_income) AS boutique_income,SUM(engine_wage) AS engine_wage,SUM(bodywork_income+paint_income) AS bodywork_income,SUM(parts_cost) AS parts_cost FROM repair_income ${where} GROUP BY branch,account_type ORDER BY branch,total_untaxed DESC`,params),
-      pool.query(`SELECT branch,service_advisor,COUNT(DISTINCT work_order) AS car_count,SUM(total_untaxed) AS total_untaxed,SUM(engine_wage) AS engine_wage,SUM(parts_income) AS parts_income FROM repair_income ${where} GROUP BY branch,service_advisor HAVING service_advisor IS NOT NULL AND service_advisor!='' ORDER BY total_untaxed DESC`,params),
-      pool.query(`SELECT branch,COUNT(DISTINCT work_order) AS car_count,SUM(total_untaxed) AS total_untaxed,SUM(engine_wage) AS engine_wage,SUM(parts_income) AS parts_income,SUM(accessories_income) AS accessories_income,SUM(boutique_income) AS boutique_income,SUM(bodywork_income+paint_income) AS bodywork_income,SUM(parts_cost) AS parts_cost FROM repair_income ${where} GROUP BY branch ORDER BY branch`,params),
-    ]);
-    res.json({ summary:summary.rows, bySA:bySA.rows, totals:totals.rows });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ============================================================
-// 統計 API — 收入分類明細
-// ============================================================
-app.get('/api/stats/income-summary', async (req, res) => {
-  try {
-    const { period, branch } = req.query;
-    const conds = []; const params = []; let idx = 1;
-    if (period) { conds.push(`period=$${idx++}`); params.push(period); }
-    if (branch) { conds.push(`branch=$${idx++}`); params.push(branch); }
-    const where = conds.length ? 'WHERE '+conds.join(' AND ') : '';
-
-    const cfgRow = await pool.query(`SELECT config_value FROM income_config WHERE config_key='external_sales_category'`);
-    const externalCategory = cfgRow.rows[0]?.config_value || '外賣';
-
-    const byType = await pool.query(`
-      SELECT branch, account_type,
-        COUNT(DISTINCT work_order)              AS car_count,
-        SUM(total_untaxed)                      AS total_untaxed,
-        ROUND(SUM(engine_wage)/1.05)            AS engine_wage_nt,
-        ROUND(SUM(parts_income)/1.05)           AS parts_income_nt,
-        ROUND(SUM(accessories_income)/1.05)     AS accessories_income_nt,
-        ROUND(SUM(boutique_income)/1.05)        AS boutique_income_nt,
-        ROUND(SUM(bodywork_income)/1.05)        AS bodywork_income_nt,
-        ROUND(SUM(paint_income)/1.05)           AS paint_income_nt,
-        ROUND(SUM(carwash_income)/1.05)         AS carwash_income_nt,
-        ROUND(SUM(outsource_income)/1.05)       AS outsource_income_nt,
-        ROUND(SUM(addon_income)/1.05)           AS addon_income_nt,
-        SUM(parts_cost)                         AS parts_cost_nt
-      FROM repair_income ${where}
-      GROUP BY branch, account_type
-      ORDER BY branch,
-        CASE WHEN account_type ILIKE '%一般%' THEN 1 WHEN account_type ILIKE '%保險%' THEN 2
-             WHEN account_type ILIKE '%延保%' THEN 3 WHEN account_type ILIKE '%票%'   THEN 4
-             WHEN account_type ILIKE '%內結%' THEN 5 WHEN account_type ILIKE '%保固%' THEN 6
-             WHEN account_type ILIKE '%VSA%' OR account_type ILIKE '%vsa%' THEN 7
-             WHEN account_type ILIKE '%善意%' THEN 8 ELSE 9 END,
-        total_untaxed DESC
-    `, params);
-
-    const extConds = []; const extParams = []; let eidx = 1;
-    if (period) { extConds.push(`period=$${eidx++}`); extParams.push(period); }
-    if (branch) { extConds.push(`branch=$${eidx++}`); extParams.push(branch); }
-    extConds.push(`category=$${eidx++}`); extParams.push(externalCategory);
-
-    const externalSales = await pool.query(`
-      SELECT branch, COUNT(DISTINCT order_no) AS order_count,
-        SUM(sale_qty) AS total_qty, SUM(sale_price_untaxed) AS total_sales, SUM(cost_untaxed) AS total_cost
-      FROM parts_sales WHERE ${extConds.join(' AND ')}
-      GROUP BY branch ORDER BY branch
-    `, extParams);
-
-    const techConds = []; const techParams = []; let tidx = 1;
-    if (period) { techConds.push(`period=$${tidx++}`); techParams.push(period); }
-    if (branch) { techConds.push(`branch=$${tidx++}`); techParams.push(branch); }
-    const techWhere = techConds.length ? 'WHERE '+techConds.join(' AND ') : '';
-
-    const techByType = await pool.query(`
-      SELECT branch, account_type, COUNT(DISTINCT work_order) AS car_count,
-        SUM(wage) AS total_wage, SUM(standard_hours) AS total_hours
-      FROM tech_performance ${techWhere}
-      GROUP BY branch, account_type
-    `, techParams);
-
-    res.json({ byType:byType.rows, externalSales:externalSales.rows, techByType:techByType.rows, externalCategory });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ============================================================
-// 統計 API — 技師工資 / 零件銷售 / 月份趨勢
-// ============================================================
-app.get('/api/stats/tech', async (req, res) => {
-  try {
-    const { period, branch } = req.query;
-    const conds = []; const params = []; let idx = 1;
-    if (period) { conds.push(`period=$${idx++}`); params.push(period); }
-    if (branch) { conds.push(`branch=$${idx++}`); params.push(branch); }
-    const where = conds.length ? 'WHERE '+conds.join(' AND ') : '';
-    const r = await pool.query(`
-      SELECT branch,tech_name_clean,COUNT(DISTINCT work_order) AS car_count,
-        SUM(standard_hours) AS total_hours,SUM(wage) AS total_wage,
-        SUM(CASE WHEN wage_category ILIKE '%美容%' THEN wage ELSE 0 END) AS beauty_wage,
-        SUM(CASE WHEN wage_category NOT ILIKE '%美容%' THEN wage ELSE 0 END) AS net_wage
-      FROM tech_performance ${where} GROUP BY branch,tech_name_clean ORDER BY total_wage DESC
-    `, params);
-    res.json({ ranking: r.rows });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.get('/api/stats/parts', async (req, res) => {
-  try {
-    const { period, branch } = req.query;
-    const conds = []; const params = []; let idx = 1;
-    if (period) { conds.push(`period=$${idx++}`); params.push(period); }
-    if (branch) { conds.push(`branch=$${idx++}`); params.push(branch); }
-    const where = conds.length ? 'WHERE '+conds.join(' AND ') : '';
-    const [byType, topParts] = await Promise.all([
-      pool.query(`SELECT branch,part_type,COUNT(*) AS count,SUM(sale_qty) AS total_qty,SUM(sale_price_untaxed) AS total_sales,SUM(cost_untaxed) AS total_cost FROM parts_sales ${where} GROUP BY branch,part_type ORDER BY branch,total_sales DESC`,params),
-      pool.query(`SELECT part_number,part_name,part_type,SUM(sale_qty) AS total_qty,SUM(sale_price_untaxed) AS total_sales FROM parts_sales ${where} GROUP BY part_number,part_name,part_type ORDER BY total_sales DESC LIMIT 20`,params),
-    ]);
-    res.json({ byType:byType.rows, topParts:topParts.rows });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.get('/api/stats/trend', async (req, res) => {
-  try {
-    const { branch } = req.query;
-    const params = branch ? [branch] : [];
-    const bc = branch ? 'AND branch=$1' : '';
-    const r = await pool.query(`SELECT period,branch,COUNT(DISTINCT work_order) AS car_count,SUM(total_untaxed) AS total_untaxed,SUM(engine_wage) AS engine_wage,SUM(parts_income) AS parts_income FROM repair_income WHERE 1=1 ${bc} GROUP BY period,branch ORDER BY period,branch`,params);
-    res.json({ trend: r.rows });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ============================================================
-// 統計 API — 每日進廠台數
-// ============================================================
-app.get('/api/stats/daily', async (req, res) => {
-  try {
-    const { period, branch } = req.query;
-    const colRows = await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_name='business_query'`);
-    const cols = colRows.rows.map(r => r.column_name);
-    const dateCol   = cols.find(c => ['open_time','進廠時間','開單時間','開立時間','接車時間'].includes(c)) || 'open_time';
-    const typeCol   = cols.find(c => ['repair_type','維修類型'].includes(c));
-    const branchCol = cols.find(c => ['branch','據點','分店'].includes(c)) || 'branch';
-    const periodCol = cols.find(c => ['period','期間'].includes(c)) || 'period';
-
-    const conditions = [`"${dateCol}" IS NOT NULL`];
-    if (typeCol) conditions.push(`"${typeCol}" NOT ILIKE '%PDI%'`);
-    const params = []; let idx = 1;
-    if (period) { conditions.push(`"${periodCol}"=$${idx++}`); params.push(period); }
-    if (branch) { conditions.push(`"${branchCol}"=$${idx++}`); params.push(branch); }
-    const where = 'WHERE '+conditions.join(' AND ');
-
-    const [daily, autoSummary] = await Promise.all([
-      pool.query(`SELECT "${dateCol}"::date AS arrive_date,"${branchCol}" AS branch,COUNT(*) AS car_count FROM business_query ${where} GROUP BY "${dateCol}"::date,"${branchCol}" ORDER BY arrive_date,"${branchCol}"`,params),
-      pool.query(`SELECT "${branchCol}" AS branch,SUM(daily_cnt) AS total_cars,COUNT(DISTINCT "${dateCol}"::date) AS auto_working_days,MAX(daily_cnt) AS max_day,MIN(daily_cnt) AS min_day FROM (SELECT "${branchCol}","${dateCol}"::date,COUNT(*) AS daily_cnt FROM business_query ${where} GROUP BY "${branchCol}","${dateCol}"::date) sub GROUP BY "${branchCol}" ORDER BY "${branchCol}"`,params),
-    ]);
-
-    const wdMap = {};
-    if (period) {
-      for (const row of autoSummary.rows) {
-        const wdRow = await pool.query(
-          `SELECT work_dates FROM working_days_config WHERE branch=$1 AND period=$2`,
-          [row.branch, period]
-        );
-        if (wdRow.rows.length && wdRow.rows[0].work_dates) {
-          wdMap[row.branch] = wdRow.rows[0].work_dates;
-        }
-      }
-    }
-
-    const summary = autoSummary.rows.map(r => {
-      const configured = wdMap[r.branch] || null;
-      const configuredDays = configured ? configured.length : null;
-      const workingDays    = configuredDays !== null ? configuredDays : parseInt(r.auto_working_days || 0);
-      const totalCars      = parseInt(r.total_cars || 0);
-      return {
-        branch: r.branch,
-        total_cars: totalCars,
-        working_days: workingDays,
-        auto_working_days: parseInt(r.auto_working_days || 0),
-        configured_working_days: configuredDays,
-        daily_avg: workingDays > 0 ? (totalCars / workingDays).toFixed(1) : '0',
-        max_day: r.max_day,
-        min_day: r.min_day,
-      };
-    });
-
-    res.json({ daily: daily.rows, summary });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.get('/api/debug/columns', async (req, res) => {
-  try { res.json((await pool.query(`SELECT column_name,data_type FROM information_schema.columns WHERE table_name='business_query' ORDER BY ordinal_position`)).rows); }
-  catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.get('/api/periods', async (req, res) => {
-  try {
-    const r = await pool.query(`SELECT DISTINCT period FROM repair_income UNION SELECT DISTINCT period FROM tech_performance UNION SELECT DISTINCT period FROM parts_sales ORDER BY period DESC`);
-    res.json(r.rows.map(r => r.period));
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ============================================================
-// SA 銷售矩陣 API
-// ============================================================
-app.get('/api/stats/sa-sales-matrix', async (req, res) => {
-  const { period, branch } = req.query;
-  try {
-    const configs = (await pool.query(`SELECT id,config_name,filters,stat_method FROM sa_sales_config ORDER BY id`)).rows;
-    if (!configs.length) return res.json({ configs:[], rows:[], colTotals:{} });
-    const saMap = {};
-    for (const cfg of configs) {
-      const filters = cfg.filters||[];
-      const catCodes = filters.filter(f=>f.type==='category_code').map(f=>f.value);
-      const funcCodes = filters.filter(f=>f.type==='function_code').map(f=>f.value);
-      const partNums = filters.filter(f=>f.type==='part_number').map(f=>f.value);
-      const partTypes = filters.filter(f=>f.type==='part_type').map(f=>f.value);
-      if (!catCodes.length&&!funcCodes.length&&!partNums.length&&!partTypes.length) continue;
-      const conds=[]; const params=[]; let idx=1;
-      if (period) { conds.push(`period=$${idx++}`); params.push(period); }
-      if (branch) { conds.push(`branch=$${idx++}`); params.push(branch); }
-      if (catCodes.length)  { conds.push(`category_code=ANY($${idx++})`); params.push(catCodes); }
-      if (funcCodes.length) { conds.push(`function_code=ANY($${idx++})`);  params.push(funcCodes); }
-      if (partNums.length)  { conds.push(`part_number=ANY($${idx++})`);    params.push(partNums); }
-      if (partTypes.length) { conds.push(`part_type=ANY($${idx++})`);      params.push(partTypes); }
-      const where = conds.length ? 'WHERE '+conds.join(' AND ') : '';
-      const r = await pool.query(`SELECT branch,COALESCE(NULLIF(sales_person,''),'（未知）') AS sa_name,SUM(sale_qty) AS qty,SUM(sale_price_untaxed) AS sales,COUNT(*) AS cnt FROM parts_sales ${where} GROUP BY branch,sa_name`,params);
-      for (const row of r.rows) {
-        const key = `${row.branch}|||${row.sa_name}`;
-        if (!saMap[key]) saMap[key] = { branch:row.branch, sa_name:row.sa_name, configs:{} };
-        saMap[key].configs[cfg.id] = { qty:parseFloat(row.qty||0), sales:parseFloat(row.sales||0), cnt:parseInt(row.cnt||0) };
-      }
-    }
-    const rows = Object.values(saMap).sort((a,b) => {
-      if (a.branch!==b.branch) return a.branch<b.branch?-1:1;
-      return Object.values(b.configs).reduce((s,c)=>s+c.sales,0) - Object.values(a.configs).reduce((s,c)=>s+c.sales,0);
-    });
-    const colTotals = {};
-    for (const cfg of configs) {
-      colTotals[cfg.id] = rows.reduce((s,row) => { const c=row.configs[cfg.id]||{qty:0,sales:0,cnt:0}; return {qty:s.qty+c.qty,sales:s.sales+c.sales,cnt:s.cnt+c.cnt}; },{qty:0,sales:0,cnt:0});
-    }
-    res.json({ configs, rows, colTotals });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ============================================================
-// 精品 & 配件銷售分析 API
-// ============================================================
-app.get('/api/stats/boutique-accessories', async (req, res) => {
-  try {
-    const { period, branch } = req.query;
-    const params = []; let idx = 1;
-    const conds = [`pc.part_type IN ('精品','配件')`];
-    if (period) { conds.push(`ps.period=$${idx++}`); params.push(period); }
-    if (branch) { conds.push(`ps.branch=$${idx++}`); params.push(branch); }
-    const where = conds.join(' AND ');
-
-    const r = await pool.query(`
-      SELECT
-        ps.branch,
-        COALESCE(NULLIF(ps.sales_person,''), '（未知）')  AS sales_person,
-        pc.part_type                                       AS part_type,
-        COALESCE(NULLIF(ps.part_type,''), '（未分類）')   AS account_type,
-        SUM(ps.sale_price_untaxed)  AS total_sales,
-        SUM(ps.cost_untaxed)        AS total_cost,
-        SUM(ps.sale_qty)            AS total_qty,
-        COUNT(*)                    AS cnt
-      FROM parts_sales ps
-      INNER JOIN parts_catalog pc ON ps.part_number = pc.part_number
-      WHERE ${where}
-      GROUP BY ps.branch, ps.sales_person, pc.part_type, ps.part_type
-      ORDER BY ps.branch, pc.part_type, SUM(ps.sale_price_untaxed) DESC
-    `, params);
-
-    const kpi = await pool.query(`
-      SELECT
-        ps.branch,
-        pc.part_type                AS part_type,
-        SUM(ps.sale_price_untaxed)  AS total_sales,
-        SUM(ps.cost_untaxed)        AS total_cost,
-        SUM(ps.sale_qty)            AS total_qty,
-        COUNT(DISTINCT ps.order_no) AS order_count
-      FROM parts_sales ps
-      INNER JOIN parts_catalog pc ON ps.part_number = pc.part_number
-      WHERE ${where}
-      GROUP BY ps.branch, pc.part_type
-      ORDER BY ps.branch, pc.part_type
-    `, params);
-
-    res.json({ rows: r.rows, kpi: kpi.rows });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ============================================================
-// 業績指標 API (CRUD)
-// ============================================================
-app.get('/api/performance-metrics', async (req, res) => {
-  try {
-    res.json((await pool.query(`SELECT * FROM performance_metrics ORDER BY sort_order, id`)).rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.post('/api/performance-metrics', async (req, res) => {
-  const { metric_name, description, metric_type, filters, stat_field, unit, sort_order } = req.body;
-  if (!metric_name) return res.status(400).json({ error: '名稱為必填' });
-  try {
-    const r = await pool.query(
-      `INSERT INTO performance_metrics (metric_name,description,metric_type,filters,stat_field,unit,sort_order)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [metric_name.trim(), description||'', metric_type||'repair_income',
-       JSON.stringify(filters||[]), stat_field||'amount', unit||'', sort_order||0]
-    );
-    res.json(r.rows[0]);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.put('/api/performance-metrics/:id', async (req, res) => {
-  const { metric_name, description, metric_type, filters, stat_field, unit, sort_order } = req.body;
-  if (!metric_name) return res.status(400).json({ error: '名稱為必填' });
-  try {
-    const r = await pool.query(
-      `UPDATE performance_metrics SET metric_name=$1,description=$2,metric_type=$3,
-       filters=$4,stat_field=$5,unit=$6,sort_order=$7 WHERE id=$8 RETURNING *`,
-      [metric_name.trim(), description||'', metric_type||'repair_income',
-       JSON.stringify(filters||[]), stat_field||'amount', unit||'', sort_order||0, req.params.id]
-    );
-    if (!r.rows.length) return res.status(404).json({ error: '找不到指標' });
-    res.json(r.rows[0]);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.delete('/api/performance-metrics/:id', async (req, res) => {
-  try {
-    await pool.query(`DELETE FROM performance_targets WHERE metric_id=$1`, [req.params.id]);
-    await pool.query(`DELETE FROM performance_metrics WHERE id=$1`, [req.params.id]);
-    res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ============================================================
-// 業績目標 API
-// ============================================================
-app.get('/api/performance-targets', async (req, res) => {
-  const { metric_id, period } = req.query;
-  try {
-    const conds = []; const params = []; let idx = 1;
-    if (metric_id) { conds.push(`metric_id=$${idx++}`); params.push(metric_id); }
-    if (period)    { conds.push(`period=$${idx++}`);    params.push(period); }
-    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
-    res.json((await pool.query(`SELECT * FROM performance_targets ${where} ORDER BY branch`, params)).rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.put('/api/performance-targets/batch', async (req, res) => {
-  const { metric_id, period, entries } = req.body;
-  if (!metric_id || !period || !Array.isArray(entries)) return res.status(400).json({ error: '參數不完整' });
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    for (const e of entries) {
-      await client.query(
-        `INSERT INTO performance_targets (metric_id,branch,period,target_value,last_year_value,note,updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,NOW())
-         ON CONFLICT (metric_id,branch,period) DO UPDATE SET
-           target_value=$4, last_year_value=$5, note=$6, updated_at=NOW()`,
-        [metric_id, e.branch, period, e.target_value||null, e.last_year_value||null, e.note||'']
-      );
-    }
-    await client.query('COMMIT');
-    res.json({ ok: true });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
-  } finally { client.release(); }
-});
-
-// ============================================================
-// 收入明細分解 API
-// ============================================================
-app.get('/api/stats/income-breakdown', async (req, res) => {
-  const { period, branch } = req.query;
-  if (!period) return res.status(400).json({ error: 'period 為必填' });
-  try {
-    const params = [period]; let idx = 2;
-    const branchCond = branch ? ` AND branch=$${idx++}` : '';
-    if (branch) params.push(branch);
-
-    // ── 維修收入：各帳類 + 鈑烤判斷 ──
-    const riRes = await pool.query(`
-      SELECT
-        branch,
-        account_type,
-        SUM(total_untaxed)  AS total,
-        SUM(CASE WHEN COALESCE(bodywork_income,0) > 0 OR COALESCE(paint_income,0) > 0
-                 THEN total_untaxed ELSE 0 END) AS with_bodywork,
-        SUM(CASE WHEN COALESCE(bodywork_income,0) = 0 AND COALESCE(paint_income,0) = 0
-                 THEN total_untaxed ELSE 0 END) AS without_bodywork
-      FROM repair_income
-      WHERE period=$1${branchCond}
-      GROUP BY branch, account_type
-    `, params);
-
-    // ── 外賣收入（零件銷售） ──
-    const cfgRow = await pool.query(`SELECT config_value FROM income_config WHERE config_key='external_sales_category'`);
-    const externalCategory = cfgRow.rows[0]?.config_value || '外賣';
-    const extParams = [period, externalCategory]; let eidx = 3;
-    const extBranchCond = branch ? ` AND branch=$${eidx++}` : '';
-    if (branch) extParams.push(branch);
-    const extRes = await pool.query(`
-      SELECT branch, SUM(sale_price_untaxed) AS ext_sales
-      FROM parts_sales
-      WHERE period=$1 AND category=$2${extBranchCond}
-      GROUP BY branch
-    `, extParams);
-    const extMap = {};
-    extRes.rows.forEach(r => { extMap[r.branch] = parseFloat(r.ext_sales || 0); });
-
-    // ── 彙整各據點 ──
-    const BRANCHES = branch ? [branch] : ['AMA','AMC','AMD'];
-    const result = {};
-
-    BRANCHES.forEach(br => {
-      const rows = riRes.rows.filter(r => r.branch === br);
-      const byType = {};
-      rows.forEach(r => { byType[r.account_type] = r; });
-
-      // 輔助：找帳類（模糊比對）
-      const findType = (kw) => rows.find(r => r.account_type?.includes(kw));
-      const sumType  = (kw) => parseFloat(findType(kw)?.total || 0);
-
-      const ins     = findType('保險');
-      const gen     = findType('一般');
-      const ext_row = findType('延保');
-      const vou     = findType('票');
-
-      const bodywork_insurance = parseFloat(ins?.total || 0);        // 保險帳類全部視為鈑烤
-      const bodywork_self      = parseFloat(gen?.with_bodywork || 0); // 一般帳類中含鈑金/烤漆的工單
-      const bodywork_total     = bodywork_insurance + bodywork_self;
-
-      const extended           = parseFloat(ext_row?.total || 0);
-      const general_no_bw      = parseFloat(gen?.without_bodywork || 0); // 一般去掉鈑烤工單
-      const voucher            = parseFloat(vou?.total || 0);
-      const external           = extMap[br] || 0;
-
-      // 一般營收 = 一般(非鈑烤) + 票劵 + 外賣
-      const general_total = general_no_bw + voucher + external;
-
-      // 有費營收 = 一般營收 + 保險鈑烤 + 延保
-      const paid_total = general_total + bodywork_insurance + extended;
-
-      // 其他帳類（內結/保固/VSA/善意）
-      const OTHER_KWS = ['內結','保固','VSA','vsa','善意'];
-      const other_rows = rows.filter(r => OTHER_KWS.some(k => r.account_type?.toLowerCase().includes(k.toLowerCase())));
-      const other_total = other_rows.reduce((s, r) => s + parseFloat(r.total || 0), 0);
-
-      // 全部營收 = paid_total + 其他帳類（外賣已含在 general_total）
-      const all_total = paid_total + other_total;
-
-      result[br] = {
-        bodywork_self,
-        bodywork_insurance,
-        bodywork_total,
-        extended,
-        general_no_bw,
-        voucher,
-        external,
-        general_total,
-        paid_total,
-        other_total,
-        all_total,
-        // 細節（其他帳類明細）
-        other_detail: other_rows.map(r => ({ account_type: r.account_type, total: parseFloat(r.total || 0) })),
-      };
-    });
-
-    res.json({ branches: result, externalCategory });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ============================================================
-// 業績統計 API
-// ============================================================
-app.get('/api/stats/performance', async (req, res) => {
-  const { period, branch } = req.query;
-  if (!period) return res.status(400).json({ error: 'period 為必填' });
-  try {
-    const metrics = (await pool.query(`SELECT * FROM performance_metrics ORDER BY sort_order, id`)).rows;
-    if (!metrics.length) return res.json({ metrics: [], results: [] });
-
-    const BRANCHES = branch ? [branch] : ['AMA','AMC','AMD'];
-    const tRes = await pool.query(
-      `SELECT * FROM performance_targets WHERE period=$1${branch ? ' AND branch=$2' : ''}`,
-      branch ? [period, branch] : [period]
-    );
-    const tMap = {};
-    tRes.rows.forEach(t => { tMap[`${t.metric_id}|||${t.branch}`] = t; });
-
-    const results = [];
-    for (const metric of metrics) {
-      const filters = metric.filters || [];
-      const mr = { metric_id: metric.id, branches: {} };
-
-      for (const br of BRANCHES) {
-        let actual = 0;
-        try {
-          if (metric.metric_type === 'repair_income') {
-            // 維修收入：sum(total_untaxed)，可篩帳類
-            const acTypes = filters.filter(f => f.type === 'account_type').map(f => f.value);
-            const q = acTypes.length
-              ? `SELECT COALESCE(SUM(total_untaxed),0) as v FROM repair_income WHERE period=$1 AND branch=$2 AND account_type=ANY($3)`
-              : `SELECT COALESCE(SUM(total_untaxed),0) as v FROM repair_income WHERE period=$1 AND branch=$2`;
-            actual = parseFloat((await pool.query(q, acTypes.length ? [period, br, acTypes] : [period, br])).rows[0]?.v || 0);
-
-          } else if (metric.metric_type === 'parts') {
-            // 零件銷售：依篩選條件
-            const cc = filters.filter(f=>f.type==='category_code').map(f=>f.value);
-            const fc = filters.filter(f=>f.type==='function_code').map(f=>f.value);
-            const pn = filters.filter(f=>f.type==='part_number').map(f=>f.value);
-            const pt = filters.filter(f=>f.type==='part_type').map(f=>f.value);
-            const c = [`period=$1`,`branch=$2`]; const p = [period, br]; let i = 3;
-            if (cc.length) { c.push(`category_code=ANY($${i++})`); p.push(cc); }
-            if (fc.length) { c.push(`function_code=ANY($${i++})`); p.push(fc); }
-            if (pn.length) { c.push(`part_number=ANY($${i++})`);   p.push(pn); }
-            if (pt.length) { c.push(`part_type=ANY($${i++})`);     p.push(pt); }
-            const fld = metric.stat_field === 'qty'   ? 'SUM(sale_qty)'
-                      : metric.stat_field === 'count' ? 'COUNT(*)'
-                      : 'SUM(sale_price_untaxed)';
-            actual = parseFloat((await pool.query(
-              `SELECT COALESCE(${fld},0) as v FROM parts_sales WHERE ${c.join(' AND ')}`, p
-            )).rows[0]?.v || 0);
-
-          } else if (metric.metric_type === 'boutique') {
-            // 精品/配件：JOIN parts_catalog，可篩品項類型及帳類
-            const bt = filters.filter(f=>f.type==='boutique_type').map(f=>f.value);
-            const ac = filters.filter(f=>f.type==='account_type').map(f=>f.value);
-            const c = [`ps.period=$1`,`ps.branch=$2`]; const p = [period, br]; let i = 3;
-            if (bt.length) { c.push(`pc.part_type=ANY($${i++})`); p.push(bt); }
-            else            { c.push(`pc.part_type IN ('精品','配件')`); }
-            if (ac.length) { c.push(`ps.part_type=ANY($${i++})`); p.push(ac); }
-            actual = parseFloat((await pool.query(
-              `SELECT COALESCE(SUM(ps.sale_price_untaxed),0) as v
-               FROM parts_sales ps JOIN parts_catalog pc ON ps.part_number=pc.part_number
-               WHERE ${c.join(' AND ')}`, p
-            )).rows[0]?.v || 0);
-
-          } else if (metric.metric_type === 'repair_subfield') {
-            // 維修收入子欄位，三種模式：
-            //   sum      : SUM(col1+col2+...) — 直接加總子欄位數值
-            //   wo_has   : 找出 col1>0 OR col2>0 的工單，SUM(total_untaxed) — 自費鈑烤
-            //   wo_exclude: 找出 col1=0 AND col2=0 的工單，SUM(total_untaxed) — 一般扣鈑烤
-            const VALID_COLS = new Set([
-              'bodywork_income','paint_income','engine_wage','parts_income',
-              'accessories_income','boutique_income','carwash_income',
-              'outsource_income','addon_income','total_untaxed','parts_cost'
-            ]);
-            const acTypes  = filters.filter(f => f.type === 'account_type').map(f => f.value);
-            const subfields = filters.filter(f => f.type === 'subfield' && VALID_COLS.has(f.value)).map(f => f.value);
-            const woMode   = filters.find(f => f.type === 'wo_mode')?.value || 'sum';
-            if (!subfields.length) {
-              actual = 0;
-            } else {
-              const p = [period, br]; let i = 3;
-              let where = 'period=$1 AND branch=$2';
-              if (acTypes.length) { where += ` AND account_type=ANY($${i++})`; p.push(acTypes); }
-              let q;
-              if (woMode === 'wo_has') {
-                // 含鈑金/烤漆的工單 → 加總整張工單金額（自費鈑烤）
-                const hasCond = subfields.map(c => `COALESCE(${c},0) > 0`).join(' OR ');
-                q = `SELECT COALESCE(SUM(total_untaxed),0) as v FROM repair_income WHERE ${where} AND (${hasCond})`;
-              } else if (woMode === 'wo_exclude') {
-                // 不含鈑金/烤漆的工單 → 加總整張工單金額（一般收入扣鈑烤）
-                const excCond = subfields.map(c => `COALESCE(${c},0) = 0`).join(' AND ');
-                q = `SELECT COALESCE(SUM(total_untaxed),0) as v FROM repair_income WHERE ${where} AND (${excCond})`;
-              } else {
-                // 直接加總子欄位數值
-                const sumExpr = subfields.map(c => `COALESCE(${c},0)`).join(' + ');
-                q = `SELECT COALESCE(SUM(${sumExpr}),0) as v FROM repair_income WHERE ${where}`;
-              }
-              actual = parseFloat((await pool.query(q, p)).rows[0]?.v || 0);
-            }
-          }
-        } catch(e) { actual = 0; }
-
-        const t  = tMap[`${metric.id}|||${br}`] || {};
-        const tv = parseFloat(t.target_value    || 0);
-        const ly = parseFloat(t.last_year_value || 0);
-        mr.branches[br] = {
-          actual,
-          target:       tv || null,
-          last_year:    ly || null,
-          achieve_rate: tv > 0 ? (actual / tv * 100) : null,
-          yoy_growth:   ly > 0 ? ((actual - ly) / ly * 100) : null,
-        };
-      }
-      results.push(mr);
-    }
-    res.json({ metrics, results });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ============================================================
-// 密碼驗證 API
-// ============================================================
-const crypto = require('crypto');
-const SESSION_TOKENS = new Set();
-async function getSettingsPassword() {
-  const r = await pool.query("SELECT value FROM app_settings WHERE key='settings_password'");
-  return r.rows[0]?.value || 'admin1234';
+function switchTab(tab) {
+  currentTab = tab;
+  const tabs = ['repair','tech','parts','boutique','sa-sales','trend','daily','performance'];
+  document.querySelectorAll('.tab').forEach((t, i) => { t.classList.toggle('active', tabs[i] === tab); });
+  tabs.forEach(t => { document.getElementById(`tab-${t}`).style.display = t === tab ? '' : 'none'; });
 }
-app.post('/api/auth/settings', async (req, res) => {
-  const { password } = req.body;
-  if (!password) return res.status(400).json({ error:'請輸入密碼' });
-  if (password !== await getSettingsPassword()) return res.status(401).json({ error:'密碼錯誤' });
-  const token = crypto.randomBytes(24).toString('hex');
-  SESSION_TOKENS.add(token);
-  setTimeout(() => SESSION_TOKENS.delete(token), 8*60*60*1000);
-  res.json({ token });
-});
-app.get('/api/auth/settings/check', (req, res) => res.json({ valid: !!(req.query.token && SESSION_TOKENS.has(req.query.token)) }));
-app.put('/api/auth/settings/password', async (req, res) => {
-  const { token, currentPassword, newPassword } = req.body;
-  if (!token||!SESSION_TOKENS.has(token)) return res.status(401).json({ error:'未驗證，請重新登入' });
-  if (!newPassword||newPassword.length<4) return res.status(400).json({ error:'新密碼至少需要 4 個字元' });
-  if (currentPassword !== await getSettingsPassword()) return res.status(401).json({ error:'目前密碼不正確' });
-  await pool.query("UPDATE app_settings SET value=$1 WHERE key='settings_password'",[newPassword]);
-  SESSION_TOKENS.clear();
-  res.json({ ok:true });
-});
 
-// ============================================================
-// 啟動
-// ============================================================
-initDatabase()
-  .then(() => app.listen(PORT, () => console.log(`Server running on port ${PORT}`)))
-  .catch(err => { console.error('DB初始化失敗:', err.message); process.exit(1); });
+async function loadPeriods() {
+  try {
+    const periods = await (await fetch('/api/periods')).json();
+    const sel = document.getElementById('selPeriod');
+    periods.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p; opt.textContent = `${p.slice(0,4)}年${p.slice(4)}月`;
+      sel.appendChild(opt);
+    });
+    if (periods.length) sel.value = periods[0];
+  } catch(e) {}
+}
+
+async function loadAll() {
+  const period = document.getElementById('selPeriod').value;
+  const branch = document.getElementById('selBranch').value;
+  document.getElementById('lastUpdate').textContent = '更新中...';
+  await Promise.all([
+    loadRepair(period, branch),
+    loadIncomeSummary(period, branch),
+    loadTech(period, branch),
+    loadParts(period, branch),
+    loadBoutiqueAccessories(period, branch),
+    loadTrend(branch),
+    loadDaily(period, branch),
+    loadSASales(),
+    loadPerformance(period, branch),
+  ]);
+  document.getElementById('lastUpdate').textContent = `更新於 ${new Date().toLocaleTimeString('zh-TW')}`;
+}
+
+async function loadRepair(period, branch) {
+  try {
+    const params = new URLSearchParams(); if (period) params.set('period', period); if (branch) params.set('branch', branch);
+    const data = await (await fetch(`/api/stats/repair?${params}`)).json();
+    if (data.error) throw new Error(data.error);
+    const totals = data.totals;
+    const totalRevenue = totals.reduce((s,r) => s + n(r.total_untaxed), 0);
+    const totalCars    = totals.reduce((s,r) => s + parseInt(r.car_count||0), 0);
+    const totalEngine  = totals.reduce((s,r) => s + n(r.engine_wage), 0);
+    const totalParts   = totals.reduce((s,r) => s + n(r.parts_income), 0);
+    const totalCost    = totals.reduce((s,r) => s + n(r.parts_cost), 0);
+    document.getElementById('repairKPI').innerHTML = `
+      <div class="kpi-card"><div class="kpi-label">總營收（未稅）</div><div class="kpi-value kpi-green">${fmtK(totalRevenue)}</div><div class="kpi-sub">元（千）</div></div>
+      <div class="kpi-card"><div class="kpi-label">出廠台數</div><div class="kpi-value kpi-blue">${totalCars.toLocaleString()}</div><div class="kpi-sub">台</div></div>
+      <div class="kpi-card"><div class="kpi-label">引擎工資</div><div class="kpi-value">${fmtK(totalEngine)}</div><div class="kpi-sub">K</div></div>
+      <div class="kpi-card"><div class="kpi-label">零件收入</div><div class="kpi-value">${fmtK(totalParts)}</div><div class="kpi-sub">K</div></div>
+      <div class="kpi-card"><div class="kpi-label">零件成本</div><div class="kpi-value kpi-yellow">${fmtK(totalCost)}</div><div class="kpi-sub">K</div></div>
+      ${totals.map(t => `<div class="kpi-card"><div class="kpi-label">${t.branch} 營收</div><div class="kpi-value">${fmtK(t.total_untaxed)}</div><div class="kpi-sub">${parseInt(t.car_count||0)}台 | 引擎${fmtK(t.engine_wage)}</div></div>`).join('')}`;
+    const saRows = data.bySA; const maxRev = Math.max(...saRows.map(r => n(r.total_untaxed)), 1);
+    document.getElementById('tbSA').innerHTML = saRows.length
+      ? saRows.map((r, i) => `<tr><td class="rank-no ${i<3?'rank-'+(i+1):''}">${i+1}</td><td><span class="badge badge-blue">${r.branch}</span></td><td style="font-weight:600">${r.service_advisor}</td><td class="num">${parseInt(r.car_count||0)}</td><td class="num" style="font-weight:700;color:#10b981">${fmt(r.total_untaxed)}</td><td class="num">${fmt(r.engine_wage)}</td><td class="num">${fmt(r.parts_income)}</td><td style="min-width:120px"><div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:${(n(r.total_untaxed)/maxRev*100).toFixed(0)}%"></div></div><span style="font-size:11px;color:#64748b">${(n(r.total_untaxed)/maxRev*100).toFixed(0)}%</span></div></td></tr>`).join('')
+      : '<tr><td colspan="8" class="empty">無資料</td></tr>';
+    document.getElementById('tbAccount').innerHTML = data.summary.length
+      ? data.summary.map(r => `<tr><td><span class="badge badge-blue">${r.branch}</span></td><td><span class="badge ${badgeType(r.account_type)}">${r.account_type||'-'}</span></td><td class="num">${parseInt(r.work_order_count||0).toLocaleString()}</td><td class="num" style="font-weight:700">${fmt(r.total_untaxed)}</td><td class="num">${fmt(r.parts_income)}</td><td class="num">${fmt(r.engine_wage)}</td><td class="num">${fmt(r.bodywork_income)}</td><td class="num" style="color:#f59e0b">${fmt(r.parts_cost)}</td></tr>`).join('')
+      : '<tr><td colspan="8" class="empty">無資料</td></tr>';
+  } catch(e) { document.getElementById('tbSA').innerHTML = `<tr><td colspan="8" style="color:#ef4444;padding:16px">${e.message}</td></tr>`; }
+}
+
+async function loadIncomeSummary(period, branch) {
+  const cardsEl = document.getElementById('incomeCategoryCards');
+  const costCardsEl = document.getElementById('incomeCostCards');
+  const revenueEl = document.getElementById('tbIncomeRevenue');
+  const costEl = document.getElementById('tbIncomeCost');
+  try {
+    const params = new URLSearchParams(); if (period) params.set('period', period); if (branch) params.set('branch', branch);
+    const data = await (await fetch(`/api/stats/income-summary?${params}`)).json();
+    if (data.error) throw new Error(data.error);
+    const { byType, externalSales, techByType, externalCategory } = data;
+    const grouped = {};
+    byType.forEach(r => {
+      const gk = ACCOUNT_GROUP(r.account_type);
+      if (!grouped[gk]) grouped[gk] = { total_untaxed:0, car_count:0, engine_wage:0, parts_income:0, accessories_income:0, boutique_income:0, bodywork_income:0, paint_income:0, carwash_income:0, outsource_income:0, addon_income:0, parts_cost:0 };
+      const g = grouped[gk];
+      g.total_untaxed+=n(r.total_untaxed); g.car_count+=n(r.car_count); g.engine_wage+=n(r.engine_wage_nt); g.parts_income+=n(r.parts_income_nt); g.accessories_income+=n(r.accessories_income_nt); g.boutique_income+=n(r.boutique_income_nt); g.bodywork_income+=n(r.bodywork_income_nt); g.paint_income+=n(r.paint_income_nt); g.carwash_income+=n(r.carwash_income_nt); g.outsource_income+=n(r.outsource_income_nt); g.addon_income+=n(r.addon_income_nt); g.parts_cost+=n(r.parts_cost_nt);
+    });
+    const extTotal = externalSales.reduce((s,r) => s + n(r.total_sales), 0);
+    const extOrders = externalSales.reduce((s,r) => s + parseInt(r.order_count||0), 0);
+    const paidTotal = (grouped['general']?.total_untaxed||0) + (grouped['insurance']?.total_untaxed||0) + (grouped['extended']?.total_untaxed||0) + extTotal;
+    const preCost = { total:0, cars:0, partsCost:0, engine:0, bodywork:0, paint:0, carwash:0, outsource:0, addon:0, wage:0, parts_sales:0, acc_sales:0, boutique_sales:0 };
+    byType.forEach(r => {
+      const gk = ACCOUNT_GROUP(r.account_type); if (!COST_GROUPS.has(gk)) return;
+      const partsCost=n(r.parts_cost_nt),engineWage=n(r.engine_wage_nt),bodywork=n(r.bodywork_income_nt),paint=n(r.paint_income_nt),carwash=n(r.carwash_income_nt),outsource=n(r.outsource_income_nt),addon=n(r.addon_income_nt),wageTotal=engineWage+bodywork+paint+carwash+outsource+addon;
+      preCost.cars+=n(r.car_count); preCost.partsCost+=partsCost; preCost.engine+=engineWage; preCost.bodywork+=bodywork; preCost.paint+=paint; preCost.carwash+=carwash; preCost.outsource+=outsource; preCost.addon+=addon; preCost.wage+=wageTotal; preCost.total+=partsCost+wageTotal; preCost.parts_sales+=n(r.parts_income_nt); preCost.acc_sales+=n(r.accessories_income_nt); preCost.boutique_sales+=n(r.boutique_income_nt);
+    });
+    const grandRevenue = paidTotal + preCost.total;
+    document.getElementById('grandKPI').innerHTML = `<div class="kpi-grid" style="margin-bottom:20px"><div class="kpi-card" style="border-color:#475569;background:#1e293b;grid-column:1/-1;max-width:320px"><div class="kpi-label" style="color:#94a3b8">📌 總計（有費收入＋無費成本）</div><div class="kpi-value" style="color:#e2e8f0;font-size:32px">${fmtK(grandRevenue)}</div><div class="kpi-sub">有費 ${fmtK(paidTotal)} ＋ 無費成本 ${fmtK(preCost.total)}</div></div></div>`;
+    let cardsHtml = '';
+    ['general','insurance','extended','voucher','external','paid'].forEach(gk => {
+      const meta = GROUP_META[gk]||GROUP_META.other;
+      if (gk==='external') { cardsHtml+=`<div class="income-cat-card ${meta.cls}"><div class="income-cat-label">${meta.icon} ${meta.label}</div><div class="income-cat-value">${fmtK(extTotal)}</div><div class="income-cat-sub">${extOrders} 筆 · 來源: ${externalCategory}</div></div>`; }
+      else if (gk==='paid') { cardsHtml+=`<div class="income-cat-card ${meta.cls}"><div class="income-cat-label">${meta.icon} ${meta.label}</div><div class="income-cat-value">${fmtK(paidTotal)}</div><div class="income-cat-sub">一般+保險+延保+外賣</div></div>`; }
+      else { const g=grouped[gk]; if(!g&&gk!=='voucher')return; cardsHtml+=`<div class="income-cat-card ${meta.cls}"><div class="income-cat-label">${meta.icon} ${meta.label}</div><div class="income-cat-value">${fmtK(g?.total_untaxed||0)}</div><div class="income-cat-sub">${g?.car_count||0} 台</div></div>`; }
+    });
+    cardsEl.innerHTML = cardsHtml||'<div style="color:#64748b;font-size:13px;grid-column:1/-1">無資料</div>';
+    const COST_GROUP_ORDER=['internal','warranty','vsa','goodwill']; let costCardsHtml='';
+    COST_GROUP_ORDER.forEach(gk => { const meta=GROUP_META[gk]; const g=grouped[gk]; if(!g)return; const gPartsCost=g.parts_cost,gWage=g.engine_wage+g.bodywork_income+g.paint_income+g.carwash_income+g.outsource_income+g.addon_income,gTotal=gPartsCost+gWage; costCardsHtml+=`<div class="income-cat-card ${meta.cls}"><div class="income-cat-label">${meta.icon} ${meta.label}</div><div class="income-cat-value">${fmtK(gTotal)}</div><div class="income-cat-sub">${parseInt(g.car_count)} 台 · 零件成本 ${fmtK(gPartsCost)} · 工資 ${fmtK(gWage)}</div></div>`; });
+    costCardsHtml+=`<div class="income-cat-card" style="background:#0f172a;border:1px solid #f59e0b"><div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:#f59e0b;border-radius:3px 0 0 3px"></div><div class="income-cat-label" style="color:#f59e0b">⚠️ 無費工單成本合計</div><div class="income-cat-value" style="color:#f59e0b;font-size:26px">${fmtK(preCost.total)}</div><div class="income-cat-sub">${parseInt(preCost.cars)} 台 · 零件成本 ${fmtK(preCost.partsCost)} · 工資 ${fmtK(preCost.wage)}</div></div>`;
+    costCardsEl.innerHTML = costCardsHtml||'<div style="color:#64748b;font-size:13px;grid-column:1/-1">無無費工單資料</div>';
+    const REVENUE_GROUPS=['general','insurance','extended','voucher']; let revRows=''; let revSub={cars:0,engine:0,parts:0,acc:0,boutique:0,bodywork:0,paint:0,carwash:0,out:0,addon:0,total:0};
+    byType.forEach(r => {
+      const gk=ACCOUNT_GROUP(r.account_type); if(!REVENUE_GROUPS.includes(gk))return;
+      const meta=GROUP_META[gk]||GROUP_META.other; const total=n(r.total_untaxed);
+      revSub.cars+=n(r.car_count); revSub.engine+=n(r.engine_wage_nt); revSub.parts+=n(r.parts_income_nt); revSub.acc+=n(r.accessories_income_nt); revSub.boutique+=n(r.boutique_income_nt); revSub.bodywork+=n(r.bodywork_income_nt); revSub.paint+=n(r.paint_income_nt); revSub.carwash+=n(r.carwash_income_nt); revSub.out+=n(r.outsource_income_nt); revSub.addon+=n(r.addon_income_nt); revSub.total+=total;
+      revRows+=`<tr><td><span class="badge badge-blue">${r.branch}</span></td><td><span class="badge ${meta.badge}">${r.account_type}</span></td><td class="num">${parseInt(r.car_count||0)}</td><td class="num">${fmt(r.engine_wage_nt)}</td><td class="num">${fmt(r.parts_income_nt)}</td><td class="num">${fmt(r.accessories_income_nt)}</td><td class="num">${fmt(r.boutique_income_nt)}</td><td class="num">${fmt(r.bodywork_income_nt)}</td><td class="num">${fmt(r.paint_income_nt)}</td><td class="num">${fmt(r.carwash_income_nt)}</td><td class="num">${fmt(r.outsource_income_nt)}</td><td class="num">${fmt(r.addon_income_nt)}</td><td class="num" style="color:#10b981;font-weight:700">${fmt(total)}</td></tr>`;
+    });
+    if (extTotal>0) { revRows+=`<tr><td><span class="badge badge-teal">外賣</span></td><td><span class="badge badge-teal">外賣(零件銷售)</span></td><td class="num">${extOrders} 筆</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num" style="color:#14b8a6;font-weight:700">${fmt(extTotal)}</td></tr>`; revSub.total+=extTotal; }
+    revRows+=`<tr class="subtotal-row"><td></td><td style="color:#f97316">有費小計</td><td class="num">${parseInt(revSub.cars)}</td><td class="num">${fmt(revSub.engine)}</td><td class="num">${fmt(revSub.parts)}</td><td class="num">${fmt(revSub.acc)}</td><td class="num">${fmt(revSub.boutique)}</td><td class="num">${fmt(revSub.bodywork)}</td><td class="num">${fmt(revSub.paint)}</td><td class="num">${fmt(revSub.carwash)}</td><td class="num">${fmt(revSub.out)}</td><td class="num">${fmt(revSub.addon)}</td><td class="num" style="color:#f97316;font-size:14px">${fmt(paidTotal)}</td></tr>`;
+    revenueEl.innerHTML = revRows||'<tr><td colspan="13" class="empty">無資料</td></tr>';
+    let costRows=''; let costTotal={cars:0,partsCost:0,engine:0,bodywork:0,paint:0,carwash:0,outsource:0,addon:0,wage:0,total:0,parts_sales:0,acc_sales:0,boutique_sales:0};
+    byType.forEach(r => {
+      const gk=ACCOUNT_GROUP(r.account_type); if(!COST_GROUPS.has(gk))return;
+      const meta=GROUP_META[gk]||GROUP_META.other;
+      const partsSales=n(r.parts_income_nt),accSales=n(r.accessories_income_nt),boutiqueSales=n(r.boutique_income_nt),partsCost=n(r.parts_cost_nt),engineWage=n(r.engine_wage_nt),bodywork=n(r.bodywork_income_nt),paint=n(r.paint_income_nt),carwash=n(r.carwash_income_nt),outsource=n(r.outsource_income_nt),addon=n(r.addon_income_nt),wageTotal=engineWage+bodywork+paint+carwash+outsource+addon,rowTotal=partsCost+wageTotal;
+      costTotal.cars+=n(r.car_count); costTotal.parts_sales+=partsSales; costTotal.acc_sales+=accSales; costTotal.boutique_sales+=boutiqueSales; costTotal.partsCost+=partsCost; costTotal.engine+=engineWage; costTotal.bodywork+=bodywork; costTotal.paint+=paint; costTotal.carwash+=carwash; costTotal.outsource+=outsource; costTotal.addon+=addon; costTotal.wage+=wageTotal; costTotal.total+=rowTotal;
+      costRows+=`<tr class="cost-row"><td><span class="badge badge-blue">${r.branch||'—'}</span></td><td><span class="badge ${meta.badge}">${r.account_type}</span></td><td class="num">${parseInt(r.car_count||0)}</td><td class="num" style="color:#3b82f6">${partsSales>0?fmt(partsSales):'—'}</td><td class="num" style="color:#10b981">${accSales>0?fmt(accSales):'—'}</td><td class="num" style="color:#f59e0b">${boutiqueSales>0?fmt(boutiqueSales):'—'}</td><td class="num">${engineWage>0?fmt(engineWage):'—'}</td><td class="num">${bodywork>0?fmt(bodywork):'—'}</td><td class="num">${paint>0?fmt(paint):'—'}</td><td class="num">${carwash>0?fmt(carwash):'—'}</td><td class="num">${outsource>0?fmt(outsource):'—'}</td><td class="num">${addon>0?fmt(addon):'—'}</td><td class="num" style="color:#94a3b8;font-weight:600">${fmt(wageTotal)}</td><td class="num" style="color:#f59e0b">${fmt(partsCost)}</td><td class="num" style="color:#f59e0b;font-weight:700">${fmt(rowTotal)}</td><td style="font-size:11px;color:#475569">成本+工資（無收入認列）</td></tr>`;
+    });
+    if (costRows) { costRows+=`<tr class="total-row"><td></td><td style="color:#3b82f6">無費合計</td><td class="num">${parseInt(costTotal.cars)}</td><td class="num" style="color:#3b82f6">${fmt(costTotal.parts_sales)}</td><td class="num" style="color:#10b981">${fmt(costTotal.acc_sales)}</td><td class="num" style="color:#f59e0b">${fmt(costTotal.boutique_sales)}</td><td class="num">${fmt(costTotal.engine)}</td><td class="num">${fmt(costTotal.bodywork)}</td><td class="num">${fmt(costTotal.paint)}</td><td class="num">${fmt(costTotal.carwash)}</td><td class="num">${fmt(costTotal.outsource)}</td><td class="num">${fmt(costTotal.addon)}</td><td class="num" style="color:#94a3b8;font-weight:700">${fmt(costTotal.wage)}</td><td class="num" style="color:#f59e0b">${fmt(costTotal.partsCost)}</td><td class="num" style="color:#f59e0b;font-size:14px">${fmt(costTotal.total)}</td><td></td></tr>`; }
+    costEl.innerHTML = costRows||'<tr><td colspan="16" class="empty">無無費工單資料</td></tr>';
+  } catch(e) { cardsEl.innerHTML=`<div style="color:#ef4444;grid-column:1/-1">${e.message}</div>`; costCardsEl.innerHTML=''; revenueEl.innerHTML=`<tr><td colspan="13" style="color:#ef4444;padding:16px">${e.message}</td></tr>`; costEl.innerHTML=`<tr><td colspan="17" style="color:#ef4444;padding:16px">${e.message}</td></tr>`; }
+}
+
+async function loadTech(period, branch) {
+  try {
+    const params = new URLSearchParams(); if (period) params.set('period', period); if (branch) params.set('branch', branch);
+    const data = await (await fetch(`/api/stats/tech?${params}`)).json();
+    if (data.error) throw new Error(data.error);
+    const rows = data.ranking; const totalWage = rows.reduce((s,r) => s + n(r.total_wage), 0); const maxWage = Math.max(...rows.map(r => n(r.total_wage)), 1);
+    document.getElementById('techKPI').innerHTML = `<div class="kpi-card"><div class="kpi-label">技師人數</div><div class="kpi-value kpi-blue">${rows.length}</div><div class="kpi-sub">人</div></div><div class="kpi-card"><div class="kpi-label">工資總額</div><div class="kpi-value kpi-green">${fmtK(totalWage)}</div><div class="kpi-sub">K</div></div><div class="kpi-card"><div class="kpi-label">平均工資</div><div class="kpi-value">${rows.length ? fmt(totalWage/rows.length) : 0}</div><div class="kpi-sub">元/人</div></div>`;
+    document.getElementById('tbTech').innerHTML = rows.length
+      ? rows.map((r,i) => `<tr><td class="rank-no ${i<3?'rank-'+(i+1):''}">${i+1}</td><td><span class="badge badge-blue">${r.branch}</span></td><td style="font-weight:600">${r.tech_name_clean}</td><td class="num">${parseInt(r.car_count||0)}</td><td class="num">${n(r.total_hours).toFixed(1)}</td><td class="num" style="font-weight:700;color:#10b981">${fmt(r.total_wage)}</td><td class="num" style="color:#f59e0b">${fmt(r.beauty_wage)}</td><td class="num" style="color:#3b82f6">${fmt(r.net_wage)}</td><td style="min-width:120px"><div class="bar-wrap"><div class="bar-bg"><div class="bar-fill green" style="width:${(n(r.total_wage)/maxWage*100).toFixed(0)}%"></div></div><span style="font-size:11px;color:#64748b">${totalWage > 0 ? (n(r.total_wage)/totalWage*100).toFixed(1) : 0}%</span></div></td></tr>`).join('')
+      : '<tr><td colspan="9" class="empty">無資料</td></tr>';
+  } catch(e) { document.getElementById('tbTech').innerHTML = `<tr><td colspan="9" style="color:#ef4444;padding:16px">${e.message}</td></tr>`; }
+}
+
+async function loadParts(period, branch) {
+  try {
+    const params = new URLSearchParams(); if (period) params.set('period', period); if (branch) params.set('branch', branch);
+    const data = await (await fetch(`/api/stats/parts?${params}`)).json();
+    if (data.error) throw new Error(data.error);
+    const byType = data.byType; const totalSales = byType.reduce((s,r) => s + n(r.total_sales), 0); const totalCost = byType.reduce((s,r) => s + n(r.total_cost), 0);
+    document.getElementById('partsKPI').innerHTML = `<div class="kpi-card"><div class="kpi-label">銷售總額</div><div class="kpi-value kpi-green">${fmtK(totalSales)}</div><div class="kpi-sub">K</div></div><div class="kpi-card"><div class="kpi-label">成本總額</div><div class="kpi-value kpi-yellow">${fmtK(totalCost)}</div><div class="kpi-sub">K</div></div><div class="kpi-card"><div class="kpi-label">毛利</div><div class="kpi-value kpi-blue">${fmtK(totalSales-totalCost)}</div><div class="kpi-sub">K</div></div><div class="kpi-card"><div class="kpi-label">毛利率</div><div class="kpi-value">${totalSales > 0 ? ((totalSales-totalCost)/totalSales*100).toFixed(1) : 0}%</div></div>`;
+    document.getElementById('tbPartsType').innerHTML = byType.length ? byType.map(r => { const s=n(r.total_sales),c=n(r.total_cost),m=s>0?((s-c)/s*100):0; return `<tr><td><span class="badge badge-blue">${r.branch}</span></td><td><span class="badge ${badgeType(r.part_type)}">${r.part_type||'-'}</span></td><td class="num">${parseInt(r.count||0).toLocaleString()}</td><td class="num">${n(r.total_qty).toLocaleString()}</td><td class="num" style="font-weight:700">${fmt(s)}</td><td class="num">${fmt(c)}</td><td class="num" style="color:#10b981">${fmt(s-c)}</td><td class="num" style="color:${m>20?'#10b981':m>10?'#f59e0b':'#ef4444'}">${m.toFixed(1)}%</td></tr>`; }).join('') : '<tr><td colspan="8" class="empty">無資料</td></tr>';
+    document.getElementById('tbTopParts').innerHTML = data.topParts.length ? data.topParts.map((r,i) => `<tr><td class="rank-no ${i<3?'rank-'+(i+1):''}">${i+1}</td><td style="font-family:monospace;font-size:12px">${r.part_number}</td><td>${r.part_name||'-'}</td><td><span class="badge ${badgeType(r.part_type)}">${r.part_type||'-'}</span></td><td class="num">${n(r.total_qty).toLocaleString()}</td><td class="num" style="font-weight:700;color:#10b981">${fmt(r.total_sales)}</td></tr>`).join('') : '<tr><td colspan="6" class="empty">無資料</td></tr>';
+  } catch(e) { document.getElementById('tbPartsType').innerHTML = `<tr><td colspan="8" style="color:#ef4444;padding:16px">${e.message}</td></tr>`; }
+}
+
+async function loadBoutiqueAccessories(period, branch) {
+  const kpiEl=document.getElementById('boutiqueKPI'); const matrixEl=document.getElementById('boutiqueMatrix');
+  if (!kpiEl||!matrixEl) return;
+  kpiEl.innerHTML='<div style="padding:12px;color:#64748b;font-size:13px"><span class="spinner"></span>載入中</div>';
+  matrixEl.innerHTML='<div style="padding:40px;text-align:center;color:#64748b"><span class="spinner"></span>載入中...</div>';
+  try {
+    const params=new URLSearchParams(); if(period)params.set('period',period); if(branch)params.set('branch',branch);
+    const data=await(await fetch(`/api/stats/boutique-accessories?${params}`)).json();
+    if(data.error)throw new Error(data.error);
+    const {rows,kpi}=data;
+    if(!rows.length){kpiEl.innerHTML=`<div style="color:#64748b;padding:12px;font-size:13px;grid-column:1/-1">無精品或配件資料。請確認已上傳<strong>零件型錄（零配件比對）</strong>。</div>`;matrixEl.innerHTML='';return;}
+    const PART_TYPES=['精品','配件'];const DEPT_ORDER=['一般','保險','延保','票券','內結','保固','VSA','善意維修'];const branchColors={AMA:'#3b82f6',AMC:'#10b981',AMD:'#f59e0b'};const typeColors={'精品':'#8b5cf6','配件':'#14b8a6'};
+    const deptSet=new Set(rows.map(r=>r.account_type));const depts=[...deptSet].sort((a,b)=>{const ai=DEPT_ORDER.indexOf(a),bi=DEPT_ORDER.indexOf(b);if(ai>=0&&bi>=0)return ai-bi;if(ai>=0)return -1;if(bi>=0)return 1;return a.localeCompare(b,'zh-TW');});
+    const totalB=kpi.filter(r=>r.part_type==='精品').reduce((s,r)=>s+n(r.total_sales),0);const totalA=kpi.filter(r=>r.part_type==='配件').reduce((s,r)=>s+n(r.total_sales),0);const branches=[...new Set(rows.map(r=>r.branch))].sort();
+    let kpiHtml=`<div class="kpi-card"><div class="kpi-label">精品銷售合計</div><div class="kpi-value kpi-purple">${fmtK(totalB)}</div><div class="kpi-sub">K 元（未稅）</div></div><div class="kpi-card"><div class="kpi-label">配件銷售合計</div><div class="kpi-value kpi-teal">${fmtK(totalA)}</div><div class="kpi-sub">K 元（未稅）</div></div><div class="kpi-card"><div class="kpi-label">精品 ＋ 配件</div><div class="kpi-value kpi-green">${fmtK(totalB+totalA)}</div><div class="kpi-sub">K 元（未稅）</div></div>`;
+    branches.forEach(br=>{const brB=kpi.filter(r=>r.branch===br&&r.part_type==='精品').reduce((s,r)=>s+n(r.total_sales),0);const brA=kpi.filter(r=>r.branch===br&&r.part_type==='配件').reduce((s,r)=>s+n(r.total_sales),0);const col=branchColors[br]||'#94a3b8';kpiHtml+=`<div class="kpi-card"><div class="kpi-label" style="color:${col}">${br} 精品＋配件</div><div class="kpi-value" style="color:${col}">${fmtK(brB+brA)}</div><div class="kpi-sub">精 ${fmtK(brB)} ／ 配 ${fmtK(brA)}</div></div>`;});
+    kpiEl.innerHTML=kpiHtml;
+    const pivotMap={};rows.forEach(r=>{const key=`${r.branch}|||${r.sales_person}`;if(!pivotMap[key])pivotMap[key]={branch:r.branch,sales_person:r.sales_person,cells:{}};pivotMap[key].cells[`${r.part_type}|||${r.account_type}`]={sales:n(r.total_sales),qty:n(r.total_qty),cnt:parseInt(r.cnt||0)};});
+    const getRowTotal=row=>PART_TYPES.reduce((s,pt)=>s+depts.reduce((ss,d)=>ss+(row.cells[`${pt}|||${d}`]?.sales||0),0),0);
+    const pivotRows=Object.values(pivotMap).sort((a,b)=>{if(a.branch!==b.branch)return a.branch<b.branch?-1:1;return getRowTotal(b)-getRowTotal(a);});
+    const thB='padding:8px 10px;text-align:left;font-size:11px;font-weight:700;color:#64748b;background:#0f172a;border-bottom:1px solid #2d3f56;white-space:nowrap;';const thN=thB+'text-align:right;';const tdB='padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.4);font-size:12px;vertical-align:middle;border-top:0;';const tdN=tdB+'text-align:right;font-variant-numeric:tabular-nums;';
+    const sTh=(l,e='')=>`position:sticky;left:${l}px;z-index:5;background:#0f172a;${e}`;const sTd=(l,bg='#111827',e='')=>`position:sticky;left:${l}px;z-index:2;background:${bg};${e}`;const sThCorner=(l,e='')=>`position:sticky;left:${l}px;z-index:3;background:#0f172a;${e}`;
+    let html=`<table style="width:100%;border-collapse:separate;border-spacing:0;font-size:12px"><thead style="position:sticky;top:0;z-index:4;"><tr>`;
+    html+=`<th rowspan="2" style="${thB}${sThCorner(0,'border-right:1px solid #2d3f56;width:36px')}">#</th>`;html+=`<th rowspan="2" style="${thB}${sThCorner(36,'border-right:1px solid #2d3f56;width:60px')}">據點</th>`;html+=`<th rowspan="2" style="${thB}${sThCorner(96,'border-right:2px solid #374151;min-width:110px')}">銷售人員</th>`;
+    PART_TYPES.forEach((pt,pi)=>{const col=typeColors[pt]||'#94a3b8';const span=depts.length+1;const bdr=pi<PART_TYPES.length-1?'2px solid #374151':'1px solid #2d3f56';html+=`<th colspan="${span}" style="${thB}background:#0f172a;text-align:center;color:${col};border-right:${bdr};border-bottom:1px solid #1e293b">${pt}</th>`;});
+    html+=`<th rowspan="2" style="${thN}background:#0f172a;color:#10b981;border-left:2px solid #374151">總計(元)</th></tr><tr>`;
+    PART_TYPES.forEach((pt,pi)=>{depts.forEach(d=>{html+=`<th style="${thN}background:#0f172a;font-size:10px;color:#475569;border-right:1px solid #2d3f56">${d}</th>`;});const bdr=pi<PART_TYPES.length-1?'2px solid #374151':'1px solid #2d3f56';html+=`<th style="${thN}background:#0f172a;color:${typeColors[pt]||'#94a3b8'};font-size:10px;border-right:${bdr}">小計</th>`;});
+    html+=`</tr></thead><tbody>`;let rowIdx=0,grandTotal=0;const colGT={};
+    branches.forEach(br=>{const bCol=branchColors[br]||'#64748b';const brRows=pivotRows.filter(r=>r.branch===br);const brSub={};let brTotal=0;
+      brRows.forEach(row=>{rowIdx++;const bg=rowIdx%2===0?'#0e1a29':'#111827';html+=`<tr>`;html+=`<td style="${tdB}${sTd(0,bg,'color:#64748b;font-weight:700;border-right:1px solid #2d3f56;width:36px')}">${rowIdx}</td>`;html+=`<td style="${tdB}${sTd(36,bg,'border-right:1px solid #2d3f56;width:60px')}"><span style="display:inline-block;padding:2px 6px;border-radius:5px;font-size:10px;font-weight:700;background:${bCol}22;color:${bCol}">${br}</span></td>`;html+=`<td style="${tdB}${sTd(96,bg,'font-weight:600;border-right:2px solid #374151;min-width:110px')}">${row.sales_person}</td>`;
+        let rowTotal=0;PART_TYPES.forEach((pt,pi)=>{let ptSub=0;const col=typeColors[pt]||'#94a3b8';depts.forEach(d=>{const v=row.cells[`${pt}|||${d}`]?.sales||0;const ck=`${pt}|||${d}`;ptSub+=v;colGT[ck]=(colGT[ck]||0)+v;brSub[ck]=(brSub[ck]||0)+v;html+=`<td style="${tdN}${v>0?'':'color:#334155;'}border-right:1px solid #2d3f56">${v>0?fmt(v):'—'}</td>`;});rowTotal+=ptSub;const bdr=pi<PART_TYPES.length-1?'2px solid #374151':'1px solid #2d3f56';const stk=`${pt}|||TOTAL`;brSub[stk]=(brSub[stk]||0)+ptSub;colGT[stk]=(colGT[stk]||0)+ptSub;html+=`<td style="${tdN}color:${col};font-weight:700;border-right:${bdr}">${ptSub>0?fmt(ptSub):'—'}</td>`;});
+        grandTotal+=rowTotal;brTotal+=rowTotal;html+=`<td style="${tdN}color:#10b981;font-weight:800;border-left:2px solid #374151">${rowTotal>0?fmt(rowTotal):'—'}</td></tr>`;});
+      const subAlpha=br==='AMA'?'59,130,246':br==='AMC'?'16,185,129':'245,158,11';html+=`<tr style="background:rgba(${subAlpha},.07);border-top:1px solid ${bCol}44">`;html+=`<td style="${tdB}${sTd(0,'transparent','border-right:1px solid #2d3f56')}"></td>`;html+=`<td style="${tdB}${sTd(36,'transparent','border-right:1px solid #2d3f56')}"><span style="font-size:10px;font-weight:800;color:${bCol}">${br}</span></td>`;html+=`<td style="${tdB}${sTd(96,'transparent','font-size:11px;color:#64748b;border-right:2px solid #374151')}">${brRows.length} 人</td>`;
+      PART_TYPES.forEach((pt,pi)=>{const col=typeColors[pt]||'#94a3b8';let ptBrT=0;depts.forEach(d=>{const v=brSub[`${pt}|||${d}`]||0;ptBrT+=v;html+=`<td style="${tdN}color:${col};font-weight:600;font-size:11px;border-right:1px solid #2d3f56">${v>0?fmt(v):'—'}</td>`;});const bdr=pi<PART_TYPES.length-1?'2px solid #374151':'1px solid #2d3f56';html+=`<td style="${tdN}color:${col};font-weight:800;font-size:12px;border-right:${bdr}">${ptBrT>0?fmt(ptBrT):'—'}</td>`;});
+      html+=`<td style="${tdN}color:${bCol};font-weight:800;border-left:2px solid #374151">${brTotal>0?fmt(brTotal):'—'}</td></tr>`;});
+    html+=`<tr style="background:#1e293b;border-top:2px solid #3b82f6">`;html+=`<td style="${tdB}${sTd(0,'#1e293b','border-right:1px solid #2d3f56')}"></td>`;html+=`<td style="${tdB}${sTd(36,'#1e293b','border-right:1px solid #2d3f56')}"></td>`;html+=`<td style="${tdB}${sTd(96,'#1e293b','font-size:13px;font-weight:800;color:#fff;border-right:2px solid #374151')}">全廠合計</td>`;
+    PART_TYPES.forEach((pt,pi)=>{const col=typeColors[pt]||'#94a3b8';let ptGT=0;depts.forEach(d=>{const v=colGT[`${pt}|||${d}`]||0;ptGT+=v;html+=`<td style="${tdN}color:${col};font-weight:700;border-right:1px solid #2d3f56">${v>0?fmt(v):'—'}</td>`;});const bdr=pi<PART_TYPES.length-1?'2px solid #374151':'1px solid #2d3f56';html+=`<td style="${tdN}color:${col};font-weight:800;font-size:13px;border-right:${bdr}">${ptGT>0?fmt(ptGT):'—'}</td>`;});
+    html+=`<td style="${tdN}color:#10b981;font-weight:800;font-size:13px;border-left:2px solid #374151">${grandTotal>0?fmt(grandTotal):'—'}</td></tr>`;html+=`</tbody></table>`;matrixEl.innerHTML=html;
+  } catch(e){kpiEl.innerHTML=`<div style="color:#ef4444;padding:12px;grid-column:1/-1">${e.message}</div>`;matrixEl.innerHTML='';}
+}
+
+async function loadConfigs() { try { saConfigs = await (await fetch('/api/sa-config')).json(); } catch(e) {} }
+
+async function loadSASales() {
+  const period=document.getElementById('selPeriod').value;const branch=document.getElementById('selBranch').value;const matrixEl=document.getElementById('saMatrix');const metaEl=document.getElementById('saMatrixMeta');
+  matrixEl.innerHTML='<div style="padding:40px;text-align:center;color:#64748b"><span class="spinner"></span>載入中...</div>';
+  const params=new URLSearchParams();if(period)params.set('period',period);if(branch)params.set('branch',branch);
+  try {
+    const data=await(await fetch(`/api/stats/sa-sales-matrix?${params}`)).json();if(data.error)throw new Error(data.error);
+    const {configs,rows,colTotals}=data;
+    if(!configs.length){matrixEl.innerHTML=`<div style="padding:48px;text-align:center;color:#64748b">尚未建立任何設定，請先至 <a href="/settings.html" style="color:#3b82f6">⚙️ 設定</a> 新增追蹤項目</div>`;metaEl.textContent='';return;}
+    if(!rows.length){matrixEl.innerHTML=`<div style="padding:48px;text-align:center;color:#64748b">此期間／據點無銷售資料</div>`;return;}
+    metaEl.textContent=`${configs.length} 個追蹤項目 · ${rows.length} 位銷售人員`;
+    const methodUnitMap={amount:'金額(元)',quantity:'數量(件)',count:'筆數(單)'};const branches=[...new Set(rows.map(r=>r.branch))].sort();const branchColors={AMA:'#3b82f6',AMC:'#10b981',AMD:'#f59e0b'};const cfgColors=['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#f97316','#84cc16'];
+    const thBase='padding:10px 14px;text-align:left;font-size:12px;font-weight:700;color:#64748b;background:#0f172a;border-bottom:1px solid #2d3f56;white-space:nowrap;';const thNum=thBase+'text-align:right;';const tdBase='padding:9px 14px;border-bottom:1px solid rgba(45,63,86,.4);font-size:13px;vertical-align:middle;border-top:0;';const tdNum=tdBase+'text-align:right;font-variant-numeric:tabular-nums;';const stTh=(l,e='')=>`position:sticky;left:${l}px;z-index:5;background:#0f172a;${e}`;const stTd=(l,bg='#111827',e='')=>`position:sticky;left:${l}px;z-index:2;background:${bg};${e}`;const saCorner=(l,e='')=>`position:sticky;left:${l}px;z-index:3;background:#0f172a;${e}`;
+    let html=`<table style="width:100%;border-collapse:separate;border-spacing:0;font-size:13px"><thead style="position:sticky;top:0;z-index:4;"><tr>`;
+    html+=`<th style="${thBase}${saCorner(0,'border-right:1px solid #2d3f56;width:40px')}" rowspan="2">#</th>`;html+=`<th style="${thBase}${saCorner(40,'border-right:1px solid #2d3f56;width:70px')}" rowspan="2">據點</th>`;html+=`<th style="${thBase}${saCorner(110,'border-right:2px solid #374151;min-width:130px')}" rowspan="2">銷售人員</th>`;
+    configs.forEach((cfg,ci)=>{const col=cfgColors[ci%cfgColors.length];html+=`<th colspan="1" style="${thBase}background:#0f172a;text-align:center;color:${col};border-right:${ci<configs.length-1?'2px solid #2d3f56':'1px solid #2d3f56'};border-bottom:1px solid #1e293b">${cfg.config_name}</th>`;});
+    html+=`</tr><tr>`;configs.forEach((cfg,ci)=>{html+=`<th style="${thNum}background:#0f172a;border-right:${ci<configs.length-1?'2px solid #2d3f56':'1px solid #2d3f56'};font-size:11px">${methodUnitMap[cfg.stat_method]||'金額(元)'}</th>`;});html+=`</tr></thead><tbody>`;
+    let rowIdx=0;
+    for(const br of branches){const brRows=rows.filter(r=>r.branch===br);const brColor=branchColors[br]||'#64748b';
+      brRows.forEach(row=>{rowIdx++;const bg=rowIdx%2===0?'#0e1a29':'#111827';html+=`<tr>`;html+=`<td style="${tdBase}${stTd(0,bg,'color:#64748b;font-weight:700;border-right:1px solid #2d3f56;width:40px')}">${rowIdx}</td>`;html+=`<td style="${tdBase}${stTd(40,bg,'border-right:1px solid #2d3f56;width:70px')}"><span style="display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;background:${brColor}22;color:${brColor}">${br}</span></td>`;html+=`<td style="${tdBase}${stTd(110,bg,'font-weight:600;border-right:2px solid #374151;min-width:130px')}">${row.sa_name}</td>`;
+        configs.forEach((cfg,ci)=>{const c=row.configs[cfg.id];const qty=c?c.qty:0,sales=c?c.sales:0,cnt=c?c.cnt:0;const has=qty>0||sales>0||cnt>0;const border=ci<configs.length-1?'2px solid #2d3f56':'';let disp,style;if(cfg.stat_method==='quantity'){disp=has?qty.toLocaleString(undefined,{maximumFractionDigits:1}):'—';style=has?'color:#e2e8f0;font-weight:600':'color:#334155';}else if(cfg.stat_method==='count'){disp=has?cnt.toLocaleString():'—';style=has?'color:#e2e8f0;font-weight:600':'color:#334155';}else{disp=has?fmt(sales):'—';style=has?'color:#10b981;font-weight:700':'color:#334155';}html+=`<td style="${tdNum}${style};border-right:${border}">${disp}</td>`;});html+=`</tr>`;});
+      const subBg=br==='AMA'?'rgba(59,130,246,.1)':br==='AMC'?'rgba(16,185,129,.1)':'rgba(245,158,11,.1)';html+=`<tr style="background:${subBg};border-top:1px solid ${brColor}44">`;html+=`<td style="${tdBase}${stTd(0,'transparent','border-right:1px solid #2d3f56')}"></td>`;html+=`<td style="${tdBase}${stTd(40,'transparent','border-right:1px solid #2d3f56')}"><span style="font-size:11px;font-weight:800;color:${brColor}">${br} 小計</span></td>`;html+=`<td style="${tdBase}${stTd(110,'transparent','font-size:12px;color:#64748b;border-right:2px solid #374151')}">${brRows.length} 人</td>`;
+      configs.forEach((cfg,ci)=>{const border=ci<configs.length-1?'2px solid #2d3f56':'';const brQ=brRows.reduce((s,r)=>s+(r.configs[cfg.id]?.qty||0),0);const brS=brRows.reduce((s,r)=>s+(r.configs[cfg.id]?.sales||0),0);const brC=brRows.reduce((s,r)=>s+(r.configs[cfg.id]?.cnt||0),0);const has=brQ>0||brS>0||brC>0;let sv;if(cfg.stat_method==='quantity')sv=has?brQ.toLocaleString(undefined,{maximumFractionDigits:1}):'—';else if(cfg.stat_method==='count')sv=has?brC.toLocaleString():'—';else sv=has?fmt(brS):'—';html+=`<td style="${tdNum}color:${brColor};font-weight:800;font-size:12px;border-right:${border}">${sv}</td>`;});html+=`</tr>`;}
+    html+=`<tr style="background:#1e293b;border-top:2px solid #3b82f6">`;html+=`<td style="${tdBase}${stTd(0,'#1e293b','border-right:1px solid #2d3f56')}"></td>`;html+=`<td style="${tdBase}${stTd(40,'#1e293b','border-right:1px solid #2d3f56')}"></td>`;html+=`<td style="${tdBase}${stTd(110,'#1e293b','font-size:13px;font-weight:800;color:#fff;border-right:2px solid #374151')}">全廠合計</td>`;
+    configs.forEach((cfg,ci)=>{const t=colTotals[cfg.id]||{qty:0,sales:0,cnt:0};const border=ci<configs.length-1?'2px solid #2d3f56':'';const has=t.qty>0||t.sales>0||t.cnt>0;let tv;if(cfg.stat_method==='quantity')tv=has?t.qty.toLocaleString(undefined,{maximumFractionDigits:1}):'—';else if(cfg.stat_method==='count')tv=has?t.cnt.toLocaleString():'—';else tv=has?fmt(t.sales):'—';html+=`<td style="${tdNum}color:#10b981;font-weight:800;font-size:13px;border-right:${border}">${tv}</td>`;});
+    html+=`</tr></tbody></table>`;matrixEl.innerHTML=html;
+  } catch(e){matrixEl.innerHTML=`<div style="padding:24px;color:#ef4444">${e.message}</div>`;}
+}
+
+async function loadTrend(branch) {
+  try {
+    const params=new URLSearchParams();if(branch)params.set('branch',branch);
+    const data=await(await fetch(`/api/stats/trend?${params}`)).json();if(data.error)throw new Error(data.error);
+    const rows=data.trend,prevMap={};
+    document.getElementById('tbTrend').innerHTML=rows.length?rows.map(r=>{const key=r.branch,cur=n(r.total_untaxed),prev=prevMap[key];const pct=prev?((cur-prev)/prev*100):null;prevMap[key]=cur;return`<tr><td>${r.period.slice(0,4)}年${r.period.slice(4)}月</td><td><span class="badge badge-blue">${r.branch}</span></td><td class="num">${parseInt(r.car_count||0)}</td><td class="num" style="font-weight:700">${fmt(r.total_untaxed)}</td><td class="num">${fmt(r.engine_wage)}</td><td class="num">${fmt(r.parts_income)}</td><td class="num ${pct===null?'':pct>=0?'up':'down'}">${pct===null?'-':(pct>=0?'▲':'▼')+Math.abs(pct).toFixed(1)+'%'}</td></tr>`;}).join(''):'<tr><td colspan="7" class="empty">無資料</td></tr>';
+  } catch(e){document.getElementById('tbTrend').innerHTML=`<tr><td colspan="7" style="color:#ef4444;padding:16px">${e.message}</td></tr>`;}
+}
+
+async function loadDaily(period, branch) {
+  try {
+    const params=new URLSearchParams();if(period)params.set('period',period);if(branch)params.set('branch',branch);
+    const data=await(await fetch(`/api/stats/daily?${params}`)).json();if(data.error)throw new Error(data.error);
+    const summary=data.summary,daily=data.daily;
+    document.getElementById('dailyKPI').innerHTML=summary.map(r=>`<div class="kpi-card"><div class="kpi-label">${r.branch} 總台數</div><div class="kpi-value kpi-blue">${parseInt(r.total_cars||0).toLocaleString()}</div><div class="kpi-sub">台</div></div><div class="kpi-card"><div class="kpi-label">${r.branch} 工作天數</div><div class="kpi-value kpi-yellow">${parseInt(r.working_days||0)}</div><div class="kpi-sub">${r.configured_working_days!==null?'✅ 手動設定':'⚠️ 自動偵測'}</div></div><div class="kpi-card"><div class="kpi-label">${r.branch} 日均台數</div><div class="kpi-value kpi-green">${n(r.daily_avg).toFixed(1)}</div><div class="kpi-sub">最高${r.max_day}/最低${r.min_day}</div></div>`).join('');
+    const branchList=[...new Set(daily.map(r=>r.branch))].sort();const dateList=[...new Set(daily.map(r=>r.arrive_date?.slice(0,10)))].sort();const colors={AMA:'#3b82f6',AMC:'#10b981',AMD:'#f59e0b'};const maxCount=Math.max(...daily.map(r=>parseInt(r.car_count||0)),1);const barW=Math.max(8,Math.min(24,Math.floor(560/(dateList.length*branchList.length+dateList.length))));const chartW=Math.max(700,dateList.length*(branchList.length*(barW+2)+10)+60);const chartH=200;const dayMap={};daily.forEach(r=>{const d=r.arrive_date?.slice(0,10);if(!dayMap[d])dayMap[d]={};dayMap[d][r.branch]=parseInt(r.car_count||0);});
+    let bars='',xLabels='';dateList.forEach((d,di)=>{const groupW=branchList.length*(barW+2),gx=50+di*(groupW+10);branchList.forEach((b,bi)=>{const val=dayMap[d]?.[b]||0,barH=val/maxCount*(chartH-40),x=gx+bi*(barW+2),y=chartH-20-barH;bars+=`<rect x="${x}" y="${y.toFixed(1)}" width="${barW}" height="${barH.toFixed(1)}" fill="${colors[b]||'#64748b'}" rx="2" opacity="0.85"><title>${b} ${d}: ${val}台</title></rect>`;if(val>0)bars+=`<text x="${(x+barW/2).toFixed(0)}" y="${(y-3).toFixed(0)}" text-anchor="middle" font-size="9" fill="#94a3b8">${val}</text>`;});xLabels+=`<text x="${(gx+(branchList.length*(barW+2))/2).toFixed(0)}" y="${chartH-4}" text-anchor="middle" font-size="9" fill="#64748b">${d.slice(8)}</text>`;});
+    let yAxis='';for(let i=0;i<=4;i++){const val=Math.round(maxCount*i/4),y=chartH-20-(i/4)*(chartH-40);yAxis+=`<line x1="45" y1="${y.toFixed(0)}" x2="${chartW}" y2="${y.toFixed(0)}" stroke="#2d3f56" stroke-width="1"/><text x="40" y="${(y+4).toFixed(0)}" text-anchor="end" font-size="9" fill="#64748b">${val}</text>`;}
+    const legend=branchList.map((b,i)=>`<rect x="${50+i*70}" y="8" width="10" height="10" fill="${colors[b]||'#64748b'}" rx="2"/><text x="${63+i*70}" y="17" font-size="11" fill="#94a3b8">${b}</text>`).join('');
+    document.getElementById('dailyChart').innerHTML=`<svg viewBox="0 0 ${chartW} ${chartH+10}" style="width:100%;height:auto;display:block">${yAxis}${bars}${xLabels}${legend}</svg>`;
+    const avgMap={};summary.forEach(r=>avgMap[r.branch]=n(r.daily_avg));
+    document.getElementById('tbDaily').innerHTML=daily.length?daily.map(r=>{const cnt=parseInt(r.car_count||0),avg=avgMap[r.branch]||0,diff=cnt-avg,pct=avg>0?(diff/avg*100):0;return`<tr><td>${r.arrive_date?.slice(0,10)}</td><td><span class="badge badge-blue">${r.branch}</span></td><td class="num" style="font-weight:700">${cnt}</td><td class="num ${diff>=0?'up':'down'}">${diff>=0?'▲':'▼'}${Math.abs(diff).toFixed(1)}<span style="font-size:11px;color:#64748b">(${pct>=0?'+':''}${pct.toFixed(0)}%)</span></td></tr>`;}).join(''):'<tr><td colspan="4" class="empty">無資料</td></tr>';
+  } catch(e){document.getElementById('dailyKPI').innerHTML=`<div style="color:#ef4444;padding:16px">${e.message}</div>`;}
+}
+
+// ══════ 收入明細分解 ══════
+async function loadIncomeBreakdown(period, branch) {
+  const el = document.getElementById('perfBreakdown');
+  const lblEl = document.getElementById('perfBreakdownPeriod');
+  if (!el) return;
+  if (!period) { el.innerHTML = '<div style="color:#64748b;font-size:13px">請選擇期間</div>'; return; }
+  el.innerHTML = '<div class="loading"><span class="spinner"></span>載入中</div>';
+  try {
+    const params = new URLSearchParams({ period });
+    if (branch) params.set('branch', branch);
+    const data = await (await fetch(`/api/stats/income-breakdown?${params}`)).json();
+    if (data.error) throw new Error(data.error);
+    if (lblEl) lblEl.textContent = `${period.slice(0,4)}年${period.slice(4)}月`;
+    const { branches: bdata } = data;
+    const BRANCHES = branch ? [branch] : ['AMA','AMC','AMD'];
+    const brColors = { AMA:'#3b82f6', AMC:'#10b981', AMD:'#f59e0b' };
+
+    // Build totals for all selected branches
+    const tot = (key) => BRANCHES.reduce((s, br) => s + (bdata[br]?.[key] || 0), 0);
+
+    // 定義列資料
+    const ROWS = [
+      { key:'bodywork_self',      label:'自費鈑烤',       indent:1, color:'#a78bfa', note:'帳類=一般，含鈑金/烤漆工單' },
+      { key:'bodywork_insurance', label:'保險鈑烤',       indent:1, color:'#a78bfa', note:'帳類=保險' },
+      { key:'bodywork_total',     label:'鈑烤合計',       indent:0, color:'#8b5cf6', bold:true },
+      { key:'extended',           label:'延保收入',       indent:0, color:'#10b981' },
+      { key:'general_no_bw',      label:'一般收入（非鈑烤）', indent:1, color:'#60a5fa', note:'帳類=一般，不含鈑金/烤漆工單' },
+      { key:'voucher',            label:'票劵收入',       indent:1, color:'#60a5fa', note:'帳類=票劵' },
+      { key:'external',           label:'外賣收入',       indent:1, color:'#2dd4bf', note:'來自零件銷售' },
+      { key:'general_total',      label:'一般營收',       indent:0, color:'#3b82f6', bold:true, note:'一般(非鈑烤)＋票劵＋外賣' },
+      { key:'paid_total',         label:'有費營收',       indent:0, color:'#f97316', bold:true, note:'一般營收＋保險鈑烤＋延保' },
+      { key:'other_total',        label:'無費成本（內結/保固/VSA/善意）', indent:0, color:'#64748b' },
+      { key:'all_total',          label:'全部營收',       indent:0, color:'#e2e8f0', bold:true, border:true, note:'有費＋無費' },
+    ];
+
+    // ── 組 HTML ──
+    // Header
+    let html = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr>
+        <th style="text-align:left;padding:9px 14px;background:#0f172a;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;min-width:200px">收入項目</th>`;
+    BRANCHES.forEach(br => {
+      const col = brColors[br] || '#94a3b8';
+      html += `<th style="text-align:right;padding:9px 14px;background:#0f172a;color:${col};font-size:12px;font-weight:800;border-bottom:1px solid #2d3f56;min-width:130px">${br}</th>`;
+    });
+    if (BRANCHES.length > 1) {
+      html += `<th style="text-align:right;padding:9px 14px;background:#0f172a;color:#94a3b8;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;min-width:120px">合計</th>`;
+    }
+    html += `</tr></thead><tbody>`;
+
+    ROWS.forEach(row => {
+      const isSep = row.border;
+      const rowBg = row.bold ? 'rgba(255,255,255,.03)' : 'transparent';
+      const borderTop = isSep ? 'border-top:2px solid #374151;' : '';
+      html += `<tr style="background:${rowBg}">
+        <td style="padding:9px 14px;border-bottom:1px solid rgba(45,63,86,.3);${borderTop}">
+          <div style="display:flex;align-items:center;gap:8px;padding-left:${row.indent ? 16 : 0}px">
+            ${row.indent ? '<div style="width:3px;height:14px;background:#2d3f56;border-radius:2px;flex-shrink:0"></div>' : ''}
+            <span style="font-size:13px;font-weight:${row.bold ? 800 : 600};color:${row.color || '#e2e8f0'}">${row.label}</span>
+            ${row.note ? `<span style="font-size:11px;color:#475569">${row.note}</span>` : ''}
+          </div>
+        </td>`;
+      BRANCHES.forEach(br => {
+        const d = bdata[br];
+        const v = d ? d[row.key] : 0;
+        html += `<td style="text-align:right;padding:9px 14px;border-bottom:1px solid rgba(45,63,86,.3);${borderTop}font-variant-numeric:tabular-nums">
+          <span style="font-size:${row.bold ? 14 : 13}px;font-weight:${row.bold ? 800 : 600};color:${row.color || '#e2e8f0'}">${fmtK(v)}</span>
+        </td>`;
+      });
+      if (BRANCHES.length > 1) {
+        const total = tot(row.key);
+        html += `<td style="text-align:right;padding:9px 14px;border-bottom:1px solid rgba(45,63,86,.3);${borderTop}font-variant-numeric:tabular-nums;background:rgba(255,255,255,.02)">
+          <span style="font-size:${row.bold ? 14 : 13}px;font-weight:${row.bold ? 800 : 600};color:${row.color || '#94a3b8'}">${fmtK(total)}</span>
+        </td>`;
+      }
+      html += `</tr>`;
+    });
+
+    // 其他帳類明細（展開在無費底下）
+    const firstBr = BRANCHES[0];
+    const allOtherDetail = [];
+    BRANCHES.forEach(br => {
+      (bdata[br]?.other_detail || []).forEach(od => {
+        if (!allOtherDetail.find(x => x.account_type === od.account_type))
+          allOtherDetail.push(od);
+      });
+    });
+    allOtherDetail.forEach(od => {
+      html += `<tr>
+        <td style="padding:6px 14px 6px 30px;border-bottom:1px solid rgba(45,63,86,.2)">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:3px;height:12px;background:#1e293b;border-radius:2px;flex-shrink:0"></div>
+            <span style="font-size:12px;color:#475569">${od.account_type}</span>
+          </div>
+        </td>`;
+      BRANCHES.forEach(br => {
+        const match = (bdata[br]?.other_detail || []).find(x => x.account_type === od.account_type);
+        const v = match ? match.total : 0;
+        html += `<td style="text-align:right;padding:6px 14px;border-bottom:1px solid rgba(45,63,86,.2);font-size:12px;color:#475569;font-variant-numeric:tabular-nums">${v > 0 ? fmtK(v) : '—'}</td>`;
+      });
+      if (BRANCHES.length > 1) html += `<td style="border-bottom:1px solid rgba(45,63,86,.2)"></td>`;
+      html += `</tr>`;
+    });
+
+    html += `</tbody></table></div>
+    <div style="font-size:11px;color:#475569;margin-top:10px;line-height:2">
+      💡 金額單位：千元（K）｜未稅｜<strong>自費鈑烤</strong>：帳類＝一般，工單內含鈑金或烤漆金額 &gt; 0
+    </div>`;
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div style="color:#ef4444;padding:16px">${e.message}</div>`;
+  }
+}
+
+// ══════ 業績進度 ══════
+async function loadPerformance(period, branch) {
+  const kpiEl    = document.getElementById('perfKPI');
+  const detailEl = document.getElementById('perfDetail');
+  const noConfEl = document.getElementById('perfNoConfig');
+  if (!kpiEl) return;
+  if (!period) {
+    kpiEl.innerHTML = '<div style="color:#64748b;padding:12px;font-size:13px">請先選擇期間後按查詢</div>';
+    if (detailEl) detailEl.innerHTML = ''; return;
+  }
+  kpiEl.innerHTML = '';
+  if (detailEl) detailEl.innerHTML = '<div class="loading"><span class="spinner"></span>載入中</div>';
+
+  // 同步載入收入明細分解
+  loadIncomeBreakdown(period, branch);
+
+  try {
+    const params = new URLSearchParams({ period });
+    if (branch) params.set('branch', branch);
+    const data = await (await fetch(`/api/stats/performance?${params}`)).json();
+    if (data.error) throw new Error(data.error);
+    const { metrics, results } = data;
+    if (!metrics.length) {
+      if (noConfEl) noConfEl.style.display = '';
+      if (detailEl) detailEl.innerHTML = '';
+      kpiEl.innerHTML = ''; return;
+    }
+    if (noConfEl) noConfEl.style.display = 'none';
+    const BRANCHES = branch ? [branch] : ['AMA','AMC','AMD'];
+    const brColors = { AMA:'#3b82f6', AMC:'#10b981', AMD:'#f59e0b' };
+    const TYPE_LABEL = { repair_income:'🔧 維修收入', parts:'🔩 零件銷售', boutique:'💎 精品配件' };
+    const FIELD_UNIT = { amount:'元', qty:'件', count:'筆' };
+    // ── KPI 整體達成率 cards ──
+    let kpiHtml = '';
+    BRANCHES.forEach(br => {
+      const col = brColors[br] || '#64748b';
+      const withTarget = results.filter(r => r.branches[br]?.target !== null).length;
+      const achieved   = results.filter(r => (r.branches[br]?.achieve_rate || 0) >= 100).length;
+      const sumRate    = results.reduce((s, r) => s + (r.branches[br]?.achieve_rate || 0), 0);
+      const avgRate    = withTarget > 0 ? sumRate / withTarget : null;
+      const rCol = avgRate === null ? '#64748b' : avgRate >= 100 ? '#10b981' : avgRate >= 80 ? '#f59e0b' : '#ef4444';
+      kpiHtml += `<div class="kpi-card"><div class="kpi-label" style="color:${col}">${br} 整體達成率</div><div class="kpi-value" style="color:${rCol}">${avgRate !== null ? avgRate.toFixed(1) + '%' : '—'}</div><div class="kpi-sub">${achieved} / ${withTarget} 項達標</div></div>`;
+    });
+    kpiEl.innerHTML = kpiHtml;
+    // ── 各指標詳細區塊 ──
+    const metricMap = {}; metrics.forEach(m => { metricMap[m.id] = m; });
+    let html = '';
+    results.forEach(r => {
+      const metric = metricMap[r.metric_id]; if (!metric) return;
+      const isAmt = metric.stat_field !== 'qty' && metric.stat_field !== 'count';
+      const unit  = metric.unit || FIELD_UNIT[metric.stat_field] || '元';
+      const fmtV = v => {
+        if (v === null || v === undefined) return '—';
+        if (isAmt && !metric.unit) return fmtK(v);
+        return metric.stat_field === 'qty' ? n(v).toFixed(1) : fmt(v);
+      };
+      html += `<div class="perf-block">
+        <div class="perf-block-header">
+          <span style="font-size:14px;font-weight:800;color:#e2e8f0">${metric.metric_name}</span>
+          <span class="badge badge-blue" style="font-size:11px">${TYPE_LABEL[metric.metric_type]||metric.metric_type}</span>
+          ${metric.description ? `<span style="font-size:12px;color:#64748b">${metric.description}</span>` : ''}
+          <span style="font-size:11px;color:#475569;margin-left:auto">單位：${unit}</span>
+        </div>
+        <div class="perf-block-body" style="grid-template-columns:repeat(${BRANCHES.length},1fr)">`;
+      BRANCHES.forEach((br, bi) => {
+        const d = r.branches[br] || {}; const col = brColors[br] || '#64748b';
+        const rate = d.achieve_rate;
+        const rCol = rate === null ? '#64748b' : rate >= 100 ? '#10b981' : rate >= 80 ? '#f59e0b' : '#ef4444';
+        const barW = rate !== null ? Math.min(100, rate).toFixed(0) : 0;
+        const yoy = d.yoy_growth;
+        html += `<div class="perf-cell${bi < BRANCHES.length - 1 ? '' : ''}">
+          <div style="font-size:11px;font-weight:800;color:${col};margin-bottom:10px;letter-spacing:.04em">${br}</div>
+          <div style="font-size:22px;font-weight:800;color:#e2e8f0;margin-bottom:6px">${fmtV(d.actual)}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+            <div style="flex:1;background:#0f172a;border-radius:3px;height:5px;min-width:40px">
+              <div style="width:${barW}%;height:5px;background:${rCol};border-radius:3px"></div>
+            </div>
+            <span style="font-size:13px;font-weight:800;color:${rCol};white-space:nowrap">${rate !== null ? rate.toFixed(1) + '%' : '無目標'}</span>
+          </div>
+          <div style="font-size:11px;color:#64748b;line-height:2">
+            <div style="display:flex;justify-content:space-between">
+              <span>目標</span>
+              <span style="color:#94a3b8;font-weight:600">${fmtV(d.target)}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span>去年同期</span>
+              <span>
+                <span style="color:#94a3b8;font-weight:600">${fmtV(d.last_year)}</span>
+                ${yoy !== null ? `<span style="color:${yoy >= 0 ? '#10b981' : '#ef4444'};margin-left:5px;font-size:11px">${yoy >= 0 ? '▲' : '▼'}${Math.abs(yoy).toFixed(1)}%</span>` : ''}
+              </span>
+            </div>
+          </div>
+        </div>`;
+      });
+      html += `</div></div>`;
+    });
+    if (detailEl) detailEl.innerHTML = html || '<div class="empty">此期間無業績資料</div>';
+    const lbl = document.getElementById('perfPeriodLabel');
+    if (lbl && period) lbl.textContent = `${period.slice(0,4)}年${period.slice(4)}月`;
+  } catch(e) {
+    if (detailEl) detailEl.innerHTML = `<div style="color:#ef4444;padding:16px">${e.message}</div>`;
+    kpiEl.innerHTML = '';
+  }
+}
+
+(async () => {
+  await loadPeriods();
+  await Promise.all([loadAll(), loadConfigs()]);
+})();
+</script>
+</body>
+</html>
