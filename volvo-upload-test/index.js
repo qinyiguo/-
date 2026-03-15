@@ -869,23 +869,29 @@ app.get('/api/periods', async (req, res) => {
 });
 
 // ============================================================
-// SA 銷售矩陣 API  ★ 完整改寫：支援 person_type + branch JOIN
+// SA 銷售矩陣 API
 // ============================================================
 app.get('/api/stats/sa-sales-matrix', async (req, res) => {
   const { period, branch, view } = req.query;
-  // ★ view = 'sales_person'（預設）或 'pickup_person'，決定此次要看哪個子分頁
-  const viewParam  = view === 'pickup_person' ? 'pickup_person' : 'sales_person';
-  const personCol  = viewParam; // GROUP BY 欄位跟著 view 走
+  const viewParam = view === 'pickup_person' ? 'pickup_person' : 'sales_person';
+
+  // ★ 技師施工用：取 tech_name_raw 的第一個名字
+  //   特殊共用帳號整組保留，其餘多人組合只取第一位
+  const SPECIAL_TECH = `'美容技師','外包雜項','不列績效','AMAB','AMAP','AMAE','隔熱紙技師'`;
+  const canonicalExpr = `
+    CASE
+      WHEN tech_name_raw IN (${SPECIAL_TECH})
+        THEN tech_name_raw
+      ELSE trim(split_part(
+             regexp_replace(tech_name_raw, '[/、,，[:space:]]+', '/', 'g'),
+             '/', 1))
+    END`;
 
   try {
     const allConfigs = (await pool.query(
       `SELECT id,config_name,filters,stat_method,person_type FROM sa_sales_config ORDER BY id`
     )).rows;
 
-    // ★ 只保留此 view 對應的設定：
-    //   person_type = 'sales_person' → 只出現在 sales 頁
-    //   person_type = 'pickup_person' → 只出現在 tech 頁
-    //   person_type = 'both'          → 兩頁都出現，但各自用該頁的 personCol
     const configs = allConfigs.filter(cfg => {
       const pt = cfg.person_type || 'sales_person';
       return pt === viewParam || pt === 'both';
@@ -908,8 +914,7 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
       if (!hasPartsConds && !hasWageConds) continue;
 
       if (hasWageConds) {
-        // ── 工資代碼路徑 ──
-        // tech_performance 本身沒有 SA 資訊，透過 work_order + branch 雙重 JOIN parts_sales 取得
+        // ══ 工資代碼路徑 ══
         const conds=[]; const params=[]; let idx=1;
         if (period) { conds.push(`tp.period=$${idx++}`); params.push(period); }
         if (branch) { conds.push(`tp.branch=$${idx++}`); params.push(branch); }
@@ -935,25 +940,36 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
                          cfg.stat_method === 'quantity' ? 'SUM(tp.standard_hours)' :
                          'COUNT(DISTINCT tp.work_order)';
 
-        // DISTINCT ON (branch, work_order)：各據點 work_order 可能重複，必須同時比對 branch
-        const r = await pool.query(`
-          SELECT tp.branch,
-            COALESCE(NULLIF(ps_uniq.person_name, ''), '（未知）') AS sa_name,
-            ${statExpr} AS val
-          FROM tech_performance tp
-          LEFT JOIN (
-            SELECT DISTINCT ON (branch, work_order)
-              branch,
-              work_order,
-              ${personCol} AS person_name
-            FROM parts_sales
-            ORDER BY branch, work_order, id
-          ) ps_uniq
-            ON  ps_uniq.work_order = tp.work_order
-            AND ps_uniq.branch     = tp.branch
-          ${where}
-          GROUP BY tp.branch, sa_name
-        `, params);
+        let r;
+        if (viewParam === 'pickup_person') {
+          // ★ 技師施工：直接用 tech_name_raw 解析出的標準名，不需 JOIN parts_sales
+          r = await pool.query(`
+            SELECT tp.branch,
+              COALESCE(NULLIF(${canonicalExpr}, ''), '（未知）') AS sa_name,
+              ${statExpr} AS val
+            FROM tech_performance tp
+            ${where}
+            GROUP BY tp.branch, sa_name
+          `, params);
+        } else {
+          // 銷售人員：JOIN parts_sales 取 sales_person（含 branch 防止跨廠撞號）
+          r = await pool.query(`
+            SELECT tp.branch,
+              COALESCE(NULLIF(ps_uniq.person_name, ''), '（未知）') AS sa_name,
+              ${statExpr} AS val
+            FROM tech_performance tp
+            LEFT JOIN (
+              SELECT DISTINCT ON (branch, work_order)
+                branch, work_order, sales_person AS person_name
+              FROM parts_sales
+              ORDER BY branch, work_order, id
+            ) ps_uniq
+              ON  ps_uniq.work_order = tp.work_order
+              AND ps_uniq.branch     = tp.branch
+            ${where}
+            GROUP BY tp.branch, sa_name
+          `, params);
+        }
 
         for (const row of r.rows) {
           const key = `${row.branch}|||${row.sa_name}`;
@@ -967,46 +983,99 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
         }
 
       } else {
-        // ── 零件銷售路徑 ── 依 view 的 personCol GROUP BY
-        const conds=[]; const params=[]; let idx=1;
-        if (period) { conds.push(`period=$${idx++}`); params.push(period); }
-        if (branch) { conds.push(`branch=$${idx++}`); params.push(branch); }
-        if (catCodes.length)  { conds.push(`category_code=ANY($${idx++})`); params.push(catCodes); }
-        if (funcCodes.length) { conds.push(`function_code=ANY($${idx++})`);  params.push(funcCodes); }
-        if (partNums.length)  { conds.push(`part_number=ANY($${idx++})`);    params.push(partNums); }
-        if (partTypes.length) { conds.push(`part_type=ANY($${idx++})`);      params.push(partTypes); }
-        const where = conds.length ? 'WHERE '+conds.join(' AND ') : '';
+        // ══ 零件銷售路徑 ══
+        if (viewParam === 'pickup_person') {
+          // ★ 技師施工：名單來自 tech_performance（canonical name），統計來自 parts_sales.pickup_person
+          //   tech_names CTE 先列出所有技師標準名，再 LEFT JOIN parts_sales
+          const tConds=[]; const params=[]; let idx=1;
+          if (period) { tConds.push(`tp.period=$${idx++}`); params.push(period); }
+          if (branch) { tConds.push(`tp.branch=$${idx++}`); params.push(branch); }
+          const techWhere = tConds.length ? 'WHERE '+tConds.join(' AND ') : '';
 
-        const r = await pool.query(`
-          SELECT branch,
-            COALESCE(NULLIF(${personCol}, ''), '（未知）') AS sa_name,
-            SUM(sale_qty)            AS qty,
-            SUM(sale_price_untaxed)  AS sales,
-            COUNT(*)                 AS cnt
-          FROM parts_sales ${where}
-          GROUP BY branch, sa_name
-        `, params);
+          // parts_sales JOIN 條件（period/branch 同值，重新加入 params）
+          const psConds = [];
+          if (period) { psConds.push(`ps.period=$${idx++}`); params.push(period); }
+          if (branch) { psConds.push(`ps.branch=$${idx++}`);  params.push(branch); }
+          if (catCodes.length)  { psConds.push(`ps.category_code=ANY($${idx++})`); params.push(catCodes); }
+          if (funcCodes.length) { psConds.push(`ps.function_code=ANY($${idx++})`);  params.push(funcCodes); }
+          if (partNums.length)  { psConds.push(`ps.part_number=ANY($${idx++})`);    params.push(partNums); }
+          if (partTypes.length) { psConds.push(`ps.part_type=ANY($${idx++})`);      params.push(partTypes); }
+          const psWhere = psConds.length ? 'AND '+psConds.join(' AND ') : '';
 
-        for (const row of r.rows) {
-          const key = `${row.branch}|||${row.sa_name}`;
-          if (!saMap[key]) saMap[key] = { branch:row.branch, sa_name:row.sa_name, configs:{} };
-          saMap[key].configs[cfg.id] = {
-            qty:   parseFloat(row.qty||0),
-            sales: parseFloat(row.sales||0),
-            cnt:   parseInt(row.cnt||0),
-          };
+          const r = await pool.query(`
+            WITH tech_names AS (
+              SELECT DISTINCT
+                tp.branch,
+                COALESCE(NULLIF(${canonicalExpr}, ''), '（未知）') AS canonical_name
+              FROM tech_performance tp
+              ${techWhere}
+            )
+            SELECT
+              tn.branch,
+              tn.canonical_name AS sa_name,
+              COALESCE(SUM(ps.sale_qty), 0)           AS qty,
+              COALESCE(SUM(ps.sale_price_untaxed), 0) AS sales,
+              COALESCE(COUNT(ps.id), 0)               AS cnt
+            FROM tech_names tn
+            LEFT JOIN parts_sales ps
+              ON  ps.pickup_person = tn.canonical_name
+              AND ps.branch        = tn.branch
+              ${psWhere}
+            GROUP BY tn.branch, tn.canonical_name
+          `, params);
+
+          for (const row of r.rows) {
+            const key = `${row.branch}|||${row.sa_name}`;
+            if (!saMap[key]) saMap[key] = { branch:row.branch, sa_name:row.sa_name, configs:{} };
+            saMap[key].configs[cfg.id] = {
+              qty:   parseFloat(row.qty||0),
+              sales: parseFloat(row.sales||0),
+              cnt:   parseInt(row.cnt||0),
+            };
+          }
+
+        } else {
+          // 銷售人員：直接 GROUP BY parts_sales.sales_person
+          const conds=[]; const params=[]; let idx=1;
+          if (period) { conds.push(`period=$${idx++}`); params.push(period); }
+          if (branch) { conds.push(`branch=$${idx++}`); params.push(branch); }
+          if (catCodes.length)  { conds.push(`category_code=ANY($${idx++})`); params.push(catCodes); }
+          if (funcCodes.length) { conds.push(`function_code=ANY($${idx++})`);  params.push(funcCodes); }
+          if (partNums.length)  { conds.push(`part_number=ANY($${idx++})`);    params.push(partNums); }
+          if (partTypes.length) { conds.push(`part_type=ANY($${idx++})`);      params.push(partTypes); }
+          const where = conds.length ? 'WHERE '+conds.join(' AND ') : '';
+
+          const r = await pool.query(`
+            SELECT branch,
+              COALESCE(NULLIF(sales_person, ''), '（未知）') AS sa_name,
+              SUM(sale_qty)            AS qty,
+              SUM(sale_price_untaxed)  AS sales,
+              COUNT(*)                 AS cnt
+            FROM parts_sales ${where}
+            GROUP BY branch, sa_name
+          `, params);
+
+          for (const row of r.rows) {
+            const key = `${row.branch}|||${row.sa_name}`;
+            if (!saMap[key]) saMap[key] = { branch:row.branch, sa_name:row.sa_name, configs:{} };
+            saMap[key].configs[cfg.id] = {
+              qty:   parseFloat(row.qty||0),
+              sales: parseFloat(row.sales||0),
+              cnt:   parseInt(row.cnt||0),
+            };
+          }
         }
       }
     }
 
-    // ★ 技師施工分頁：排除已出現在「銷售人員」名單的人名
-    // 原因：parts_sales 中 pickup_person 有時是 SA 本人，會造成重複
+    // ★ 技師施工分頁：排除已出現在 parts_sales.sales_person 的名字
+    //   因名單來源是 tech_performance，仍可能有 SA 同時出現在技師記錄中
     let excludeNames = new Set();
     if (viewParam === 'pickup_person') {
-      const exConds = []; const exParams = []; let exIdx = 1;
+      const exConds=[]; const exParams=[]; let exIdx=1;
       if (period) { exConds.push(`period=$${exIdx++}`); exParams.push(period); }
       if (branch) { exConds.push(`branch=$${exIdx++}`); exParams.push(branch); }
-      const exWhere = exConds.length ? 'WHERE ' + exConds.join(' AND ') : '';
+      const exWhere = exConds.length ? 'WHERE '+exConds.join(' AND ') : '';
       const exRes = await pool.query(
         `SELECT DISTINCT COALESCE(NULLIF(sales_person,''), '（未知）') AS name
          FROM parts_sales ${exWhere}`,
@@ -1016,11 +1085,15 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
     }
 
     const rows = Object.values(saMap)
-      .filter(row => !excludeNames.has(row.sa_name))  // ★ 過濾掉銷售人員名單中的人
+      .filter(row => !excludeNames.has(row.sa_name))
       .sort((a,b) => {
         if (a.branch!==b.branch) return a.branch<b.branch?-1:1;
-        return Object.values(b.configs).reduce((s,c)=>s+c.sales,0) - Object.values(a.configs).reduce((s,c)=>s+c.sales,0);
+        // 技師施工：依零件銷售總量排序（sales 可能都是 0 時用 cnt）
+        const bSum = Object.values(b.configs).reduce((s,c)=>s+c.sales+c.cnt,0);
+        const aSum = Object.values(a.configs).reduce((s,c)=>s+c.sales+c.cnt,0);
+        return bSum - aSum;
       });
+
     const colTotals = {};
     for (const cfg of configs) {
       colTotals[cfg.id] = rows.reduce((s,row) => {
