@@ -479,11 +479,36 @@
           <!-- 維修收入子欄位選項 -->
           <div id="perfSubfieldOptions" style="display:none">
             <div class="hint" style="margin:8px 0 12px">
-              選擇要加總的<strong>收入子欄位</strong>，並篩選帳類。可用於設定鈑烤、工資等分項指標。<br>
-              💡 範例：<strong>自費鈑烤</strong> → 帳類=一般，勾選「鈑金收入 ＋ 烤漆收入」<br>
-              💡 範例：<strong>保險鈑烤</strong> → 帳類=保險，勾選「合計（未稅）」
+              選擇<strong>工單篩選模式</strong>和<strong>判斷欄位</strong>，搭配帳類篩選，可精確設定鈑烤、工資等分項指標。
             </div>
-            <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:8px">📊 加總欄位（可多選）</div>
+
+            <!-- 工單篩選模式 -->
+            <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:8px">⚙️ 工單篩選模式</div>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">
+              <label class="stat-radio-item selected" id="woModeLabel-wo_has" onclick="selectWoMode('wo_has')">
+                <input type="radio" name="wo_mode" value="wo_has" checked>
+                <div class="stat-radio-info">
+                  <span class="stat-radio-name">🎯 包含指定欄位的工單 → SUM(合計未稅)</span>
+                  <span class="stat-radio-desc">工單中只要有任一勾選欄位 &gt; 0，就計入整張工單金額。<strong>用於：自費鈑烤</strong>（帳類=一般，欄位=鈑金＋烤漆）</span>
+                </div>
+              </label>
+              <label class="stat-radio-item" id="woModeLabel-wo_exclude" onclick="selectWoMode('wo_exclude')">
+                <input type="radio" name="wo_mode" value="wo_exclude">
+                <div class="stat-radio-info">
+                  <span class="stat-radio-name">🚫 排除指定欄位的工單 → SUM(合計未稅)</span>
+                  <span class="stat-radio-desc">工單中所有勾選欄位都 = 0，才計入整張工單金額。<strong>用於：一般收入扣鈑烤</strong>（帳類=一般，欄位=鈑金＋烤漆）</span>
+                </div>
+              </label>
+              <label class="stat-radio-item" id="woModeLabel-sum" onclick="selectWoMode('sum')">
+                <input type="radio" name="wo_mode" value="sum">
+                <div class="stat-radio-info">
+                  <span class="stat-radio-name">➕ 直接加總子欄位數值</span>
+                  <span class="stat-radio-desc">SUM(欄位1 ＋ 欄位2 ＋…)，不看整張工單金額。<strong>用於：保險鈑烤</strong>（帳類=保險，欄位=合計未稅）</span>
+                </div>
+              </label>
+            </div>
+
+            <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:8px">📊 判斷欄位（可多選）</div>
             <div class="part-type-grid" id="perfSubfieldChips" style="margin-bottom:14px"></div>
             <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:8px">帳類篩選（可多選，留空=全部）</div>
             <div class="part-type-grid" id="perfSubfieldAccountChips"></div>
@@ -743,6 +768,8 @@ function _buildSubfieldChips(selectedVals){
     return`<label class="part-type-chip ${on?'checked':''}" onclick="toggleGenericChip(this)" style="min-width:100px"><input type="checkbox" value="${sf.value}" ${on?'checked':''}>${sf.label}</label>`;
   }).join('');
 }
+function selectWoMode(val){document.querySelectorAll('input[name="wo_mode"]').forEach(el=>el.checked=el.value===val);['wo_has','wo_exclude','sum'].forEach(v=>document.getElementById(`woModeLabel-${v}`)?.classList.toggle('selected',v===val));}
+function getWoMode(){return document.querySelector('input[name="wo_mode"]:checked')?.value||'wo_has';}
 
 async function loadPerfMetrics(){try{perfMetrics=await(await fetch('/api/performance-metrics')).json();renderPerfMetricList();updatePerfTgtSelect();}catch(e){document.getElementById('perfMetricList').innerHTML=`<div style="color:#ef4444">${e.message}</div>`;}}
 
@@ -776,9 +803,9 @@ function _buildChips(containerId,values,selectedVals){document.getElementById(co
 function toggleGenericChip(el){const cb=el.querySelector('input');cb.checked=!cb.checked;el.classList.toggle('checked',cb.checked);}
 function _getCheckedValues(containerId){return[...document.querySelectorAll(`#${containerId} input:checked`)].map(cb=>cb.value);}
 
-function perfStartNew(){perfEditingId=null;perfFilters=[];document.getElementById('perfEditorTitle').textContent='新增指標';['perfName','perfDesc','perfUnit'].forEach(id=>document.getElementById(id).value='');document.getElementById('perfType').value='repair_income';onPerfTypeChange();_buildChips('perfRepairAccountTypes',PERF_ALL_ACCOUNT,[]);_buildChips('perfBoutiqueTypeChips',PERF_BOUTIQUE,['精品','配件']);_buildChips('perfBoutiqueAccountChips',PERF_ALL_ACCOUNT,[]);_buildSubfieldChips([]);_buildChips('perfSubfieldAccountChips',PERF_ALL_ACCOUNT,[]);selectPerfStatMethod('amount');renderPerfFilterList();document.getElementById('perfEditorPanel').style.display='';document.getElementById('perfName').focus();}
+function perfStartNew(){perfEditingId=null;perfFilters=[];document.getElementById('perfEditorTitle').textContent='新增指標';['perfName','perfDesc','perfUnit'].forEach(id=>document.getElementById(id).value='');document.getElementById('perfType').value='repair_income';onPerfTypeChange();_buildChips('perfRepairAccountTypes',PERF_ALL_ACCOUNT,[]);_buildChips('perfBoutiqueTypeChips',PERF_BOUTIQUE,['精品','配件']);_buildChips('perfBoutiqueAccountChips',PERF_ALL_ACCOUNT,[]);_buildSubfieldChips([]);_buildChips('perfSubfieldAccountChips',PERF_ALL_ACCOUNT,[]);selectWoMode('wo_has');selectPerfStatMethod('amount');renderPerfFilterList();document.getElementById('perfEditorPanel').style.display='';document.getElementById('perfName').focus();}
 
-function perfStartEdit(id){const m=perfMetrics.find(x=>x.id===id);if(!m)return;perfEditingId=id;perfFilters=(m.filters||[]).map(f=>({...f}));document.getElementById('perfEditorTitle').textContent=`編輯指標 — ${m.metric_name}`;document.getElementById('perfName').value=m.metric_name;document.getElementById('perfDesc').value=m.description||'';document.getElementById('perfUnit').value=m.unit||'';document.getElementById('perfType').value=m.metric_type;onPerfTypeChange();if(m.metric_type==='repair_income'){_buildChips('perfRepairAccountTypes',PERF_ALL_ACCOUNT,perfFilters.filter(f=>f.type==='account_type').map(f=>f.value));}if(m.metric_type==='repair_subfield'){const sf=perfFilters.filter(f=>f.type==='subfield').map(f=>f.value);const ac=perfFilters.filter(f=>f.type==='account_type').map(f=>f.value);_buildSubfieldChips(sf);_buildChips('perfSubfieldAccountChips',PERF_ALL_ACCOUNT,ac);}if(m.metric_type==='boutique'){const bt=perfFilters.filter(f=>f.type==='boutique_type').map(f=>f.value);const ac=perfFilters.filter(f=>f.type==='account_type').map(f=>f.value);_buildChips('perfBoutiqueTypeChips',PERF_BOUTIQUE,bt.length?bt:['精品','配件']);_buildChips('perfBoutiqueAccountChips',PERF_ALL_ACCOUNT,ac);}if(m.metric_type==='parts'){selectPerfStatMethod(m.stat_field||'amount');renderPerfFilterList();}document.getElementById('perfEditorPanel').style.display='';document.getElementById('perfEditorPanel').scrollIntoView({behavior:'smooth',block:'nearest'});}
+function perfStartEdit(id){const m=perfMetrics.find(x=>x.id===id);if(!m)return;perfEditingId=id;perfFilters=(m.filters||[]).map(f=>({...f}));document.getElementById('perfEditorTitle').textContent=`編輯指標 — ${m.metric_name}`;document.getElementById('perfName').value=m.metric_name;document.getElementById('perfDesc').value=m.description||'';document.getElementById('perfUnit').value=m.unit||'';document.getElementById('perfType').value=m.metric_type;onPerfTypeChange();if(m.metric_type==='repair_income'){_buildChips('perfRepairAccountTypes',PERF_ALL_ACCOUNT,perfFilters.filter(f=>f.type==='account_type').map(f=>f.value));}if(m.metric_type==='repair_subfield'){const sf=perfFilters.filter(f=>f.type==='subfield').map(f=>f.value);const ac=perfFilters.filter(f=>f.type==='account_type').map(f=>f.value);const wm=perfFilters.find(f=>f.type==='wo_mode')?.value||'wo_has';_buildSubfieldChips(sf);_buildChips('perfSubfieldAccountChips',PERF_ALL_ACCOUNT,ac);selectWoMode(wm);}if(m.metric_type==='boutique'){const bt=perfFilters.filter(f=>f.type==='boutique_type').map(f=>f.value);const ac=perfFilters.filter(f=>f.type==='account_type').map(f=>f.value);_buildChips('perfBoutiqueTypeChips',PERF_BOUTIQUE,bt.length?bt:['精品','配件']);_buildChips('perfBoutiqueAccountChips',PERF_ALL_ACCOUNT,ac);}if(m.metric_type==='parts'){selectPerfStatMethod(m.stat_field||'amount');renderPerfFilterList();}document.getElementById('perfEditorPanel').style.display='';document.getElementById('perfEditorPanel').scrollIntoView({behavior:'smooth',block:'nearest'});}
 
 function perfCancelEdit(){document.getElementById('perfEditorPanel').style.display='none';perfFilters=[];}
 function selectPerfStatMethod(val){document.querySelectorAll('input[name="perf_stat_method"]').forEach(el=>el.checked=el.value===val);['amount','qty','count'].forEach(v=>document.getElementById(`perfSmLabel-${v}`)?.classList.toggle('selected',v===val));}
@@ -805,8 +832,9 @@ async function perfSave(){
   else if(metric_type==='repair_subfield'){
     const sf=_getCheckedValues('perfSubfieldChips');
     const ac=_getCheckedValues('perfSubfieldAccountChips');
-    if(!sf.length){alert('請至少勾選一個加總欄位');return;}
-    filters=[...sf.map(v=>({type:'subfield',value:v})),...ac.map(v=>({type:'account_type',value:v}))];
+    const wm=getWoMode();
+    if(!sf.length){alert('請至少勾選一個判斷欄位');return;}
+    filters=[...sf.map(v=>({type:'subfield',value:v})),...ac.map(v=>({type:'account_type',value:v})),{type:'wo_mode',value:wm}];
     stat_field='amount';
   }
   else if(metric_type==='parts'){if(!perfFilters.length){alert('請至少新增一個篩選條件');return;}filters=perfFilters.map(({type,value})=>({type,value}));stat_field=getPerfStatMethod();}
