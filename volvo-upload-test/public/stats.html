@@ -380,15 +380,15 @@ function switchTab(tab){
 async function loadPeriods(){
   try{
     const periods=await(await fetch('/api/periods')).json();
-    const sel=document.getElementById('selPeriod');
-    periods.forEach(p=>{const opt=document.createElement('option');opt.value=p;opt.textContent=`${p.slice(0,4)}年${p.slice(4)}月`;sel.appendChild(opt);});
+    _allPeriods=periods;
     const now=new Date(),cur=`${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}`;
-    sel.value=periods.includes(cur)?cur:(periods[0]||'');
+    _currentPeriod=periods.includes(cur)?cur:(periods[0]||'');
+    renderPeriodSelectorStats('');
   }catch(e){}
 }
 
 async function loadAll(){
-  const period=document.getElementById('selPeriod').value, branch=document.getElementById('selBranch').value;
+  const period=getPeriod(), branch=document.getElementById('selBranch').value;
   document.getElementById('lastUpdate').textContent='更新中...';
   await Promise.all([loadRepair(period,branch),loadIncomeSummary(period,branch),loadTech(period,branch),loadParts(period,branch),loadBoutiqueAccessories(period,branch),loadTrend(branch),loadDaily(period,branch),loadSASales()]);
   document.getElementById('lastUpdate').textContent=`更新於 ${new Date().toLocaleTimeString('zh-TW')}`;
@@ -515,7 +515,7 @@ async function loadBoutiqueAccessories(period,branch){
 async function loadConfigs(){try{saConfigs=await(await fetch('/api/sa-config')).json();}catch(e){}}
 
 async function loadSASales(){
-  const period=document.getElementById('selPeriod').value,branch=document.getElementById('selBranch').value;
+  const period=getPeriod(),branch=document.getElementById('selBranch').value;
   const matrixEl=document.getElementById('saMatrix'),metaEl=document.getElementById('saMatrixMeta');
   matrixEl.innerHTML='<div style="padding:40px;text-align:center;color:#64748b"><span class="spinner"></span>載入中...</div>';
   const params=new URLSearchParams();if(period)params.set('period',period);if(branch)params.set('branch',branch);
