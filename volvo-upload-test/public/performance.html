@@ -70,6 +70,11 @@
   <!-- KPI 整體達成率 -->
   <div id="perfKPI" class="kpi-grid"></div>
 
+  <!-- 四大營收 KPI -->
+  <div id="revenueKPISection" style="margin-bottom:20px;display:none">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px" id="revenueKPIGrid"></div>
+  </div>
+
   <!-- 收入明細分解 -->
   <div class="card" id="perfBreakdownCard">
     <div class="card-title">
@@ -117,10 +122,89 @@ async function doLoad() {
   const branch = document.getElementById('selBranch').value;
   document.getElementById('lastUpdate').textContent = '更新中...';
   await Promise.all([
+    loadRevenueKPI(period, branch),
     loadIncomeBreakdown(period, branch),
     loadPerformance(period, branch),
   ]);
   document.getElementById('lastUpdate').textContent = `更新於 ${new Date().toLocaleTimeString('zh-TW')}`;
+}
+
+// ══ 四大營收 KPI ══
+async function loadRevenueKPI(period, branch) {
+  const section = document.getElementById('revenueKPISection');
+  const grid = document.getElementById('revenueKPIGrid');
+  if (!section || !grid) return;
+  if (!period) { section.style.display = 'none'; return; }
+
+  try {
+    const [bkRes, tgtRes] = await Promise.all([
+      fetch(`/api/stats/income-breakdown?period=${period}${branch?'&branch='+branch:''}`).then(r=>r.json()),
+      fetch(`/api/revenue-targets?period=${period}${branch?'&branch='+branch:''}`).then(r=>r.json()),
+    ]);
+    if (bkRes.error) throw new Error(bkRes.error);
+
+    const BRANCHES = branch ? [branch] : ['AMA','AMC','AMD'];
+    const brColors = { AMA:'#3b82f6', AMC:'#10b981', AMD:'#f59e0b' };
+    const tMap = {};
+    (Array.isArray(tgtRes) ? tgtRes : []).forEach(t => { tMap[t.branch] = t; });
+    const bdata = bkRes.branches || {};
+
+    const METRICS = [
+      { key:'paid',     label:'🔶 有費營收', color:'#f97316', actualKey:'paid_total'     },
+      { key:'bodywork', label:'🔨 鈑烤營收', color:'#8b5cf6', actualKey:'bodywork_total' },
+      { key:'general',  label:'💙 一般營收', color:'#3b82f6', actualKey:'general_total'  },
+      { key:'extended', label:'🛡️ 延保營收', color:'#10b981', actualKey:'extended'       },
+    ];
+
+    let html = '';
+    METRICS.forEach(m => {
+      html += `<div style="background:#1a2332;border:1px solid #2d3f56;border-radius:12px;padding:16px;overflow:hidden">
+        <div style="font-size:13px;font-weight:800;color:${m.color};margin-bottom:14px">${m.label}</div>
+        <div style="display:grid;grid-template-columns:repeat(${BRANCHES.length},1fr);gap:0;border-top:1px solid #2d3f56">`;
+
+      BRANCHES.forEach((br, bi) => {
+        const col  = brColors[br] || '#64748b';
+        const t    = tMap[br] || {};
+        const bd   = bdata[br] || {};
+        const actual = bd[m.actualKey] || 0;
+        const target = parseFloat(t[`${m.key}_target`] || 0);
+        const ly     = parseFloat(t[`${m.key}_last_year`] || 0);
+        const rate   = target > 0 ? actual / target * 100 : null;
+        const yoy    = ly > 0 ? (actual - ly) / ly * 100 : null;
+        const rCol   = rate === null ? '#64748b' : rate >= 100 ? '#10b981' : rate >= 80 ? '#f59e0b' : '#ef4444';
+        const barW   = rate !== null ? Math.min(100, rate).toFixed(0) : 0;
+        const borderR = bi < BRANCHES.length - 1 ? 'border-right:1px solid #2d3f56;' : '';
+
+        html += `<div style="padding:12px 14px;${borderR}">
+          <div style="font-size:11px;font-weight:800;color:${col};margin-bottom:8px">${br}</div>
+          <div style="font-size:18px;font-weight:800;color:#e2e8f0;margin-bottom:2px">${fmtK(actual)}</div>
+          <div style="display:flex;align-items:center;gap:5px;margin-bottom:8px">
+            <div style="flex:1;background:#0f172a;border-radius:3px;height:4px">
+              <div style="width:${barW}%;height:4px;background:${rCol};border-radius:3px;transition:width .4s"></div>
+            </div>
+            <span style="font-size:12px;font-weight:800;color:${rCol};white-space:nowrap">${rate !== null ? rate.toFixed(1)+'%' : '—'}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:auto 1fr;gap:2px 8px;font-size:11px;color:#64748b;align-items:center">
+            <span>目標</span>
+            <span style="text-align:right;color:#94a3b8;font-weight:600">${target > 0 ? fmtK(target) : '未設定'}</span>
+            <span>去年同期</span>
+            <span style="text-align:right">
+              <span style="color:#94a3b8;font-weight:600">${ly > 0 ? fmtK(ly) : '—'}</span>
+              ${yoy !== null ? `<span style="color:${yoy>=0?'#10b981':'#ef4444'};margin-left:4px">${yoy>=0?'▲':'▼'}${Math.abs(yoy).toFixed(1)}%</span>` : ''}
+            </span>
+          </div>
+        </div>`;
+      });
+
+      html += `</div></div>`;
+    });
+
+    grid.innerHTML = html;
+    section.style.display = '';
+  } catch(e) {
+    grid.innerHTML = `<div style="color:#ef4444;padding:12px">${e.message}</div>`;
+    section.style.display = '';
+  }
 }
 
 // ══ 收入明細分解 ══
