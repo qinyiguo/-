@@ -962,6 +962,109 @@ app.put('/api/performance-targets/batch', async (req, res) => {
 });
 
 // ============================================================
+// 收入明細分解 API
+// ============================================================
+app.get('/api/stats/income-breakdown', async (req, res) => {
+  const { period, branch } = req.query;
+  if (!period) return res.status(400).json({ error: 'period 為必填' });
+  try {
+    const params = [period]; let idx = 2;
+    const branchCond = branch ? ` AND branch=$${idx++}` : '';
+    if (branch) params.push(branch);
+
+    // ── 維修收入：各帳類 + 鈑烤判斷 ──
+    const riRes = await pool.query(`
+      SELECT
+        branch,
+        account_type,
+        SUM(total_untaxed)  AS total,
+        SUM(CASE WHEN COALESCE(bodywork_income,0) > 0 OR COALESCE(paint_income,0) > 0
+                 THEN total_untaxed ELSE 0 END) AS with_bodywork,
+        SUM(CASE WHEN COALESCE(bodywork_income,0) = 0 AND COALESCE(paint_income,0) = 0
+                 THEN total_untaxed ELSE 0 END) AS without_bodywork
+      FROM repair_income
+      WHERE period=$1${branchCond}
+      GROUP BY branch, account_type
+    `, params);
+
+    // ── 外賣收入（零件銷售） ──
+    const cfgRow = await pool.query(`SELECT config_value FROM income_config WHERE config_key='external_sales_category'`);
+    const externalCategory = cfgRow.rows[0]?.config_value || '外賣';
+    const extParams = [period, externalCategory]; let eidx = 3;
+    const extBranchCond = branch ? ` AND branch=$${eidx++}` : '';
+    if (branch) extParams.push(branch);
+    const extRes = await pool.query(`
+      SELECT branch, SUM(sale_price_untaxed) AS ext_sales
+      FROM parts_sales
+      WHERE period=$1 AND category=$2${extBranchCond}
+      GROUP BY branch
+    `, extParams);
+    const extMap = {};
+    extRes.rows.forEach(r => { extMap[r.branch] = parseFloat(r.ext_sales || 0); });
+
+    // ── 彙整各據點 ──
+    const BRANCHES = branch ? [branch] : ['AMA','AMC','AMD'];
+    const result = {};
+
+    BRANCHES.forEach(br => {
+      const rows = riRes.rows.filter(r => r.branch === br);
+      const byType = {};
+      rows.forEach(r => { byType[r.account_type] = r; });
+
+      // 輔助：找帳類（模糊比對）
+      const findType = (kw) => rows.find(r => r.account_type?.includes(kw));
+      const sumType  = (kw) => parseFloat(findType(kw)?.total || 0);
+
+      const ins     = findType('保險');
+      const gen     = findType('一般');
+      const ext_row = findType('延保');
+      const vou     = findType('票');
+
+      const bodywork_insurance = parseFloat(ins?.total || 0);        // 保險帳類全部視為鈑烤
+      const bodywork_self      = parseFloat(gen?.with_bodywork || 0); // 一般帳類中含鈑金/烤漆的工單
+      const bodywork_total     = bodywork_insurance + bodywork_self;
+
+      const extended           = parseFloat(ext_row?.total || 0);
+      const general_no_bw      = parseFloat(gen?.without_bodywork || 0); // 一般去掉鈑烤工單
+      const voucher            = parseFloat(vou?.total || 0);
+      const external           = extMap[br] || 0;
+
+      // 一般營收 = 一般(非鈑烤) + 票劵 + 外賣
+      const general_total = general_no_bw + voucher + external;
+
+      // 有費營收 = 一般營收 + 保險鈑烤 + 延保
+      const paid_total = general_total + bodywork_insurance + extended;
+
+      // 其他帳類（內結/保固/VSA/善意）
+      const OTHER_KWS = ['內結','保固','VSA','vsa','善意'];
+      const other_rows = rows.filter(r => OTHER_KWS.some(k => r.account_type?.toLowerCase().includes(k.toLowerCase())));
+      const other_total = other_rows.reduce((s, r) => s + parseFloat(r.total || 0), 0);
+
+      // 全部營收 = paid_total + 其他帳類（外賣已含在 general_total）
+      const all_total = paid_total + other_total;
+
+      result[br] = {
+        bodywork_self,
+        bodywork_insurance,
+        bodywork_total,
+        extended,
+        general_no_bw,
+        voucher,
+        external,
+        general_total,
+        paid_total,
+        other_total,
+        all_total,
+        // 細節（其他帳類明細）
+        other_detail: other_rows.map(r => ({ account_type: r.account_type, total: parseFloat(r.total || 0) })),
+      };
+    });
+
+    res.json({ branches: result, externalCategory });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============================================================
 // 業績統計 API
 // ============================================================
 app.get('/api/stats/performance', async (req, res) => {
