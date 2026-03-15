@@ -172,6 +172,24 @@ const initDatabase = async () => {
         UNIQUE(metric_id, branch, period)
       )`);
 
+    // ── 四大營收目標（有費/鈑烤/一般/延保）──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS revenue_targets (
+        id              SERIAL PRIMARY KEY,
+        branch          VARCHAR(10)  NOT NULL,
+        period          VARCHAR(6)   NOT NULL,
+        paid_target     NUMERIC(15,2),
+        paid_last_year  NUMERIC(15,2),
+        bodywork_target     NUMERIC(15,2),
+        bodywork_last_year  NUMERIC(15,2),
+        general_target  NUMERIC(15,2),
+        general_last_year   NUMERIC(15,2),
+        extended_target NUMERIC(15,2),
+        extended_last_year  NUMERIC(15,2),
+        updated_at      TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(branch, period)
+      )`);
+
     console.log('[initDB] ✅ 所有表格建立完成');
   } catch (err) {
     console.error('[initDB] ❌ 失敗:', err.message);
@@ -782,8 +800,26 @@ app.get('/api/debug/columns', async (req, res) => {
 
 app.get('/api/periods', async (req, res) => {
   try {
-    const r = await pool.query(`SELECT DISTINCT period FROM repair_income UNION SELECT DISTINCT period FROM tech_performance UNION SELECT DISTINCT period FROM parts_sales ORDER BY period DESC`);
-    res.json(r.rows.map(r => r.period));
+    // DB 中實際有資料的期間
+    const r = await pool.query(`
+      SELECT DISTINCT period FROM repair_income
+      UNION SELECT DISTINCT period FROM tech_performance
+      UNION SELECT DISTINCT period FROM parts_sales
+      UNION SELECT DISTINCT period FROM revenue_targets
+      ORDER BY period DESC`);
+    const dbPeriods = new Set(r.rows.map(r => r.period));
+
+    // 補全：今年 + 去年 的全部 12 個月
+    const now = new Date();
+    const extraPeriods = new Set();
+    for (let y = now.getFullYear(); y >= now.getFullYear() - 1; y--) {
+      for (let m = 12; m >= 1; m--) {
+        extraPeriods.add(`${y}${String(m).padStart(2,'0')}`);
+      }
+    }
+    // 合併並排序（DB資料優先保留，extra補充沒出現的）
+    const allPeriods = [...new Set([...dbPeriods, ...extraPeriods])].sort().reverse();
+    res.json(allPeriods);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -959,6 +995,110 @@ app.put('/api/performance-targets/batch', async (req, res) => {
     await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
   } finally { client.release(); }
+});
+
+// ============================================================
+// 營收目標 API
+// ============================================================
+app.get('/api/revenue-targets', async (req, res) => {
+  const { period, branch } = req.query;
+  try {
+    const conds = []; const params = []; let idx = 1;
+    if (period) { conds.push(`period=$${idx++}`); params.push(period); }
+    if (branch) { conds.push(`branch=$${idx++}`); params.push(branch); }
+    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+    res.json((await pool.query(`SELECT * FROM revenue_targets ${where} ORDER BY period, branch`, params)).rows);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/revenue-targets/batch', async (req, res) => {
+  const { entries } = req.body; // [{branch, period, paid_target, paid_last_year, ...}]
+  if (!Array.isArray(entries) || !entries.length) return res.status(400).json({ error: '無資料' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const e of entries) {
+      if (!e.branch || !e.period) continue;
+      await client.query(`
+        INSERT INTO revenue_targets (branch,period,paid_target,paid_last_year,bodywork_target,bodywork_last_year,general_target,general_last_year,extended_target,extended_last_year,updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+        ON CONFLICT (branch,period) DO UPDATE SET
+          paid_target=$3,paid_last_year=$4,bodywork_target=$5,bodywork_last_year=$6,
+          general_target=$7,general_last_year=$8,extended_target=$9,extended_last_year=$10,updated_at=NOW()
+      `, [e.branch, e.period,
+          e.paid_target||null, e.paid_last_year||null,
+          e.bodywork_target||null, e.bodywork_last_year||null,
+          e.general_target||null, e.general_last_year||null,
+          e.extended_target||null, e.extended_last_year||null]);
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true, count: entries.length });
+  } catch(err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); }
+  finally { client.release(); }
+});
+
+app.delete('/api/revenue-targets', async (req, res) => {
+  const { branch, period } = req.query;
+  if (!branch || !period) return res.status(400).json({ error: 'branch 和 period 為必填' });
+  try {
+    await pool.query(`DELETE FROM revenue_targets WHERE branch=$1 AND period=$2`, [branch, period]);
+    res.json({ ok: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// 解析營收目標 Excel
+app.post('/api/upload-revenue-targets', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: '請選擇檔案' });
+  try {
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    if (!rows.length) return res.status(400).json({ error: 'Excel 無資料列' });
+
+    const numCol = (row, ...keys) => {
+      for (const k of keys) {
+        const v = row[k]; const n = parseFloat(v);
+        if (v !== '' && v !== undefined && !isNaN(n)) return n;
+      }
+      return null;
+    };
+
+    const entries = [];
+    for (const row of rows) {
+      const branch = String(row['據點']||row['Branch']||'').trim().toUpperCase();
+      const period = String(row['期間']||row['Period']||'').trim().replace(/\D/g,'');
+      if (!['AMA','AMC','AMD'].includes(branch) || period.length !== 6) continue;
+      entries.push({
+        branch, period,
+        paid_target:        numCol(row,'有費營收_目標','有費目標'),
+        paid_last_year:     numCol(row,'有費營收_去年','有費去年'),
+        bodywork_target:    numCol(row,'鈑烤營收_目標','鈑烤目標'),
+        bodywork_last_year: numCol(row,'鈑烤營收_去年','鈑烤去年'),
+        general_target:     numCol(row,'一般營收_目標','一般目標'),
+        general_last_year:  numCol(row,'一般營收_去年','一般去年'),
+        extended_target:    numCol(row,'延保營收_目標','延保目標'),
+        extended_last_year: numCol(row,'延保營收_去年','延保去年'),
+      });
+    }
+    if (!entries.length) return res.status(400).json({ error: '找不到有效資料列，請確認欄位名稱與格式' });
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const e of entries) {
+        await client.query(`
+          INSERT INTO revenue_targets (branch,period,paid_target,paid_last_year,bodywork_target,bodywork_last_year,general_target,general_last_year,extended_target,extended_last_year,updated_at)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+          ON CONFLICT (branch,period) DO UPDATE SET
+            paid_target=$3,paid_last_year=$4,bodywork_target=$5,bodywork_last_year=$6,
+            general_target=$7,general_last_year=$8,extended_target=$9,extended_last_year=$10,updated_at=NOW()
+        `, [e.branch,e.period,e.paid_target,e.paid_last_year,e.bodywork_target,e.bodywork_last_year,e.general_target,e.general_last_year,e.extended_target,e.extended_last_year]);
+      }
+      await client.query('COMMIT');
+      res.json({ ok: true, count: entries.length, entries });
+    } catch(err) { await client.query('ROLLBACK'); throw err; }
+    finally { client.release(); }
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 // ============================================================
