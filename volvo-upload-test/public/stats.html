@@ -173,7 +173,7 @@
       <button class="tab" onclick="switchTab('tech')">👨‍🔧 技師工資</button>
       <button class="tab" onclick="switchTab('parts')">🔩 零件銷售</button>
       <button class="tab" onclick="switchTab('boutique')">💎 精品配件銷售</button>
-      <button class="tab" onclick="switchTab('sa-sales')">📋 指標銷售</button>
+      <button class="tab" onclick="switchTab('sa-sales')">📋 指標銷售與施工</button>
       <button class="tab" onclick="switchTab('trend')">📈 月份趨勢</button>
       <button class="tab" onclick="switchTab('daily')">📅 每日進廠台數</button>
     </div>
@@ -533,7 +533,11 @@ async function loadSASales(){
     html+=`<th style="${thBase}${saCorner(0,'border-right:1px solid #2d3f56;width:40px')}" rowspan="2">#</th>`;
     html+=`<th style="${thBase}${saCorner(40,'border-right:1px solid #2d3f56;width:70px')}" rowspan="2">據點</th>`;
     html+=`<th style="${thBase}${saCorner(110,'border-right:2px solid #374151;min-width:130px')}" rowspan="2">銷售人員</th>`;
-    configs.forEach((cfg,ci)=>{const col=cfgColors[ci%cfgColors.length];html+=`<th colspan="1" style="${thBase}background:#0f172a;text-align:center;color:${col};border-right:${ci<configs.length-1?'2px solid #2d3f56':'1px solid #2d3f56'};border-bottom:1px solid #1e293b">${cfg.config_name}</th>`;});
+    configs.forEach((cfg,ci)=>{
+    const col=cfgColors[ci%cfgColors.length];
+    const ptIcon = cfg.person_type==='pickup_person' ? ' 🔧' : ' 👤';
+    html+=`<th colspan="1" style="${thBase}background:#0f172a;text-align:center;color:${col};border-right:${ci<configs.length-1?'2px solid #2d3f56':'1px solid #2d3f56'};border-bottom:1px solid #1e293b">${cfg.config_name}${ptIcon}</th>`;
+});
     html+=`</tr><tr>`;configs.forEach((cfg,ci)=>{html+=`<th style="${thNum}background:#0f172a;border-right:${ci<configs.length-1?'2px solid #2d3f56':'1px solid #2d3f56'};font-size:11px">${methodUnitMap[cfg.stat_method]||'金額(元)'}</th>`;});html+=`</tr></thead><tbody>`;
     let rowIdx=0;
     for(const br of branches){
