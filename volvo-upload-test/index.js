@@ -1028,9 +1028,10 @@ app.get('/api/stats/performance', async (req, res) => {
             )).rows[0]?.v || 0);
 
           } else if (metric.metric_type === 'repair_subfield') {
-            // 維修收入子欄位：自選加總欄位 + 帳類篩選
-            // 例：自費鈑烤 = account_type=['一般'], subfields=['bodywork_income','paint_income']
-            //     保險鈑烤 = account_type=['保險'], subfields=['total_untaxed']
+            // 維修收入子欄位，三種模式：
+            //   sum      : SUM(col1+col2+...) — 直接加總子欄位數值
+            //   wo_has   : 找出 col1>0 OR col2>0 的工單，SUM(total_untaxed) — 自費鈑烤
+            //   wo_exclude: 找出 col1=0 AND col2=0 的工單，SUM(total_untaxed) — 一般扣鈑烤
             const VALID_COLS = new Set([
               'bodywork_income','paint_income','engine_wage','parts_income',
               'accessories_income','boutique_income','carwash_income',
@@ -1038,16 +1039,28 @@ app.get('/api/stats/performance', async (req, res) => {
             ]);
             const acTypes  = filters.filter(f => f.type === 'account_type').map(f => f.value);
             const subfields = filters.filter(f => f.type === 'subfield' && VALID_COLS.has(f.value)).map(f => f.value);
+            const woMode   = filters.find(f => f.type === 'wo_mode')?.value || 'sum';
             if (!subfields.length) {
               actual = 0;
             } else {
-              const sumExpr = subfields.map(c => `COALESCE(${c},0)`).join(' + ');
               const p = [period, br]; let i = 3;
               let where = 'period=$1 AND branch=$2';
               if (acTypes.length) { where += ` AND account_type=ANY($${i++})`; p.push(acTypes); }
-              actual = parseFloat((await pool.query(
-                `SELECT COALESCE(SUM(${sumExpr}),0) as v FROM repair_income WHERE ${where}`, p
-              )).rows[0]?.v || 0);
+              let q;
+              if (woMode === 'wo_has') {
+                // 含鈑金/烤漆的工單 → 加總整張工單金額（自費鈑烤）
+                const hasCond = subfields.map(c => `COALESCE(${c},0) > 0`).join(' OR ');
+                q = `SELECT COALESCE(SUM(total_untaxed),0) as v FROM repair_income WHERE ${where} AND (${hasCond})`;
+              } else if (woMode === 'wo_exclude') {
+                // 不含鈑金/烤漆的工單 → 加總整張工單金額（一般收入扣鈑烤）
+                const excCond = subfields.map(c => `COALESCE(${c},0) = 0`).join(' AND ');
+                q = `SELECT COALESCE(SUM(total_untaxed),0) as v FROM repair_income WHERE ${where} AND (${excCond})`;
+              } else {
+                // 直接加總子欄位數值
+                const sumExpr = subfields.map(c => `COALESCE(${c},0)`).join(' + ');
+                q = `SELECT COALESCE(SUM(${sumExpr}),0) as v FROM repair_income WHERE ${where}`;
+              }
+              actual = parseFloat((await pool.query(q, p)).rows[0]?.v || 0);
             }
           }
         } catch(e) { actual = 0; }
