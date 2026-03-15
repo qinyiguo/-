@@ -190,6 +190,21 @@ const initDatabase = async () => {
         UNIQUE(branch, period)
       )`);
 
+    // ── 業績預估（各據點主管輸入本月預估）──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS revenue_estimates (
+        id              SERIAL PRIMARY KEY,
+        branch          VARCHAR(10)  NOT NULL,
+        period          VARCHAR(6)   NOT NULL,
+        paid_estimate     NUMERIC(15,2),
+        bodywork_estimate NUMERIC(15,2),
+        general_estimate  NUMERIC(15,2),
+        extended_estimate NUMERIC(15,2),
+        note            TEXT DEFAULT '',
+        updated_at      TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(branch, period)
+      )`);
+
     console.log('[initDB] ✅ 所有表格建立完成');
   } catch (err) {
     console.error('[initDB] ❌ 失敗:', err.message);
@@ -1246,6 +1261,45 @@ app.post('/api/upload-revenue-targets-native', upload.single('file'), async (req
     } catch(err) { await client.query('ROLLBACK'); throw err; }
     finally { client.release(); }
   } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============================================================
+// 業績預估 API
+// ============================================================
+app.get('/api/revenue-estimates', async (req, res) => {
+  const { period, branch } = req.query;
+  try {
+    const conds = []; const params = []; let idx = 1;
+    if (period) { conds.push(`period=$${idx++}`); params.push(period); }
+    if (branch) { conds.push(`branch=$${idx++}`); params.push(branch); }
+    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+    res.json((await pool.query(`SELECT * FROM revenue_estimates ${where} ORDER BY branch`, params)).rows);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/revenue-estimates/batch', async (req, res) => {
+  const { entries } = req.body;
+  if (!Array.isArray(entries) || !entries.length) return res.status(400).json({ error: '無資料' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const e of entries) {
+      if (!e.branch || !e.period) continue;
+      await client.query(`
+        INSERT INTO revenue_estimates (branch,period,paid_estimate,bodywork_estimate,general_estimate,extended_estimate,note,updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+        ON CONFLICT (branch,period) DO UPDATE SET
+          paid_estimate=$3, bodywork_estimate=$4, general_estimate=$5,
+          extended_estimate=$6, note=$7, updated_at=NOW()
+      `, [e.branch, e.period,
+          e.paid_estimate||null, e.bodywork_estimate||null,
+          e.general_estimate||null, e.extended_estimate||null,
+          e.note||'']);
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch(err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); }
+  finally { client.release(); }
 });
 
 // ============================================================
