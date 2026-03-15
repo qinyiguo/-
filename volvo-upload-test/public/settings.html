@@ -399,17 +399,39 @@
 
         <!-- 方式 A：原生格式 -->
         <div style="background:#0f172a;border:1px solid #3b82f6;border-radius:10px;padding:16px;margin-bottom:14px">
-          <div style="font-size:13px;font-weight:800;color:#3b82f6;margin-bottom:10px">⭐ 方式 A：直接上傳你的目標 Excel（推薦）</div>
-          <div style="font-size:12px;color:#94a3b8;line-height:1.9;margin-bottom:12px">
-            支援你現有的「橫式分區」格式：每個營收類型一個區塊，欄是 1月～12月，列是 AMA/AMC/AMD。<br>
-            系統自動識別「<strong>有效營收</strong>」「<strong>鈑烤</strong>」「<strong>一般營收</strong>」「<strong>延保</strong>」四個區塊，單位 <strong>K（千元）自動換算</strong>。
+          <div style="font-size:13px;font-weight:800;color:#3b82f6;margin-bottom:10px">⭐ 方式 A：直接上傳你的 Excel（推薦）</div>
+          <div style="font-size:12px;color:#94a3b8;line-height:1.9;margin-bottom:14px">
+            支援「橫式分區」格式：每個營收類型一個區塊，欄是 1月～12月，列是 AMA/AMC/AMD。<br>
+            系統自動識別「<strong>有效營收</strong>」「<strong>鈑烤</strong>」「<strong>一般營收</strong>」「<strong>延保</strong>」四個區塊，單位 <strong>K（千元）自動換算</strong>。<br>
+            💡 <strong>目標</strong>和<strong>去年實績</strong>用同一個格式，上傳時選擇類型即可，可分兩次上傳。
           </div>
+
+          <!-- 類型選擇 -->
+          <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+            <label id="revTypeLabel-target" onclick="selectRevType('target')"
+              style="display:flex;align-items:center;gap:8px;cursor:pointer;background:rgba(59,130,246,.15);border:1.5px solid #3b82f6;border-radius:8px;padding:10px 16px;flex:1;min-width:180px">
+              <input type="radio" name="rev_data_type" value="target" checked style="accent-color:#3b82f6;width:15px;height:15px">
+              <div>
+                <div style="font-size:13px;font-weight:800;color:#3b82f6">🎯 月目標</div>
+                <div style="font-size:11px;color:#64748b;margin-top:2px">這份 Excel 是今年的月目標</div>
+              </div>
+            </label>
+            <label id="revTypeLabel-last_year" onclick="selectRevType('last_year')"
+              style="display:flex;align-items:center;gap:8px;cursor:pointer;background:#1e293b;border:1.5px solid #2d3f56;border-radius:8px;padding:10px 16px;flex:1;min-width:180px">
+              <input type="radio" name="rev_data_type" value="last_year" style="accent-color:#10b981;width:15px;height:15px">
+              <div>
+                <div style="font-size:13px;font-weight:800;color:#94a3b8">📅 去年實績</div>
+                <div style="font-size:11px;color:#64748b;margin-top:2px">這份 Excel 是去年的實際結果</div>
+              </div>
+            </label>
+          </div>
+
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
             <select id="revNativeYear" class="form-select">
               <option value="">選擇年份...</option>
             </select>
             <input type="file" id="revNativeFileInput" accept=".xlsx,.xls" style="display:none" onchange="uploadRevNativeFile(this)">
-            <button class="btn btn-primary" onclick="document.getElementById('revNativeFileInput').click()">📤 上傳原生 Excel</button>
+            <button class="btn btn-primary" onclick="document.getElementById('revNativeFileInput').click()">📤 上傳</button>
             <span id="revNativeStatus" style="font-size:13px;color:#64748b"></span>
           </div>
           <div id="revNativeResult" style="margin-top:10px"></div>
@@ -1008,20 +1030,23 @@ async function loadRevPeriods() {
 async function uploadRevNativeFile(input) {
   const file = input.files[0]; if (!file) return;
   const year = document.getElementById('revNativeYear').value;
+  const dataType = document.querySelector('input[name="rev_data_type"]:checked')?.value || 'target';
   if (!year) { alert('請先選擇年份'); input.value = ''; return; }
   const statusEl = document.getElementById('revNativeStatus');
   const resultEl = document.getElementById('revNativeResult');
+  const typeLabel = dataType === 'last_year' ? '去年實績' : '月目標';
   statusEl.textContent = '解析中...'; resultEl.innerHTML = '';
   const formData = new FormData();
   formData.append('file', file);
   formData.append('year', year);
+  formData.append('dataType', dataType);
   try {
     const res = await (await fetch('/api/upload-revenue-targets-native', { method:'POST', body: formData })).json();
     if (res.error) throw new Error(res.error);
     statusEl.textContent = '';
     const periodList = Object.entries(res.summary || {}).sort(([a],[b])=>a.localeCompare(b)).map(([p,brs]) => `${p.slice(0,4)}年${p.slice(4)}月（${brs.join('/')}）`).join('、');
     resultEl.innerHTML = `<div style="background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;padding:12px 16px;font-size:13px;color:#10b981">
-      ✅ 成功匯入 ${res.year} 年共 <strong>${res.count}</strong> 筆資料<br>
+      ✅ 成功匯入 ${res.year} 年 <strong>${typeLabel}</strong> 共 <strong>${res.count}</strong> 筆<br>
       <span style="font-size:12px;color:#64748b">識別欄位：${(res.fields||[]).join('、')}</span><br>
       <span style="font-size:12px;color:#64748b">${periodList}</span>
     </div>`;
@@ -1031,6 +1056,19 @@ async function uploadRevNativeFile(input) {
     statusEl.textContent = '';
     resultEl.innerHTML = `<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:12px 16px;font-size:13px;color:#ef4444">❌ ${e.message}</div>`;
   }
+}
+
+function selectRevType(val) {
+  ['target','last_year'].forEach(v => {
+    const lbl = document.getElementById(`revTypeLabel-${v}`);
+    const isSelected = v === val;
+    if (lbl) {
+      lbl.style.background = isSelected ? 'rgba(59,130,246,.15)' : '#1e293b';
+      lbl.style.borderColor = isSelected ? (v==='target'?'#3b82f6':'#10b981') : '#2d3f56';
+    }
+    const radio = lbl?.querySelector('input[type=radio]');
+    if (radio) radio.checked = isSelected;
+  });
 }
 
 async function loadRevManual() {
