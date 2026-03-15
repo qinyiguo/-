@@ -68,9 +68,15 @@
   </div>
 
   <!-- Tab 切換 -->
-  <div style="display:flex;gap:2px;background:#1e293b;border-radius:8px;padding:3px;margin-bottom:20px;width:fit-content">
-    <button id="tab-btn-progress" class="tab active" onclick="switchPerfTab('progress')">📊 業績進度</button>
-    <button id="tab-btn-estimate" class="tab" onclick="switchPerfTab('estimate')">✏️ 業績預估設定</button>
+  <div style="display:flex;gap:0;background:#0f172a;border:1px solid #2d3f56;border-radius:10px;padding:4px;margin-bottom:20px;width:fit-content">
+    <button id="tab-btn-progress" onclick="switchPerfTab('progress')"
+      style="padding:8px 20px;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;background:#3b82f6;color:#fff;transition:all .15s">
+      📊 業績進度
+    </button>
+    <button id="tab-btn-estimate" onclick="switchPerfTab('estimate')"
+      style="padding:8px 20px;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;transition:all .15s">
+      ✏️ 業績預估設定
+    </button>
   </div>
 
   <!-- ══ 業績進度 ══ -->
@@ -163,7 +169,11 @@ async function loadPeriods() {
 function switchPerfTab(tab) {
   ['progress','estimate'].forEach(t => {
     document.getElementById(`tab-${t}`).style.display = t === tab ? '' : 'none';
-    document.getElementById(`tab-btn-${t}`)?.classList.toggle('active', t === tab);
+    const btn = document.getElementById(`tab-btn-${t}`);
+    if (btn) {
+      btn.style.background = t === tab ? '#3b82f6' : 'transparent';
+      btn.style.color = t === tab ? '#fff' : '#64748b';
+    }
   });
   if (tab === 'estimate') renderEstTable();
 }
@@ -251,10 +261,9 @@ async function saveAllEstimates() {
     if (data.error) throw new Error(data.error);
     msgEl.textContent = `✅ 預估已儲存（${period.slice(0,4)}年${period.slice(4)}月）`;
     msgEl.style.color = '#10b981';
-    // 切回進度頁時重新載入
-    if (document.getElementById('tab-progress').style.display !== 'none') {
-      loadRevenueKPI(period, branch);
-    }
+    // 儲存後切回業績進度並自動更新
+    switchPerfTab('progress');
+    await loadRevenueKPI(period, branch);
   } catch(e) {
     msgEl.textContent = '❌ ' + e.message;
     msgEl.style.color = '#ef4444';
