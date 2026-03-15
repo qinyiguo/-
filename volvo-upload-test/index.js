@@ -862,24 +862,68 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
     const saMap = {};
     for (const cfg of configs) {
       const filters = cfg.filters||[];
-      const catCodes = filters.filter(f=>f.type==='category_code').map(f=>f.value);
+      const catCodes  = filters.filter(f=>f.type==='category_code').map(f=>f.value);
       const funcCodes = filters.filter(f=>f.type==='function_code').map(f=>f.value);
-      const partNums = filters.filter(f=>f.type==='part_number').map(f=>f.value);
+      const partNums  = filters.filter(f=>f.type==='part_number').map(f=>f.value);
       const partTypes = filters.filter(f=>f.type==='part_type').map(f=>f.value);
-      if (!catCodes.length&&!funcCodes.length&&!partNums.length&&!partTypes.length) continue;
-      const conds=[]; const params=[]; let idx=1;
-      if (period) { conds.push(`period=$${idx++}`); params.push(period); }
-      if (branch) { conds.push(`branch=$${idx++}`); params.push(branch); }
-      if (catCodes.length)  { conds.push(`category_code=ANY($${idx++})`); params.push(catCodes); }
-      if (funcCodes.length) { conds.push(`function_code=ANY($${idx++})`);  params.push(funcCodes); }
-      if (partNums.length)  { conds.push(`part_number=ANY($${idx++})`);    params.push(partNums); }
-      if (partTypes.length) { conds.push(`part_type=ANY($${idx++})`);      params.push(partTypes); }
-      const where = conds.length ? 'WHERE '+conds.join(' AND ') : '';
-      const r = await pool.query(`SELECT branch,COALESCE(NULLIF(sales_person,''),'（未知）') AS sa_name,SUM(sale_qty) AS qty,SUM(sale_price_untaxed) AS sales,COUNT(*) AS cnt FROM parts_sales ${where} GROUP BY branch,sa_name`,params);
-      for (const row of r.rows) {
-        const key = `${row.branch}|||${row.sa_name}`;
-        if (!saMap[key]) saMap[key] = { branch:row.branch, sa_name:row.sa_name, configs:{} };
-        saMap[key].configs[cfg.id] = { qty:parseFloat(row.qty||0), sales:parseFloat(row.sales||0), cnt:parseInt(row.cnt||0) };
+      const workCodes = filters.filter(f=>f.type==='work_code').map(f=>f.value);
+
+      const hasPartsConds = catCodes.length||funcCodes.length||partNums.length||partTypes.length;
+      const hasWageConds  = workCodes.length;
+      if (!hasPartsConds && !hasWageConds) continue;
+
+      if (hasWageConds) {
+        // 工資代碼：從 tech_performance 查詢，以技師為單位
+        const conds=[]; const params=[]; let idx=1;
+        if (period) { conds.push(`period=$${idx++}`); params.push(period); }
+        if (branch) { conds.push(`branch=$${idx++}`); params.push(branch); }
+        // work_code 支援精確和範圍（格式：from-to）
+        const wcConds = [];
+        for (const wc of workCodes) {
+          if (wc.includes('-')) {
+            const [from, to] = wc.split('-').map(s=>s.trim());
+            wcConds.push(`work_code BETWEEN $${idx++} AND $${idx++}`);
+            params.push(from, to);
+          } else {
+            wcConds.push(`work_code=$${idx++}`);
+            params.push(wc);
+          }
+        }
+        if (wcConds.length) conds.push(`(${wcConds.join(' OR ')})`);
+        const where = conds.length ? 'WHERE '+conds.join(' AND ') : '';
+        const statExpr = cfg.stat_method === 'amount' ? 'SUM(wage)' :
+                         cfg.stat_method === 'quantity' ? 'SUM(standard_hours)' :
+                         'COUNT(DISTINCT work_order)';
+        const r = await pool.query(
+          `SELECT branch, COALESCE(NULLIF(tech_name_clean,''),'（未知）') AS sa_name,
+           ${statExpr} AS val FROM tech_performance ${where} GROUP BY branch, sa_name`, params
+        );
+        for (const row of r.rows) {
+          const key = `${row.branch}|||${row.sa_name}`;
+          if (!saMap[key]) saMap[key] = { branch:row.branch, sa_name:row.sa_name, configs:{} };
+          const v = parseFloat(row.val||0);
+          saMap[key].configs[cfg.id] = { qty: cfg.stat_method==='quantity'?v:0, sales: cfg.stat_method==='amount'?v:0, cnt: cfg.stat_method==='count'?v:parseInt(v) };
+        }
+      } else {
+        // 零件銷售
+        const conds=[]; const params=[]; let idx=1;
+        if (period) { conds.push(`period=$${idx++}`); params.push(period); }
+        if (branch) { conds.push(`branch=$${idx++}`); params.push(branch); }
+        if (catCodes.length)  { conds.push(`category_code=ANY($${idx++})`); params.push(catCodes); }
+        if (funcCodes.length) { conds.push(`function_code=ANY($${idx++})`);  params.push(funcCodes); }
+        if (partNums.length)  { conds.push(`part_number=ANY($${idx++})`);    params.push(partNums); }
+        if (partTypes.length) { conds.push(`part_type=ANY($${idx++})`);      params.push(partTypes); }
+        const where = conds.length ? 'WHERE '+conds.join(' AND ') : '';
+        const r = await pool.query(
+          `SELECT branch,COALESCE(NULLIF(sales_person,''),'（未知）') AS sa_name,
+           SUM(sale_qty) AS qty,SUM(sale_price_untaxed) AS sales,COUNT(*) AS cnt
+           FROM parts_sales ${where} GROUP BY branch,sa_name`, params
+        );
+        for (const row of r.rows) {
+          const key = `${row.branch}|||${row.sa_name}`;
+          if (!saMap[key]) saMap[key] = { branch:row.branch, sa_name:row.sa_name, configs:{} };
+          saMap[key].configs[cfg.id] = { qty:parseFloat(row.qty||0), sales:parseFloat(row.sales||0), cnt:parseInt(row.cnt||0) };
+        }
       }
     }
     const rows = Object.values(saMap).sort((a,b) => {
