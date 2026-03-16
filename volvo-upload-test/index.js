@@ -116,7 +116,6 @@ const initDatabase = async () => {
         created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
       )`);
     await client.query(`ALTER TABLE sa_sales_config ADD COLUMN IF NOT EXISTS stat_method VARCHAR(20) NOT NULL DEFAULT 'amount'`);
-    // ★ 新增：人員分類欄位（sales_person=銷售人員 / pickup_person=技師施工）
     await client.query(`ALTER TABLE sa_sales_config ADD COLUMN IF NOT EXISTS person_type VARCHAR(20) NOT NULL DEFAULT 'sales_person'`);
 
     await client.query(`
@@ -497,7 +496,7 @@ app.post('/api/upload', upload.array('files', 8), async (req, res) => {
 });
 
 // ============================================================
-// SA 銷售設定 API  ★ 修改：加入 person_type
+// SA 銷售設定 API
 // ============================================================
 app.get('/api/sa-config', async (req, res) => {
   try {
@@ -530,7 +529,6 @@ app.put('/api/sa-config/:id', async (req, res) => {
   if (!config_name) return res.status(400).json({ error:'名稱為必填' });
   if (!Array.isArray(filters)||!filters.length) return res.status(400).json({ error:'至少需要一個篩選條件' });
   const method = ['amount','quantity','count'].includes(stat_method) ? stat_method : 'amount';
-  // ★ 驗證 person_type（支援 'both'）
   const ptype  = ['sales_person','pickup_person','both'].includes(person_type) ? person_type : 'sales_person';
   try {
     const r = await pool.query(
@@ -853,7 +851,7 @@ const buildQueryConds = (period, branch) => {
   if (branch) { conds.push(`branch=$${idx++}`); params.push(branch); }
   return { conds, params, idx };
 };
- 
+
 // 維修收入查詢
 app.get('/api/query/repair_income', async (req, res) => {
   try {
@@ -872,7 +870,7 @@ app.get('/api/query/repair_income', async (req, res) => {
     res.json({ rows: r.rows, count: r.rows.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
- 
+
 // 技師績效查詢
 app.get('/api/query/tech_performance', async (req, res) => {
   try {
@@ -889,7 +887,7 @@ app.get('/api/query/tech_performance', async (req, res) => {
     res.json({ rows: r.rows, count: r.rows.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
- 
+
 // 零件銷售查詢
 app.get('/api/query/parts_sales', async (req, res) => {
   try {
@@ -907,7 +905,7 @@ app.get('/api/query/parts_sales', async (req, res) => {
     res.json({ rows: r.rows, count: r.rows.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
- 
+
 // 業務查詢
 app.get('/api/query/business_query', async (req, res) => {
   try {
@@ -955,8 +953,6 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
   const { period, branch, view } = req.query;
   const viewParam = view === 'pickup_person' ? 'pickup_person' : 'sales_person';
 
-  // ★ 技師施工用：取 tech_name_raw 的第一個名字
-  //   特殊共用帳號整組保留，其餘多人組合只取第一位
   const SPECIAL_TECH = `'美容技師','外包雜項','不列績效','AMAB','AMAP','AMAE','隔熱紙技師'`;
   const canonicalExpr = `
     CASE
@@ -994,7 +990,6 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
       if (!hasPartsConds && !hasWageConds) continue;
 
       if (hasWageConds) {
-        // ══ 工資代碼路徑 ══
         const conds=[]; const params=[]; let idx=1;
         if (period) { conds.push(`tp.period=$${idx++}`); params.push(period); }
         if (branch) { conds.push(`tp.branch=$${idx++}`); params.push(branch); }
@@ -1022,7 +1017,6 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
 
         let r;
         if (viewParam === 'pickup_person') {
-          // ★ 技師施工：直接用 tech_name_raw 解析出的標準名，不需 JOIN parts_sales
           r = await pool.query(`
             SELECT tp.branch,
               COALESCE(NULLIF(${canonicalExpr}, ''), '（未知）') AS sa_name,
@@ -1032,7 +1026,6 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
             GROUP BY tp.branch, sa_name
           `, params);
         } else {
-          // 銷售人員：JOIN parts_sales 取 sales_person（含 branch 防止跨廠撞號）
           r = await pool.query(`
             SELECT tp.branch,
               COALESCE(NULLIF(ps_uniq.person_name, ''), '（未知）') AS sa_name,
@@ -1063,16 +1056,12 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
         }
 
       } else {
-        // ══ 零件銷售路徑 ══
         if (viewParam === 'pickup_person') {
-          // ★ 技師施工：名單來自 tech_performance（canonical name），統計來自 parts_sales.pickup_person
-          //   tech_names CTE 先列出所有技師標準名，再 LEFT JOIN parts_sales
           const tConds=[]; const params=[]; let idx=1;
           if (period) { tConds.push(`tp.period=$${idx++}`); params.push(period); }
           if (branch) { tConds.push(`tp.branch=$${idx++}`); params.push(branch); }
           const techWhere = tConds.length ? 'WHERE '+tConds.join(' AND ') : '';
 
-          // parts_sales JOIN 條件（period/branch 同值，重新加入 params）
           const psConds = [];
           if (period) { psConds.push(`ps.period=$${idx++}`); params.push(period); }
           if (branch) { psConds.push(`ps.branch=$${idx++}`);  params.push(branch); }
@@ -1115,7 +1104,6 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
           }
 
         } else {
-          // 銷售人員：直接 GROUP BY parts_sales.sales_person
           const conds=[]; const params=[]; let idx=1;
           if (period) { conds.push(`period=$${idx++}`); params.push(period); }
           if (branch) { conds.push(`branch=$${idx++}`); params.push(branch); }
@@ -1148,8 +1136,6 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
       }
     }
 
-    // ★ 技師施工分頁：排除已出現在 parts_sales.sales_person 的名字
-    //   因名單來源是 tech_performance，仍可能有 SA 同時出現在技師記錄中
     let excludeNames = new Set();
     if (viewParam === 'pickup_person') {
       const exConds=[]; const exParams=[]; let exIdx=1;
@@ -1168,7 +1154,6 @@ app.get('/api/stats/sa-sales-matrix', async (req, res) => {
       .filter(row => !excludeNames.has(row.sa_name))
       .sort((a,b) => {
         if (a.branch!==b.branch) return a.branch<b.branch?-1:1;
-        // 技師施工：依零件銷售總量排序（sales 可能都是 0 時用 cnt）
         const bSum = Object.values(b.configs).reduce((s,c)=>s+c.sales+c.cnt,0);
         const aSum = Object.values(a.configs).reduce((s,c)=>s+c.sales+c.cnt,0);
         return bSum - aSum;
@@ -1782,12 +1767,14 @@ app.get('/api/stats/income-breakdown', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ============================================================
+// 零配精品銷售目標上傳 API（支援扁平格式 + 區塊格式）
+// ============================================================
 app.post('/api/upload-performance-targets-native', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: '請選擇檔案' });
   const year = String(req.body.year || '').trim();
   const dataType = String(req.body.dataType || 'target').trim();
   if (!year.match(/^\d{4}$/)) return res.status(400).json({ error: '請指定正確的年份' });
-  const valueField = dataType === 'last_year' ? 'last_year_value' : 'target_value';
 
   try {
     const workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: false, cellNF: true, cellText: false });
@@ -1797,6 +1784,150 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
       if (SHEET_KWS.some(kw => sn.includes(kw))) { sheetName = sn; break; }
     }
     const sheet = workbook.Sheets[sheetName];
+
+    // ── 偵測格式：object 模式讀取，判斷是否為扁平格式 ──
+    // 扁平格式：第一欄=期間, 第二欄=據點, 其餘欄位={指標名稱}_目標 / {指標名稱}_去年
+    const objRows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: true });
+    const firstRowKeys = objRows.length ? Object.keys(objRows[0]) : [];
+    const isFlatFormat =
+      firstRowKeys.some(k => k === '期間' || k === 'Period') &&
+      firstRowKeys.some(k => k === '據點' || k === 'Branch');
+
+    if (isFlatFormat) {
+      // ═══════════════════════════════════════════════════════
+      //  扁平格式解析
+      //  每列 = 一個 period+branch 組合的所有指標數值
+      //  欄位命名：{指標名稱}_目標  /  {指標名稱}_去年
+      // ═══════════════════════════════════════════════════════
+      const headers = firstRowKeys;
+      const targetCols   = headers.filter(h => h.endsWith('_目標'));
+      const lastYearCols = headers.filter(h => h.endsWith('_去年'));
+
+      const allMetricNames = [
+        ...new Set([
+          ...targetCols.map(h => h.replace(/_目標$/, '')),
+          ...lastYearCols.map(h => h.replace(/_去年$/, '')),
+        ]),
+      ];
+
+      if (!allMetricNames.length) {
+        return res.status(400).json({
+          error: '找不到指標欄位，欄位名稱需以 _目標 或 _去年 結尾',
+          debug: { sampleHeaders: headers.slice(0, 8) },
+        });
+      }
+
+      const BRANCHES = ['AMA', 'AMC', 'AMD'];
+      // entriesMap[metricName][`${branch}|||${period}`] = { branch, period, target_value, last_year_value }
+      const entriesMap = {};
+      allMetricNames.forEach(m => { entriesMap[m] = {}; });
+
+      for (const row of objRows) {
+        const rawPeriod = String(row['期間'] || row['Period'] || '').trim().replace(/\D/g, '');
+        const rawBranch = String(row['據點'] || row['Branch'] || '').trim().toUpperCase();
+        if (rawPeriod.length !== 6 || !BRANCHES.includes(rawBranch)) continue;
+
+        for (const metricName of allMetricNames) {
+          const tv = parseFloat(String(row[`${metricName}_目標`] ?? '').replace(/,/g, ''));
+          const ly = parseFloat(String(row[`${metricName}_去年`] ?? '').replace(/,/g, ''));
+          const key = `${rawBranch}|||${rawPeriod}`;
+          entriesMap[metricName][key] = {
+            branch: rawBranch,
+            period: rawPeriod,
+            target_value:    isNaN(tv) ? null : tv,
+            last_year_value: isNaN(ly) ? null : ly,
+          };
+        }
+      }
+
+      const totalEntries = Object.values(entriesMap).reduce((s, m) => s + Object.keys(m).length, 0);
+      if (!totalEntries) {
+        return res.status(400).json({
+          error: '找不到有效資料列，請確認期間格式（例：202601）和據點（AMA/AMC/AMD）',
+        });
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        const createdMetrics = [];
+        const existingMetrics = [];
+        const metricIdMap = {};
+        const strip = s => s.replace(/銷售目標|目標|銷售/g, '').replace(/\s+/g, '').trim();
+        const allDbMetrics = (await client.query('SELECT id, metric_name FROM performance_metrics')).rows;
+
+        for (const metricName of allMetricNames) {
+          let found = allDbMetrics.find(m => m.metric_name === metricName);
+          if (!found) found = allDbMetrics.find(m => strip(m.metric_name) === strip(metricName));
+          if (found) {
+            metricIdMap[metricName] = found.id;
+            existingMetrics.push(metricName);
+          } else {
+            const ins = await client.query(
+              `INSERT INTO performance_metrics (metric_name, description, metric_type, filters, stat_field, unit)
+               VALUES ($1, '', 'parts', '[]', 'amount', '') RETURNING id`,
+              [metricName]
+            );
+            metricIdMap[metricName] = ins.rows[0].id;
+            createdMetrics.push(metricName);
+          }
+        }
+
+        // 同時寫入 target_value 和 last_year_value（哪個有值寫哪個，不覆蓋既有）
+        let count = 0;
+        for (const [metricName, rowMap] of Object.entries(entriesMap)) {
+          const metricId = metricIdMap[metricName];
+          for (const entry of Object.values(rowMap)) {
+            await client.query(`
+              INSERT INTO performance_targets (metric_id, branch, period, target_value, last_year_value, updated_at)
+              VALUES ($1,$2,$3,$4,$5,NOW())
+              ON CONFLICT (metric_id, branch, period) DO UPDATE SET
+                target_value    = CASE WHEN $4 IS NOT NULL THEN $4 ELSE performance_targets.target_value END,
+                last_year_value = CASE WHEN $5 IS NOT NULL THEN $5 ELSE performance_targets.last_year_value END,
+                updated_at      = NOW()
+            `, [metricId, entry.branch, entry.period, entry.target_value, entry.last_year_value]);
+            count++;
+          }
+        }
+
+        await client.query('COMMIT');
+
+        // 整理期間摘要
+        const summaryMap = {};
+        for (const rowMap of Object.values(entriesMap)) {
+          for (const e of Object.values(rowMap)) {
+            if (!summaryMap[e.period]) summaryMap[e.period] = new Set();
+            summaryMap[e.period].add(e.branch);
+          }
+        }
+        const summary = {};
+        Object.entries(summaryMap).forEach(([p, s]) => { summary[p] = [...s].sort(); });
+
+        res.json({
+          ok: true,
+          count,
+          year,
+          format: 'flat',
+          dataType: 'both',
+          metrics: allMetricNames.map(n => ({ name: n, rawTitle: n })),
+          created: createdMetrics,
+          existing: existingMetrics,
+          summary,
+        });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+      return; // 扁平格式已處理完畢
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  區塊格式（原有邏輯，維持不動）
+    // ═══════════════════════════════════════════════════════
+    const valueField = dataType === 'last_year' ? 'last_year_value' : 'target_value';
     const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
 
     const BRANCHES = ['AMA','AMC','AMD'];
@@ -1807,7 +1938,6 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
       return m ? parseInt(m[1]) : -1;
     };
 
-    // ★ cleanTitle：移除常見後綴，以及 (k)/(K) 標記（僅影響 metric 名稱比對，不影響數值）
     const cleanTitle = (title) => {
       return String(title)
         .replace(/銷售目標|目標|銷售|（k）|\(k\)|\(K\)|\（K\）/gi, '')
@@ -1820,7 +1950,7 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
 
     for (let ri = 0; ri < raw.length; ri++) {
       const row = raw[ri];
-      if (!row || row.every(c => c === '' || c === null)) continue;
+      if (!row || row.every(c => c === '' || c === null || c === undefined)) continue;
 
       const monthCells = row.map((c, ci) => ({ mo: toMonthIndex(c), ci })).filter(x => x.mo > 0);
       if (monthCells.length >= 6) {
@@ -1829,8 +1959,6 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
         continue;
       }
 
-      // ★ 區塊標題判斷：第一格有文字，其後欄位都是空的
-      // 注意：xlsx.js 對 data_type='n' 的空 cell 可能回傳 0 而非 ''，所以用 isCellEmpty 判斷
       const isCellEmpty = (v) => v === '' || v === 0 || v === null || v === undefined;
       const firstCell = row[0];
       if (firstCell && typeof firstCell === 'string' && isCellEmpty(row[1]) && isCellEmpty(row[2])) {
@@ -1851,14 +1979,15 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
 
       if (!data[curName].branches[matchedBranch]) data[curName].branches[matchedBranch] = {};
       for (const [mo, ci] of Object.entries(monthColIdx)) {
-        // ★ 값 직접 사용（不乘1000）；允許儲存 0（去年 0 件是有意義的資料）
         const v = parseFloat(String(row[ci] ?? '').replace(/,/g, ''));
         if (!isNaN(v)) data[curName].branches[matchedBranch][parseInt(mo)] = v;
       }
     }
 
     if (!Object.keys(data).length) {
-      return res.status(400).json({ error: '找不到任何區塊資料，請確認格式（需有標題列＋月份列＋AMA/AMC/AMD資料列）' });
+      return res.status(400).json({
+        error: '找不到任何區塊資料，請確認格式（需有標題列＋月份列＋AMA/AMC/AMD資料列）',
+      });
     }
 
     const client = await pool.connect();
@@ -1875,17 +2004,13 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
         return match || null;
       };
 
-      // ★ 指標查找：先嘗試 cleaned 名稱，若找不到再嘗試原始標題與部分模糊匹配
       const findMetricId = async (cleanedName, rawTitle) => {
-        // 1. 精確比對 cleaned 名稱
         let r = await client.query(`SELECT id FROM performance_metrics WHERE metric_name=$1`, [cleanedName]);
         if (r.rows.length) return r.rows[0].id;
-        // 2. 精確比對原始標題
         if (rawTitle && rawTitle !== cleanedName) {
           r = await client.query(`SELECT id FROM performance_metrics WHERE metric_name=$1`, [rawTitle]);
           if (r.rows.length) return r.rows[0].id;
         }
-        // 3. DB 內的 metric_name 清理後與 cleanedName 比對（處理 DB 儲存了帶後綴的名稱）
         const allMetrics = (await client.query(`SELECT id, metric_name FROM performance_metrics`)).rows;
         const strip = s => s.replace(/銷售目標|目標|銷售/g,'').replace(/\s+/g,'').trim();
         const match = allMetrics.find(m => strip(m.metric_name) === cleanedName || strip(m.metric_name) === strip(cleanedName));
@@ -1923,7 +2048,6 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
         for (const [branch, monthData] of Object.entries(info.branches)) {
           for (const [mo, val] of Object.entries(monthData)) {
             const period = `${year}${String(mo).padStart(2,'0')}`;
-            // ★ 直接四捨五入儲存，不乘以 1000（Excel 值已是元/件數）
             const storedVal = Math.round(val);
             await client.query(`
               INSERT INTO performance_targets (metric_id,branch,period,${valueField},updated_at)
@@ -1938,7 +2062,6 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
       await client.query('COMMIT');
       res.json({
         ok: true, count, year, dataType,
-        // ★ 去年實績上傳說明：year 應填「今年」（目標所在年份），不是資料的實際年份
         yearNote: dataType === 'last_year'
           ? `去年實績已存入 ${year} 年各月的 last_year_value。確認：目標期間也是 ${year} 年？`
           : null,
@@ -1947,9 +2070,15 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
         createdFromSA,
         existing: Object.keys(data).filter(n => !createdMetrics.includes(n)),
       });
-    } catch(err) { await client.query('ROLLBACK'); throw err; }
-    finally { client.release(); }
-  } catch(err) { res.status(500).json({ error: err.message }); }
+    } catch(err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================================
