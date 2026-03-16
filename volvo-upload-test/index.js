@@ -1749,13 +1749,15 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
         continue;
       }
 
-      // 區塊標題判斷：第一格有文字，其後兩格為空
+      // ★ 區塊標題判斷：第一格有文字，其後欄位都是空的
+      // 注意：xlsx.js 對 data_type='n' 的空 cell 可能回傳 0 而非 ''，所以用 isCellEmpty 判斷
+      const isCellEmpty = (v) => v === '' || v === 0 || v === null || v === undefined;
       const firstCell = row[0];
-      if (firstCell && typeof firstCell === 'string' && row[1] === '' && row[2] === '') {
+      if (firstCell && typeof firstCell === 'string' && isCellEmpty(row[1]) && isCellEmpty(row[2])) {
         const cleaned = cleanTitle(firstCell);
         if (cleaned.length >= 2) {
           curName = cleaned;
-          monthColIdx = {};   // 重置月份欄位索引，等下一列月份列設定
+          monthColIdx = {};
           if (!data[curName]) data[curName] = { rawTitle: String(firstCell).trim(), branches: {} };
           continue;
         }
@@ -1769,9 +1771,9 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
 
       if (!data[curName].branches[matchedBranch]) data[curName].branches[matchedBranch] = {};
       for (const [mo, ci] of Object.entries(monthColIdx)) {
-        // ★ 值直接使用原始數值（已是元或件數），不做 ×1000
+        // ★ 값 직접 사용（不乘1000）；允許儲存 0（去年 0 件是有意義的資料）
         const v = parseFloat(String(row[ci] ?? '').replace(/,/g, ''));
-        if (!isNaN(v) && v > 0) data[curName].branches[matchedBranch][parseInt(mo)] = v;
+        if (!isNaN(v)) data[curName].branches[matchedBranch][parseInt(mo)] = v;
       }
     }
 
