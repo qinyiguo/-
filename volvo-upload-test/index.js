@@ -1727,23 +1727,15 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
       return m ? parseInt(m[1]) : -1;
     };
 
+    // ★ cleanTitle：移除常見後綴，以及 (k)/(K) 標記（僅影響 metric 名稱比對，不影響數值）
     const cleanTitle = (title) => {
       return String(title)
         .replace(/銷售目標|目標|銷售|（k）|\(k\)|\(K\)|\（K\）/gi, '')
         .replace(/\s+/g, '').trim();
     };
 
-    const getCellFormat = (rowIdx, colIdx) => {
-      const cols = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-      const col = colIdx < 26 ? cols[colIdx] : 'A' + cols[colIdx - 26];
-      const addr = `${col}${rowIdx + 1}`;
-      const c = sheet[addr];
-      return c ? (c.z || '') : '';
-    };
-
     const data = {};
     let curName = null;
-    let curIsK = false;
     let monthColIdx = {};
 
     for (let ri = 0; ri < raw.length; ri++) {
@@ -1757,14 +1749,14 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
         continue;
       }
 
+      // 區塊標題判斷：第一格有文字，其後兩格為空
       const firstCell = row[0];
       if (firstCell && typeof firstCell === 'string' && row[1] === '' && row[2] === '') {
         const cleaned = cleanTitle(firstCell);
         if (cleaned.length >= 2) {
           curName = cleaned;
-          curIsK = firstCell.toLowerCase().includes('(k)') || firstCell.includes('（k）') || firstCell.includes('（K）');
-          monthColIdx = {};
-          if (!data[curName]) data[curName] = { isK: curIsK, branches: {} };
+          monthColIdx = {};   // 重置月份欄位索引，等下一列月份列設定
+          if (!data[curName]) data[curName] = { rawTitle: String(firstCell).trim(), branches: {} };
           continue;
         }
       }
@@ -1775,13 +1767,9 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
       const matchedBranch = BRANCHES.find(b => branchRaw === b || branchRaw.endsWith(b));
       if (!matchedBranch) continue;
 
-      const firstDataCol = Object.values(monthColIdx)[0];
-      const fmt = getCellFormat(ri, firstDataCol);
-      const isKByFmt = /,[ _]/.test(fmt) || /,\)/.test(fmt) || fmt.endsWith(',');
-      data[curName].isK = curIsK || isKByFmt;
-
       if (!data[curName].branches[matchedBranch]) data[curName].branches[matchedBranch] = {};
       for (const [mo, ci] of Object.entries(monthColIdx)) {
+        // ★ 值直接使用原始數值（已是元或件數），不做 ×1000
         const v = parseFloat(String(row[ci] ?? '').replace(/,/g, ''));
         if (!isNaN(v) && v > 0) data[curName].branches[matchedBranch][parseInt(mo)] = v;
       }
@@ -1805,15 +1793,31 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
         return match || null;
       };
 
+      // ★ 指標查找：先嘗試 cleaned 名稱，若找不到再嘗試原始標題與部分模糊匹配
+      const findMetricId = async (cleanedName, rawTitle) => {
+        // 1. 精確比對 cleaned 名稱
+        let r = await client.query(`SELECT id FROM performance_metrics WHERE metric_name=$1`, [cleanedName]);
+        if (r.rows.length) return r.rows[0].id;
+        // 2. 精確比對原始標題
+        if (rawTitle && rawTitle !== cleanedName) {
+          r = await client.query(`SELECT id FROM performance_metrics WHERE metric_name=$1`, [rawTitle]);
+          if (r.rows.length) return r.rows[0].id;
+        }
+        // 3. DB 內的 metric_name 清理後與 cleanedName 比對（處理 DB 儲存了帶後綴的名稱）
+        const allMetrics = (await client.query(`SELECT id, metric_name FROM performance_metrics`)).rows;
+        const strip = s => s.replace(/銷售目標|目標|銷售/g,'').replace(/\s+/g,'').trim();
+        const match = allMetrics.find(m => strip(m.metric_name) === cleanedName || strip(m.metric_name) === strip(cleanedName));
+        if (match) return match.id;
+        return null;
+      };
+
       const createdMetrics = [];
       const createdFromSA = [];
       const metricIdMap = {};
-      for (const [name] of Object.entries(data)) {
-        const existing = await client.query(
-          `SELECT id FROM performance_metrics WHERE metric_name=$1`, [name]
-        );
-        if (existing.rows.length) {
-          metricIdMap[name] = existing.rows[0].id;
+      for (const [name, info] of Object.entries(data)) {
+        const existingId = await findMetricId(name, info.rawTitle);
+        if (existingId) {
+          metricIdMap[name] = existingId;
         } else {
           const saMatch = findSaConfig(name);
           const filters = saMatch ? JSON.stringify(saMatch.filters) : '[]';
@@ -1837,7 +1841,8 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
         for (const [branch, monthData] of Object.entries(info.branches)) {
           for (const [mo, val] of Object.entries(monthData)) {
             const period = `${year}${String(mo).padStart(2,'0')}`;
-            const storedVal = info.isK ? Math.round(val * 1000) : Math.round(val);
+            // ★ 直接四捨五入儲存，不乘以 1000（Excel 值已是元/件數）
+            const storedVal = Math.round(val);
             await client.query(`
               INSERT INTO performance_targets (metric_id,branch,period,${valueField},updated_at)
               VALUES ($1,$2,$3,$4,NOW())
@@ -1851,7 +1856,11 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
       await client.query('COMMIT');
       res.json({
         ok: true, count, year, dataType,
-        metrics: Object.keys(data).map(n => ({ name: n, isK: data[n].isK })),
+        // ★ 去年實績上傳說明：year 應填「今年」（目標所在年份），不是資料的實際年份
+        yearNote: dataType === 'last_year'
+          ? `去年實績已存入 ${year} 年各月的 last_year_value。確認：目標期間也是 ${year} 年？`
+          : null,
+        metrics: Object.keys(data).map(n => ({ name: n, rawTitle: data[n].rawTitle })),
         created: createdMetrics,
         createdFromSA,
         existing: Object.keys(data).filter(n => !createdMetrics.includes(n)),
