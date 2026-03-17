@@ -26,18 +26,11 @@
   .btn { padding: 7px 16px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
   .btn-primary { background: #3b82f6; color: #fff; }
   .btn-primary:hover { background: #2563eb; }
-  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
-  .kpi-card { background: #1e293b; border: 1px solid #2d3f56; border-radius: 10px; padding: 18px; }
-  .kpi-label { font-size: 12px; color: #64748b; margin-bottom: 6px; }
-  .kpi-value { font-size: 26px; font-weight: 800; color: #fff; }
-  .kpi-sub { font-size: 12px; color: #64748b; margin-top: 4px; }
   .card { background: #1a2332; border: 1px solid #2d3f56; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
   .card-title { font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .card-title-note { font-size: 11px; font-weight: 400; color: #64748b; margin-left: auto; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
   .badge-blue { background: rgba(59,130,246,.15); color: #3b82f6; }
-  .badge-green { background: rgba(16,185,129,.15); color: #10b981; }
-  .badge-gray { background: rgba(100,116,139,.15); color: #94a3b8; }
   .loading { text-align: center; padding: 48px; color: #64748b; }
   .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #2d3f56; border-top-color: #3b82f6; border-radius: 50%; animation: spin .7s linear infinite; margin-right: 8px; vertical-align: middle; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -49,8 +42,6 @@
   .achieve-bar-label { font-size: 11px; color: #475569; font-weight: 700; letter-spacing: .05em; white-space: nowrap; }
   .achieve-chip { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.03); border: 1px solid #2d3f56; border-radius: 8px; padding: 8px 14px; }
   .full-badge { font-size: 10px; padding: 2px 7px; border-radius: 10px; background: rgba(16,185,129,.15); color: #10b981; white-space: nowrap; }
-
-  /* ══ Custom Period Selector ══ */
   .period-selector { position: relative; }
   .period-btn { display: flex; align-items: center; gap: 8px; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; padding: 7px 12px 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .15s; user-select: none; min-width: 148px; justify-content: space-between; outline: none; }
   .period-btn:hover { border-color: #3b82f6; background: #141f33; }
@@ -62,14 +53,11 @@
   .period-dropdown { position: absolute; top: calc(100% + 6px); left: 0; background: #1a2740; border: 1px solid #334155; border-radius: 12px; box-shadow: 0 16px 48px rgba(0,0,0,.8); z-index: 9999; width: 260px; overflow: hidden; display: none; flex-direction: column; }
   .period-dropdown.open { display: flex; }
   .period-dd-header { padding: 12px 14px 10px; border-bottom: 1px solid #2d3f56; flex-shrink: 0; }
-  .period-dd-header-title { font-size: 11px; font-weight: 700; color: #475569; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 8px; }
   .period-dd-search input { width: 100%; background: #0f172a; border: 1px solid #2d3f56; color: #e2e8f0; padding: 7px 12px; border-radius: 7px; font-size: 12px; outline: none; transition: border-color .15s; }
   .period-dd-search input:focus { border-color: #3b82f6; }
   .period-dd-list { overflow-y: auto; max-height: 340px; padding: 6px 0; }
   .period-dd-list::-webkit-scrollbar { width: 4px; }
-  .period-dd-list::-webkit-scrollbar-track { background: transparent; }
   .period-dd-list::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
-  .period-dd-year-group { padding: 0; }
   .period-dd-year-label { font-size: 11px; font-weight: 700; color: #374151; letter-spacing: .06em; padding: 8px 14px 4px; display: flex; align-items: center; gap: 8px; }
   .period-dd-year-label::after { content: ''; flex: 1; height: 1px; background: #1e3050; }
   .period-dd-months { display: grid; grid-template-columns: repeat(3,1fr); gap: 4px; padding: 0 10px 8px; }
@@ -122,7 +110,11 @@
 <div class="container">
   <div id="tab-progress">
     <div id="revenueKPISection" style="margin-bottom:20px;display:none">
+      <!-- 集團有費合計 (新增) -->
+      <div id="revKPI-group" style="margin-bottom:12px"></div>
+      <!-- 各廠 有費營收 -->
       <div id="revKPI-paid" style="margin-bottom:12px"></div>
+      <!-- 三欄子指標 -->
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px" id="revKPI-sub"></div>
     </div>
     <div class="card">
@@ -178,7 +170,6 @@ const fmtK = (v) => Math.round(n(v) / 1000).toLocaleString() + 'K';
 let _currentPeriod = '';
 let _allPeriods = [];
 
-// ══ Custom Period Selector ══
 function getPeriod() { return _currentPeriod; }
 
 function initPeriodSelector(periods) {
@@ -199,7 +190,6 @@ function renderPeriodSelector(filterQ) {
     return `${p.slice(0,4)}年${p.slice(4)}月`;
   }
 
-  // Group by year
   const groups = {};
   (_allPeriods).forEach(p => {
     const yr = p.slice(0,4);
@@ -213,11 +203,8 @@ function renderPeriodSelector(filterQ) {
 
   let listHtml = '';
   Object.keys(groups).sort((a,b)=>b-a).forEach(yr => {
-    const months = groups[yr]; // sorted desc from API
-    listHtml += `<div class="period-dd-year-group">
-      <div class="period-dd-year-label">${yr}</div>
-      <div class="period-dd-months">`;
-    // Show months 1-12, mark which exist
+    const months = groups[yr];
+    listHtml += `<div class="period-dd-year-label">${yr}</div><div class="period-dd-months">`;
     for (let mo = 12; mo >= 1; mo--) {
       const p = `${yr}${String(mo).padStart(2,'0')}`;
       const exists = months.includes(p);
@@ -232,7 +219,7 @@ function renderPeriodSelector(filterQ) {
         </div>`;
       }
     }
-    listHtml += `</div></div>`;
+    listHtml += `</div>`;
   });
 
   wrap.innerHTML = `
@@ -282,7 +269,7 @@ window.filterPeriodDD = function(q) {
   } else {
     Object.keys(groups).sort((a,b)=>b-a).forEach(yr => {
       const months = groups[yr];
-      listHtml += `<div class="period-dd-year-group"><div class="period-dd-year-label">${yr}</div><div class="period-dd-months">`;
+      listHtml += `<div class="period-dd-year-label">${yr}</div><div class="period-dd-months">`;
       for (let mo = 12; mo >= 1; mo--) {
         const p = `${yr}${String(mo).padStart(2,'0')}`;
         if (!months.includes(p)) continue;
@@ -290,7 +277,7 @@ window.filterPeriodDD = function(q) {
         listHtml += `<div class="period-dd-mo ${isSel?'selected':''} ${isCur?'current-month':''} has-data" onclick="selectPeriod('${p}')">
           <span class="mo-num">${mo}</span><span class="mo-label">月</span><span class="mo-dot"></span></div>`;
       }
-      listHtml += `</div></div>`;
+      listHtml += `</div>`;
     });
   }
   const el = document.getElementById('ps-list');
@@ -402,11 +389,108 @@ async function loadRevenueKPI(period,branch){
     const tMap={};(Array.isArray(tgtRes)?tgtRes:[]).forEach(t=>{tMap[t.branch]=t;});
     const eMap={};(Array.isArray(estRes)?estRes:[]).forEach(e=>{eMap[e.branch]=e;});
     const bdata=bkRes.branches||{};
+
+    // ============================================================
+    // 集團合計卡片 (新功能)
+    // ============================================================
+    const buildGroupCard = (metricKey, actualKey, label, color) => {
+      // 加總所有據點
+      const ALL_BRANCHES = ['AMA','AMC','AMD'];
+      const gActual = ALL_BRANCHES.reduce((s,br)=>s+(bdata[br]?.[actualKey]||0),0);
+      const gTarget = ALL_BRANCHES.reduce((s,br)=>s+parseFloat(tMap[br]?.[`${metricKey}_target`]||0),0);
+      const gLY     = ALL_BRANCHES.reduce((s,br)=>s+parseFloat(tMap[br]?.[`${metricKey}_last_year`]||0),0);
+      const gEst    = ALL_BRANCHES.reduce((s,br)=>s+parseFloat(eMap[br]?.[`${metricKey}_estimate`]||0),0);
+      const rate    = gTarget>0 ? gActual/gTarget*100 : null;
+      const estRate = gTarget>0&&gEst>0 ? gEst/gTarget*100 : null;
+      const yoy     = gLY>0 ? (gActual-gLY)/gLY*100 : null;
+      const rCol    = rate===null?'#64748b':rate>=100?'#10b981':rate>=80?'#f59e0b':'#ef4444';
+      const eCol    = estRate===null?'#64748b':estRate>=100?'#10b981':estRate>=80?'#f59e0b':'#f97316';
+      const barW    = rate!==null?Math.min(100,rate).toFixed(0):0;
+      const estBarW = estRate!==null?Math.min(100,estRate).toFixed(0):0;
+
+      // 各據點細項
+      const branchCells = BRANCHES.map((br,bi)=>{
+        const bd=bdata[br]||{}, t=tMap[br]||{}, e=eMap[br]||{};
+        const act=bd[actualKey]||0, tgt=parseFloat(t[`${metricKey}_target`]||0), ly=parseFloat(t[`${metricKey}_last_year`]||0), est=parseFloat(e[`${metricKey}_estimate`]||0);
+        const r=tgt>0?act/tgt*100:null, er=tgt>0&&est>0?est/tgt*100:null, y=ly>0?(act-ly)/ly*100:null;
+        const rc=r===null?'#64748b':r>=100?'#10b981':r>=80?'#f59e0b':'#ef4444';
+        const ec=er===null?'#64748b':er>=100?'#10b981':er>=80?'#f59e0b':'#f97316';
+        const col=brColors[br]||'#64748b';
+        const bw=r!==null?Math.min(100,r).toFixed(0):0;
+        const ebw=er!==null?Math.min(100,er).toFixed(0):0;
+        const borderR=bi<BRANCHES.length-1?'border-right:1px solid #2d3f56;':'';
+        return `<div style="padding:14px 16px;${borderR}">
+          <div style="font-size:11px;font-weight:800;color:${col};margin-bottom:8px">${br}</div>
+          <div style="font-size:20px;font-weight:800;color:#e2e8f0;margin-bottom:4px">${fmtK(act)}</div>
+          <div style="display:flex;align-items:center;gap:5px;margin-bottom:${est>0?'6px':'10px'}">
+            <div style="flex:1;background:#0f172a;border-radius:3px;height:5px"><div style="width:${bw}%;height:5px;background:${rc};border-radius:3px;transition:width .4s"></div></div>
+            <span style="font-size:12px;font-weight:800;color:${rc};white-space:nowrap">${r!==null?r.toFixed(1)+'%':'—'}</span>
+          </div>
+          ${est>0?`<div style="display:flex;align-items:center;gap:5px;margin-bottom:10px">
+            <div style="flex:1;background:#0f172a;border-radius:3px;height:3px"><div style="width:${ebw}%;height:3px;border-radius:3px;background:repeating-linear-gradient(90deg,${ec} 0,${ec} 4px,transparent 4px,transparent 7px)"></div></div>
+            <span style="font-size:11px;font-weight:700;color:${ec};white-space:nowrap">預 ${er!==null?er.toFixed(1)+'%':'—'}</span>
+          </div>`:''}
+          <div style="display:grid;grid-template-columns:auto 1fr;gap:2px 8px;font-size:11px;color:#64748b">
+            <span>目標</span><span style="text-align:right;color:#94a3b8;font-weight:600">${tgt>0?fmtK(tgt):'未設定'}</span>
+            ${est>0?`<span style="color:${ec}">預估</span><span style="text-align:right;color:${ec};font-weight:700">${fmtK(est)}</span>`:''}
+            <span>去年同期</span><span style="text-align:right">
+              <span style="color:#94a3b8;font-weight:600">${ly>0?fmtK(ly):'—'}</span>
+              ${y!==null?`<span style="color:${y>=0?'#10b981':'#ef4444'};margin-left:4px">${y>=0?'▲':'▼'}${Math.abs(y).toFixed(1)}%</span>`:''}
+            </span>
+          </div>
+        </div>`;
+      }).join('');
+
+      return `<div style="background:#1a2332;border:2px solid ${color}44;border-radius:12px;overflow:hidden">
+        <!-- 集團合計橫幅 -->
+        <div style="background:linear-gradient(135deg,${color}18,${color}08);border-bottom:1px solid ${color}33;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:13px;font-weight:800;color:${color}">集團有費合計</span>
+            <span style="font-size:11px;color:#475569">一般(含自費鈑烤)＋保險鈑烤＋延保 ｜ AMA＋AMC＋AMD</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:16px;margin-left:auto;flex-wrap:wrap">
+            <div>
+              <div style="font-size:11px;color:#64748b;margin-bottom:2px">集團總計</div>
+              <div style="font-size:28px;font-weight:900;color:#fff;line-height:1">${fmtK(gActual)}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;min-width:160px">
+              <div style="display:flex;align-items:center;gap:6px">
+                <div style="flex:1;background:#0f172a;border-radius:3px;height:6px"><div style="width:${barW}%;height:6px;background:${rCol};border-radius:3px;transition:width .5s"></div></div>
+                <span style="font-size:13px;font-weight:900;color:${rCol};white-space:nowrap;min-width:52px;text-align:right">${rate!==null?rate.toFixed(1)+'%':'—'}</span>
+              </div>
+              ${gEst>0?`<div style="display:flex;align-items:center;gap:6px">
+                <div style="flex:1;background:#0f172a;border-radius:3px;height:4px"><div style="width:${estBarW}%;height:4px;border-radius:3px;background:repeating-linear-gradient(90deg,${eCol} 0,${eCol} 4px,transparent 4px,transparent 8px)"></div></div>
+                <span style="font-size:11px;font-weight:700;color:${eCol};white-space:nowrap;min-width:52px;text-align:right">預 ${estRate!==null?estRate.toFixed(1)+'%':'—'}</span>
+              </div>`:''}
+            </div>
+            <div style="display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:12px;color:#64748b">
+              <span>目標</span><span style="color:#94a3b8;font-weight:700">${gTarget>0?fmtK(gTarget):'未設定'}</span>
+              ${gEst>0?`<span style="color:${eCol}">預估</span><span style="color:${eCol};font-weight:700">${fmtK(gEst)}</span>`:''}
+              <span>去年同期</span><span>
+                <span style="color:#94a3b8;font-weight:600">${gLY>0?fmtK(gLY):'—'}</span>
+                ${yoy!==null?`<span style="color:${yoy>=0?'#10b981':'#ef4444'};margin-left:4px">${yoy>=0?'▲':'▼'}${Math.abs(yoy).toFixed(1)}%</span>`:''}
+              </span>
+            </div>
+          </div>
+        </div>
+        <!-- 各廠細項 -->
+        <div style="padding:10px 16px 8px;border-bottom:1px solid #2d3f56">
+          <span style="font-size:11px;color:#374151;font-weight:700;letter-spacing:.05em">各據點明細</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(${BRANCHES.length},1fr)">
+          ${branchCells}
+        </div>
+      </div>`;
+    };
+
+    // ============================================================
+    // 一般子卡片 (一般/鈑烤/延保)
+    // ============================================================
     const buildCard=(m,fullWidth)=>{
       let card=`<div style="background:#1a2332;border:1px solid #2d3f56;border-radius:12px;overflow:hidden">
         <div style="padding:12px 18px 10px;border-bottom:1px solid #2d3f56;display:flex;align-items:center;gap:8px">
           <span style="font-size:14px;font-weight:800;color:${m.color}">${m.label}</span>
-          ${fullWidth?`<span style="font-size:11px;color:#475569;margin-left:4px">一般＋保險鈑烤＋延保</span>`:''}
+          ${fullWidth?`<span style="font-size:11px;color:#475569;margin-left:4px">一般(含自費鈑烤)＋保險鈑烤＋延保</span>`:''}
         </div>
         <div style="display:grid;grid-template-columns:repeat(${BRANCHES.length},1fr)">`;
       BRANCHES.forEach((br,bi)=>{
@@ -440,6 +524,16 @@ async function loadRevenueKPI(period,branch){
       });
       card+=`</div></div>`;return card;
     };
+
+    // 只在「全部」模式下顯示集團合計
+    const groupEl = document.getElementById('revKPI-group');
+    if(!branch) {
+      groupEl.innerHTML = buildGroupCard('paid','paid_total','集團有費合計','#f97316');
+      groupEl.style.display = '';
+    } else {
+      groupEl.style.display = 'none';
+    }
+
     document.getElementById('revKPI-paid').innerHTML=buildCard({key:'paid',label:'🔶 有費營收',color:'#f97316',actualKey:'paid_total'},true);
     document.getElementById('revKPI-sub').innerHTML=[
       {key:'general',label:'💙 一般營收',color:'#3b82f6',actualKey:'general_total'},
@@ -463,6 +557,7 @@ async function loadIncomeBreakdown(period,branch){
     const BRANCHES=branch?[branch]:['AMA','AMC','AMD'];
     const brColors={AMA:'#3b82f6',AMC:'#10b981',AMD:'#f59e0b'};
     const tot=k=>BRANCHES.reduce((s,br)=>s+(bdata[br]?.[k]||0),0);
+
     const ROWS=[
       {key:'general_no_bw',label:'一般收入（非鈑烤）',indent:1,color:'#60a5fa',note:'帳類=一般，不含鈑金/烤漆工單'},
       {key:'voucher',label:'票劵收入',indent:1,color:'#60a5fa',note:'帳類=票劵'},
@@ -472,10 +567,11 @@ async function loadIncomeBreakdown(period,branch){
       {key:'bodywork_insurance',label:'保險鈑烤',indent:1,color:'#a78bfa',note:'帳類=保險'},
       {key:'bodywork_total',label:'🔨 鈑烤營收',indent:0,color:'#8b5cf6',bold:true},
       {key:'extended',label:'🛡️ 延保營收',indent:0,color:'#10b981',bold:true},
-      {key:'paid_total',label:'🔶 有費營收',indent:0,color:'#f97316',bold:true,border:true,note:'一般＋鈑烤＋延保'},
-      {key:'other_total',label:'無費成本（內結/保固/VSA/善意維修）',indent:0,color:'#64748b'},
-      {key:'all_total',label:'📌 全部營收',indent:0,color:'#e2e8f0',bold:true,border:true},
+      {key:'paid_total',label:'🔶 有費營收',indent:0,color:'#f97316',bold:true,border:true,note:'一般(含自費鈑烤)＋保險鈑烤＋延保'},
+      {key:'other_total',label:'無費成本（內結/保固/VSA/善意）',indent:0,color:'#64748b'},
+      {key:'all_total',label:'📌 全部營收',indent:0,color:'#e2e8f0',bold:true,border:true,note:'有費＋無費'},
     ];
+
     let html=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>
       <th style="text-align:left;padding:10px 16px;background:#0f172a;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;min-width:220px">收入項目</th>`;
     BRANCHES.forEach(br=>{html+=`<th style="text-align:right;padding:10px 16px;background:#0f172a;color:${brColors[br]||'#94a3b8'};font-size:13px;font-weight:800;border-bottom:1px solid #2d3f56;min-width:140px">${br}</th>`;});
@@ -518,7 +614,6 @@ async function loadPerformance(period,branch){
     const TYPE_LABEL={repair_income:'🔧 維修收入(合計)',repair_subfield:'🔨 維修收入(子欄位)',parts:'🔩 零件銷售',boutique:'💎 精品配件',tech_wage:'🚗 工資代碼'};
     const FIELD_UNIT={amount:'元',qty:'件',count:'筆'};
     const metricMap={};metrics.forEach(m=>{metricMap[m.id]=m;});
-    // achieve summary
     const brStats={};BRANCHES.forEach(br=>{brStats[br]={achieved:0,total:metrics.length};});
     results.forEach(r=>{BRANCHES.forEach(br=>{const d=r.branches[br]||{};if(d.achieve_rate!==null&&d.achieve_rate>=100)brStats[br].achieved++;});});
     achBar.innerHTML=`<span class="achieve-bar-label">各據點達標情況</span>`+BRANCHES.map(br=>{
