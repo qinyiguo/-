@@ -852,6 +852,10 @@ const buildQueryConds = (period, branch) => {
   return { conds, params, idx };
 };
 
+// ============================================================
+// 資料查詢 API — 無筆數上限
+// ============================================================
+
 // 維修收入查詢
 app.get('/api/query/repair_income', async (req, res) => {
   try {
@@ -865,8 +869,7 @@ app.get('/api/query/repair_income', async (req, res) => {
               carwash_income, outsource_income, addon_income, total_untaxed,
               total_taxed, parts_cost, service_advisor
        FROM repair_income ${where}
-       ORDER BY branch, settle_date DESC, work_order
-       `, params);
+       ORDER BY branch, settle_date DESC, work_order`, params);
     res.json({ rows: r.rows, count: r.rows.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -882,8 +885,7 @@ app.get('/api/query/tech_performance', async (req, res) => {
               work_code, task_content, account_type, standard_hours, wage,
               discount, wage_category
        FROM tech_performance ${where}
-       ORDER BY branch, dispatch_date DESC, tech_name_clean
-       `, params);
+       ORDER BY branch, dispatch_date DESC, tech_name_clean`, params);
     res.json({ rows: r.rows, count: r.rows.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -900,8 +902,7 @@ app.get('/api/query/parts_sales', async (req, res) => {
               retail_price, sale_price_untaxed, cost_untaxed, discount_rate,
               department, pickup_person, sales_person, plate_no
        FROM parts_sales ${where}
-       ORDER BY branch, order_no DESC
-       `, params);
+       ORDER BY branch, order_no DESC`, params);
     res.json({ rows: r.rows, count: r.rows.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -918,8 +919,7 @@ app.get('/api/query/business_query', async (req, res) => {
               repair_tech, repair_type, car_series, car_model, model_year,
               owner, is_ev, mileage_in, mileage_out
        FROM business_query ${where}
-       ORDER BY branch, open_time DESC
-       `, params);
+       ORDER BY branch, open_time DESC`, params);
     res.json({ rows: r.rows, count: r.rows.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -1785,8 +1785,6 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
     }
     const sheet = workbook.Sheets[sheetName];
 
-    // ── 偵測格式：object 模式讀取，判斷是否為扁平格式 ──
-    // 扁平格式：第一欄=期間, 第二欄=據點, 其餘欄位={指標名稱}_目標 / {指標名稱}_去年
     const objRows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: true });
     const firstRowKeys = objRows.length ? Object.keys(objRows[0]) : [];
     const isFlatFormat =
@@ -1794,11 +1792,6 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
       firstRowKeys.some(k => k === '據點' || k === 'Branch');
 
     if (isFlatFormat) {
-      // ═══════════════════════════════════════════════════════
-      //  扁平格式解析
-      //  每列 = 一個 period+branch 組合的所有指標數值
-      //  欄位命名：{指標名稱}_目標  /  {指標名稱}_去年
-      // ═══════════════════════════════════════════════════════
       const headers = firstRowKeys;
       const targetCols   = headers.filter(h => h.endsWith('_目標'));
       const lastYearCols = headers.filter(h => h.endsWith('_去年'));
@@ -1818,7 +1811,6 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
       }
 
       const BRANCHES = ['AMA', 'AMC', 'AMD'];
-      // entriesMap[metricName][`${branch}|||${period}`] = { branch, period, target_value, last_year_value }
       const entriesMap = {};
       allMetricNames.forEach(m => { entriesMap[m] = {}; });
 
@@ -1874,7 +1866,6 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
           }
         }
 
-        // 同時寫入 target_value 和 last_year_value（哪個有值寫哪個，不覆蓋既有）
         let count = 0;
         for (const [metricName, rowMap] of Object.entries(entriesMap)) {
           const metricId = metricIdMap[metricName];
@@ -1893,7 +1884,6 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
 
         await client.query('COMMIT');
 
-        // 整理期間摘要
         const summaryMap = {};
         for (const rowMap of Object.values(entriesMap)) {
           for (const e of Object.values(rowMap)) {
@@ -1921,12 +1911,9 @@ app.post('/api/upload-performance-targets-native', upload.single('file'), async 
       } finally {
         client.release();
       }
-      return; // 扁平格式已處理完畢
+      return;
     }
 
-    // ═══════════════════════════════════════════════════════
-    //  區塊格式（原有邏輯，維持不動）
-    // ═══════════════════════════════════════════════════════
     const valueField = dataType === 'last_year' ? 'last_year_value' : 'target_value';
     const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
 
