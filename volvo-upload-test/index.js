@@ -866,7 +866,7 @@ app.get('/api/query/repair_income', async (req, res) => {
               total_taxed, parts_cost, service_advisor
        FROM repair_income ${where}
        ORDER BY branch, settle_date DESC, work_order
-       , params);
+       `, params);
     res.json({ rows: r.rows, count: r.rows.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -883,7 +883,7 @@ app.get('/api/query/tech_performance', async (req, res) => {
               discount, wage_category
        FROM tech_performance ${where}
        ORDER BY branch, dispatch_date DESC, tech_name_clean
-       , params);
+       `, params);
     res.json({ rows: r.rows, count: r.rows.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -901,7 +901,7 @@ app.get('/api/query/parts_sales', async (req, res) => {
               department, pickup_person, sales_person, plate_no
        FROM parts_sales ${where}
        ORDER BY branch, order_no DESC
-       , params);
+       `, params);
     res.json({ rows: r.rows, count: r.rows.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -919,7 +919,7 @@ app.get('/api/query/business_query', async (req, res) => {
               owner, is_ev, mileage_in, mileage_out
        FROM business_query ${where}
        ORDER BY branch, open_time DESC
-       , params);
+       `, params);
     res.json({ rows: r.rows, count: r.rows.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
