@@ -464,17 +464,17 @@ async function loadIncomeBreakdown(period,branch){
     const brColors={AMA:'#3b82f6',AMC:'#10b981',AMD:'#f59e0b'};
     const tot=k=>BRANCHES.reduce((s,br)=>s+(bdata[br]?.[k]||0),0);
     const ROWS=[
-      {key:'bodywork_self',label:'自費鈑烤',indent:1,color:'#a78bfa',note:'帳類=一般，含鈑金/烤漆工單'},
-      {key:'bodywork_insurance',label:'保險鈑烤',indent:1,color:'#a78bfa',note:'帳類=保險'},
-      {key:'bodywork_total',label:'🔨 鈑烤營收',indent:0,color:'#8b5cf6',bold:true},
-      {key:'extended',label:'🛡️ 延保營收',indent:0,color:'#10b981',bold:true},
       {key:'general_no_bw',label:'一般收入（非鈑烤）',indent:1,color:'#60a5fa',note:'帳類=一般，不含鈑金/烤漆工單'},
       {key:'voucher',label:'票劵收入',indent:1,color:'#60a5fa',note:'帳類=票劵'},
       {key:'external',label:'外賣收入',indent:1,color:'#2dd4bf',note:'來自零件銷售'},
       {key:'general_total',label:'💙 一般營收',indent:0,color:'#3b82f6',bold:true,note:'一般(非鈑烤)＋票劵＋外賣'},
-      {key:'paid_total',label:'🔶 有費營收',indent:0,color:'#f97316',bold:true,border:true,note:'一般＋保險鈑烤＋延保'},
-      {key:'other_total',label:'無費成本（內結/保固/VSA/善意）',indent:0,color:'#64748b'},
-      {key:'all_total',label:'📌 全部營收',indent:0,color:'#e2e8f0',bold:true,border:true,note:'有費＋無費'},
+      {key:'bodywork_self',label:'自費鈑烤',indent:1,color:'#a78bfa',note:'帳類=一般，含鈑金/烤漆工單'},
+      {key:'bodywork_insurance',label:'保險鈑烤',indent:1,color:'#a78bfa',note:'帳類=保險'},
+      {key:'bodywork_total',label:'🔨 鈑烤營收',indent:0,color:'#8b5cf6',bold:true},
+      {key:'extended',label:'🛡️ 延保營收',indent:0,color:'#10b981',bold:true},
+      {key:'paid_total',label:'🔶 有費營收',indent:0,color:'#f97316',bold:true,border:true,note:'一般＋鈑烤＋延保'},
+      {key:'other_total',label:'無費成本（內結/保固/VSA/善意維修）',indent:0,color:'#64748b'},
+      {key:'all_total',label:'📌 全部營收',indent:0,color:'#e2e8f0',bold:true,border:true},
     ];
     let html=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>
       <th style="text-align:left;padding:10px 16px;background:#0f172a;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;min-width:220px">收入項目</th>`;
