@@ -42,6 +42,7 @@
   .achieve-bar-label { font-size: 11px; color: #475569; font-weight: 700; letter-spacing: .05em; white-space: nowrap; }
   .achieve-chip { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.03); border: 1px solid #2d3f56; border-radius: 8px; padding: 8px 14px; }
   .full-badge { font-size: 10px; padding: 2px 7px; border-radius: 10px; background: rgba(16,185,129,.15); color: #10b981; white-space: nowrap; }
+  /* Period selector */
   .period-selector { position: relative; }
   .period-btn { display: flex; align-items: center; gap: 8px; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; padding: 7px 12px 7px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all .15s; user-select: none; min-width: 148px; justify-content: space-between; outline: none; }
   .period-btn:hover { border-color: #3b82f6; background: #141f33; }
@@ -74,6 +75,14 @@
   .period-dd-mo .mo-dot { width: 4px; height: 4px; border-radius: 50%; background: transparent; margin-top: 3px; }
   .period-dd-mo.has-data .mo-dot { background: #10b981; }
   .period-dd-mo.selected .mo-dot { background: #3b82f6; }
+  /* 工作天進度 */
+  .wd-progress-wrap { display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; margin-bottom: 14px; }
+  .wd-card { background: #1a2332; border: 1px solid #2d3f56; border-radius: 10px; padding: 14px 16px; flex: 1; min-width: 190px; display: flex; flex-direction: column; gap: 9px; }
+  .wd-track { background: #0f172a; border-radius: 4px; height: 7px; position: relative; overflow: hidden; }
+  .wd-fill  { height: 7px; border-radius: 4px; transition: width .5s; }
+  .wd-rev-marker { position: absolute; top: -3px; width: 2px; height: 13px; background: rgba(255,255,255,.55); border-radius: 1px; transition: left .5s; pointer-events: none; }
+  .wd-status { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+  .wd-legend { width: 100%; display: flex; gap: 14px; align-items: center; font-size: 11px; color: #475569; padding: 4px 2px 0; flex-wrap: wrap; }
 </style>
 </head>
 <body>
@@ -109,12 +118,13 @@
 
 <div class="container">
   <div id="tab-progress">
+
+    <!-- ══ 工作天進度 ══ -->
+    <div id="workingDaysBar" style="display:none"></div>
+
     <div id="revenueKPISection" style="margin-bottom:20px;display:none">
-      <!-- 集團有費合計 (新增) -->
       <div id="revKPI-group" style="margin-bottom:12px"></div>
-      <!-- 各廠 有費營收 -->
       <div id="revKPI-paid" style="margin-bottom:12px"></div>
-      <!-- 三欄子指標 -->
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px" id="revKPI-sub"></div>
     </div>
     <div class="card">
@@ -168,14 +178,15 @@ const fmt  = (v) => Math.round(n(v)).toLocaleString();
 const fmtK = (v) => Math.round(n(v) / 1000).toLocaleString() + 'K';
 
 let _currentPeriod = '';
-let _allPeriods = [];
+let _allPeriods    = [];
+let _wdSummary     = null;   // from /api/stats/daily summary
+let _revRates      = null;   // { AMA: paidRate%, AMC: ..., AMD: ... }
 
 function getPeriod() { return _currentPeriod; }
 
+// ── Period selector ──
 function initPeriodSelector(periods) {
   _allPeriods = periods;
-  const wrap = document.getElementById('periodSelectorWrap');
-  if (!wrap) return;
   renderPeriodSelector('');
 }
 
@@ -184,153 +195,204 @@ function renderPeriodSelector(filterQ) {
   if (!wrap) return;
   const now = new Date();
   const thisMonth = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}`;
-
-  function fmtP(p) {
-    if (!p) return '全部期間';
-    return `${p.slice(0,4)}年${p.slice(4)}月`;
-  }
-
   const groups = {};
-  (_allPeriods).forEach(p => {
-    const yr = p.slice(0,4);
-    if (!groups[yr]) groups[yr] = [];
-    groups[yr].push(p);
-  });
-
+  _allPeriods.forEach(p => { const yr=p.slice(0,4); if(!groups[yr])groups[yr]=[]; groups[yr].push(p); });
   const btnContent = _currentPeriod
     ? `<span class="pb-year">${_currentPeriod.slice(0,4)}</span><span class="pb-month">${parseInt(_currentPeriod.slice(4))}月</span>`
     : `<span class="pb-month" style="color:#64748b">全部期間</span>`;
-
-  let listHtml = '';
-  Object.keys(groups).sort((a,b)=>b-a).forEach(yr => {
-    const months = groups[yr];
-    listHtml += `<div class="period-dd-year-label">${yr}</div><div class="period-dd-months">`;
-    for (let mo = 12; mo >= 1; mo--) {
-      const p = `${yr}${String(mo).padStart(2,'0')}`;
-      const exists = months.includes(p);
-      if (!filterQ || fmtP(p).includes(filterQ)) {
-        const isSel = p === _currentPeriod;
-        const isCur = p === thisMonth;
-        listHtml += `<div class="period-dd-mo ${isSel?'selected':''} ${isCur?'current-month':''} ${exists?'has-data':''}"
-          onclick="selectPeriod('${p}')">
-          <span class="mo-num">${mo}</span>
-          <span class="mo-label">月</span>
-          <span class="mo-dot"></span>
-        </div>`;
-      }
-    }
-    listHtml += `</div>`;
-  });
-
-  wrap.innerHTML = `
-    <div class="period-selector" id="ps-root">
-      <button class="period-btn" id="ps-btn" type="button" onclick="togglePeriodDD(event)">
-        ${btnContent}
-        <span class="pb-arrow">▼</span>
-      </button>
-      <div class="period-dropdown" id="ps-dd">
-        <div class="period-dd-header">
-          <div class="period-dd-year-label" style="padding:0 0 6px;font-size:11px;color:#475569">選擇期間</div>
-          <div class="period-dd-search">
-            <input type="text" placeholder="🔍 搜尋 例：2026年03月" id="ps-search"
-              oninput="filterPeriodDD(this.value)" onclick="event.stopPropagation()">
-          </div>
-        </div>
-        <div class="period-dd-list" id="ps-list">${listHtml}</div>
-      </div>
-    </div>`;
-}
-
-window.togglePeriodDD = function(e) {
-  e.stopPropagation();
-  const btn = document.getElementById('ps-btn');
-  const dd = document.getElementById('ps-dd');
-  if (!btn || !dd) return;
-  const isOpen = dd.classList.contains('open');
-  closeAllPD();
-  if (!isOpen) {
-    btn.classList.add('open');
-    dd.classList.add('open');
-    setTimeout(() => document.getElementById('ps-search')?.focus(), 50);
-  }
-};
-
-window.filterPeriodDD = function(q) {
-  const now = new Date();
-  const thisMonth = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}`;
-  function fmtP(p) { return `${p.slice(0,4)}年${p.slice(4)}月`; }
-  const groups = {};
-  _allPeriods.filter(p => !q || fmtP(p).includes(q) || p.includes(q.replace(/[^0-9]/g,''))).forEach(p => {
-    const yr = p.slice(0,4); if (!groups[yr]) groups[yr] = []; groups[yr].push(p);
-  });
-  let listHtml = '';
-  if (!Object.keys(groups).length) {
-    listHtml = '<div style="padding:20px;text-align:center;color:#475569;font-size:12px">無符合期間</div>';
-  } else {
-    Object.keys(groups).sort((a,b)=>b-a).forEach(yr => {
-      const months = groups[yr];
-      listHtml += `<div class="period-dd-year-label">${yr}</div><div class="period-dd-months">`;
-      for (let mo = 12; mo >= 1; mo--) {
-        const p = `${yr}${String(mo).padStart(2,'0')}`;
-        if (!months.includes(p)) continue;
-        const isSel = p === _currentPeriod, isCur = p === thisMonth;
-        listHtml += `<div class="period-dd-mo ${isSel?'selected':''} ${isCur?'current-month':''} has-data" onclick="selectPeriod('${p}')">
+  function fmtP(p){return`${p.slice(0,4)}年${p.slice(4)}月`;}
+  let listHtml='';
+  Object.keys(groups).sort((a,b)=>b-a).forEach(yr=>{
+    const months=groups[yr];
+    listHtml+=`<div class="period-dd-year-label">${yr}</div><div class="period-dd-months">`;
+    for(let mo=12;mo>=1;mo--){
+      const p=`${yr}${String(mo).padStart(2,'0')}`,exists=months.includes(p);
+      if(!filterQ||fmtP(p).includes(filterQ)){
+        const isSel=p===_currentPeriod,isCur=p===thisMonth;
+        listHtml+=`<div class="period-dd-mo ${isSel?'selected':''} ${isCur?'current-month':''} ${exists?'has-data':''}" onclick="selectPeriod('${p}')">
           <span class="mo-num">${mo}</span><span class="mo-label">月</span><span class="mo-dot"></span></div>`;
       }
-      listHtml += `</div>`;
-    });
-  }
-  const el = document.getElementById('ps-list');
-  if (el) el.innerHTML = listHtml;
-};
-
-window.selectPeriod = function(val) {
-  _currentPeriod = val;
-  closeAllPD();
-  renderPeriodSelector('');
-};
-
-window.closeAllPD = function() {
-  document.querySelectorAll('.period-btn.open').forEach(b => b.classList.remove('open'));
-  document.querySelectorAll('.period-dropdown.open').forEach(d => d.classList.remove('open'));
-};
-
-document.addEventListener('click', closeAllPD);
-
-async function loadPeriods() {
-  try {
-    const periods = await (await fetch('/api/periods')).json();
-    _allPeriods = periods;
-    const now = new Date();
-    const cur = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}`;
-    _currentPeriod = periods.includes(cur) ? cur : (periods[0] || '');
-    initPeriodSelector(periods);
-  } catch(e) {}
-}
-
-function switchPerfTab(tab) {
-  ['progress','estimate'].forEach(t => {
-    document.getElementById(`tab-${t}`).style.display = t===tab?'':'none';
-    document.getElementById(`tab-btn-${t}`).classList.toggle('active', t===tab);
+    }
+    listHtml+=`</div>`;
   });
-  if (tab==='estimate') renderEstTable();
+  wrap.innerHTML=`<div class="period-selector" id="ps-root">
+    <button class="period-btn" id="ps-btn" type="button" onclick="togglePeriodDD(event)">${btnContent}<span class="pb-arrow">▼</span></button>
+    <div class="period-dropdown" id="ps-dd">
+      <div class="period-dd-header">
+        <div class="period-dd-year-label" style="padding:0 0 6px;font-size:11px;color:#475569">選擇期間</div>
+        <div class="period-dd-search"><input type="text" placeholder="🔍 搜尋 例：2026年03月" id="ps-search" oninput="filterPeriodDD(this.value)" onclick="event.stopPropagation()"></div>
+      </div>
+      <div class="period-dd-list" id="ps-list">${listHtml}</div>
+    </div></div>`;
 }
 
-async function renderEstTable() {
-  const period = getPeriod(), branch = document.getElementById('selBranch').value;
-  const tbody = document.getElementById('estTableBody');
-  const lbl = document.getElementById('estPeriodLabel');
-  if (lbl && period) lbl.textContent = `${period.slice(0,4)}年${period.slice(4)}月`;
-  if (!period) { tbody.innerHTML='<tr><td colspan="5" style="padding:24px;text-align:center;color:#64748b">請先選擇期間後按查詢</td></tr>'; return; }
-  tbody.innerHTML='<tr><td colspan="5" style="padding:24px;text-align:center;color:#64748b"><span class="spinner"></span>載入中</td></tr>';
+window.togglePeriodDD=function(e){e.stopPropagation();const btn=document.getElementById('ps-btn'),dd=document.getElementById('ps-dd');if(!btn||!dd)return;const isOpen=dd.classList.contains('open');closeAllPD();if(!isOpen){btn.classList.add('open');dd.classList.add('open');setTimeout(()=>document.getElementById('ps-search')?.focus(),50);}};
+window.filterPeriodDD=function(q){const now=new Date(),thisMonth=`${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}`;function fmtP(p){return`${p.slice(0,4)}年${p.slice(4)}月`;}const groups={};_allPeriods.filter(p=>!q||fmtP(p).includes(q)||p.includes(q.replace(/[^0-9]/g,''))).forEach(p=>{const yr=p.slice(0,4);if(!groups[yr])groups[yr]=[];groups[yr].push(p);});let listHtml='';if(!Object.keys(groups).length){listHtml='<div style="padding:20px;text-align:center;color:#475569;font-size:12px">無符合期間</div>';}else{Object.keys(groups).sort((a,b)=>b-a).forEach(yr=>{const months=groups[yr];listHtml+=`<div class="period-dd-year-label">${yr}</div><div class="period-dd-months">`;for(let mo=12;mo>=1;mo--){const p=yr+String(mo).padStart(2,'0');if(!months.includes(p))continue;const isSel=p===_currentPeriod,isCur=p===thisMonth;listHtml+=`<div class="period-dd-mo ${isSel?'selected':''} ${isCur?'current-month':''} has-data" onclick="selectPeriod('${p}')"><span class="mo-num">${mo}</span><span class="mo-label">月</span><span class="mo-dot"></span></div>`;}listHtml+=`</div>`;});}const el=document.getElementById('ps-list');if(el)el.innerHTML=listHtml;};
+window.selectPeriod=function(val){_currentPeriod=val;closeAllPD();renderPeriodSelector('');};
+window.closeAllPD=function(){document.querySelectorAll('.period-btn.open').forEach(b=>b.classList.remove('open'));document.querySelectorAll('.period-dropdown.open').forEach(d=>d.classList.remove('open'));};
+document.addEventListener('click',closeAllPD);
+
+async function loadPeriods(){
+  try{
+    const periods=await(await fetch('/api/periods')).json();
+    _allPeriods=periods;
+    const now=new Date(),cur=`${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}`;
+    _currentPeriod=periods.includes(cur)?cur:(periods[0]||'');
+    initPeriodSelector(periods);
+  }catch(e){}
+}
+
+function switchPerfTab(tab){
+  ['progress','estimate'].forEach(t=>{
+    document.getElementById(`tab-${t}`).style.display=t===tab?'':'none';
+    document.getElementById(`tab-btn-${t}`).classList.toggle('active',t===tab);
+  });
+  if(tab==='estimate')renderEstTable();
+}
+
+// ══════════════════════════════════════════════
+// 工作天進度
+// ══════════════════════════════════════════════
+async function loadWorkingDaysProgress(period, branch) {
+  _wdSummary = null;
+  const el = document.getElementById('workingDaysBar');
+  if (!period) { el.style.display='none'; return; }
   try {
+    const data = await fetch(`/api/stats/daily?period=${period}${branch?'&branch='+branch:''}`).then(r=>r.json());
+    _wdSummary = data.summary || [];
+    renderWorkingDaysBar();
+  } catch(e) { el.style.display='none'; }
+}
+
+function renderWorkingDaysBar() {
+  const el = document.getElementById('workingDaysBar');
+  if (!_wdSummary || !_wdSummary.length) { el.style.display='none'; return; }
+
+  const branch = document.getElementById('selBranch').value;
+  const BRANCHES = branch ? [branch] : ['AMA','AMC','AMD'];
+  const brColors = { AMA:'#3b82f6', AMC:'#10b981', AMD:'#f59e0b' };
+
+  const cards = BRANCHES.map(br => {
+    const s   = _wdSummary.find(r => r.branch === br);
+    const col = brColors[br] || '#94a3b8';
+
+    const elapsed  = s ? parseInt(s.auto_working_days || 0) : 0;
+    const total    = s ? parseInt(s.working_days || 0) : 0;
+    const isManual = s ? s.configured_working_days !== null : false;
+    const wdPct    = total > 0 ? Math.min(100, elapsed / total * 100) : 0;
+
+    // 進度條顏色：根據進度多寡
+    const fillColor = wdPct >= 90 ? '#10b981' : wdPct >= 50 ? col : '#f59e0b';
+
+    // 有費達成率（若已載入）
+    const revRate = (_revRates && _revRates[br] != null) ? _revRates[br] : null;
+
+    // 比較狀態
+    let statusHtml = '';
+    if (revRate !== null && wdPct > 0) {
+      const gap = revRate - wdPct;
+      if (gap >= 3) {
+        statusHtml = `<span class="wd-status" style="background:rgba(16,185,129,.15);color:#10b981">🚀 超前 ${Math.abs(gap).toFixed(1)}%</span>`;
+      } else if (gap <= -5) {
+        statusHtml = `<span class="wd-status" style="background:rgba(239,68,68,.15);color:#ef4444">⚠️ 落後 ${Math.abs(gap).toFixed(1)}%</span>`;
+      } else {
+        statusHtml = `<span class="wd-status" style="background:rgba(245,158,11,.12);color:#f59e0b">〜 符合進度</span>`;
+      }
+    }
+
+    // 有費達成率標記線位置（在進度條上）
+    const markerHtml = revRate !== null
+      ? `<div class="wd-rev-marker" style="left:${Math.min(100, revRate).toFixed(1)}%" title="有費達成率 ${revRate.toFixed(1)}%"></div>`
+      : '';
+
+    return `<div class="wd-card" style="border-color:${col}44">
+      <!-- 標頭 -->
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span style="font-size:13px;font-weight:800;color:${col}">📅 ${br}</span>
+        <div style="display:flex;align-items:center;gap:7px">
+          ${isManual
+            ? `<span style="font-size:10px;color:#10b981;background:rgba(16,185,129,.12);padding:1px 6px;border-radius:5px">✅ 手動</span>`
+            : `<span style="font-size:10px;color:#f59e0b;background:rgba(245,158,11,.1);padding:1px 6px;border-radius:5px">⚠️ 自動</span>`}
+          <span style="font-size:12px;color:#64748b">
+            <strong style="font-size:15px;color:#e2e8f0">${elapsed}</strong>
+            <span> / ${total > 0 ? total : '?'} 天</span>
+          </span>
+        </div>
+      </div>
+      <!-- 進度條 -->
+      <div class="wd-track">
+        <div class="wd-fill" style="width:${wdPct.toFixed(1)}%;background:${fillColor}"></div>
+        ${markerHtml}
+      </div>
+      <!-- 數字 + 狀態 -->
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <!-- 工作天進度 -->
+          <div style="text-align:center">
+            <div style="font-size:20px;font-weight:900;color:${fillColor};line-height:1">${wdPct.toFixed(0)}%</div>
+            <div style="font-size:10px;color:#475569;margin-top:1px">天數進度</div>
+          </div>
+          ${revRate !== null ? `
+          <div style="width:1px;height:30px;background:#2d3f56"></div>
+          <!-- 有費達成率 -->
+          <div style="text-align:center">
+            <div style="font-size:20px;font-weight:900;color:#f97316;line-height:1">${revRate.toFixed(0)}%</div>
+            <div style="font-size:10px;color:#475569;margin-top:1px">有費達成</div>
+          </div>` : ''}
+        </div>
+        ${statusHtml}
+      </div>
+    </div>`;
+  }).join('');
+
+  const legend = `<div class="wd-legend">
+    <span>📅 天數進度 = 已有進廠資料天數 ÷ 本月工作天</span>
+    <span style="display:inline-flex;align-items:center;gap:4px">
+      <span style="display:inline-block;width:8px;height:8px;background:rgba(255,255,255,.4);border-radius:1px;flex-shrink:0"></span>
+      條上白線 = 有費達成率位置
+    </span>
+    <span>超前 / 落後判斷：有費達成率 − 天數進度，差距 ≥3% 為超前，≤−5% 為落後</span>
+  </div>`;
+
+  el.innerHTML = `<div class="wd-progress-wrap">${cards}</div>${legend}`;
+  el.style.display = '';
+}
+
+// ══════════════════════════════════════════════
+// 主查詢
+// ══════════════════════════════════════════════
+async function doLoad() {
+  const period=getPeriod(), branch=document.getElementById('selBranch').value;
+  document.getElementById('lastUpdate').textContent='更新中...';
+  _wdSummary = null;
+  _revRates  = null;
+  await Promise.all([
+    loadWorkingDaysProgress(period, branch),
+    loadRevenueKPI(period, branch),
+    loadIncomeBreakdown(period, branch),
+    loadPerformance(period, branch),
+  ]);
+  document.getElementById('lastUpdate').textContent=`更新於 ${new Date().toLocaleTimeString('zh-TW')}`;
+}
+
+// ══════════════════════════════════════════════
+// 業績預估
+// ══════════════════════════════════════════════
+async function renderEstTable() {
+  const period=getPeriod(),branch=document.getElementById('selBranch').value;
+  const tbody=document.getElementById('estTableBody');
+  const lbl=document.getElementById('estPeriodLabel');
+  if(lbl&&period)lbl.textContent=`${period.slice(0,4)}年${period.slice(4)}月`;
+  if(!period){tbody.innerHTML='<tr><td colspan="5" style="padding:24px;text-align:center;color:#64748b">請先選擇期間後按查詢</td></tr>';return;}
+  tbody.innerHTML='<tr><td colspan="5" style="padding:24px;text-align:center;color:#64748b"><span class="spinner"></span>載入中</td></tr>';
+  try{
     const estRes=await fetch(`/api/revenue-estimates?period=${period}${branch?'&branch='+branch:''}`).then(r=>r.json());
-    const eMap={}; (Array.isArray(estRes)?estRes:[]).forEach(e=>{eMap[e.branch]=e;});
+    const eMap={};(Array.isArray(estRes)?estRes:[]).forEach(e=>{eMap[e.branch]=e;});
     const BRANCHES=branch?[branch]:['AMA','AMC','AMD'];
     const brColors={AMA:'#3b82f6',AMC:'#10b981',AMD:'#f59e0b'};
     const KEYS=[{key:'paid',col:'#f97316'},{key:'general',col:'#3b82f6'},{key:'bodywork',col:'#8b5cf6'},{key:'extended',col:'#10b981'}];
     tbody.innerHTML=BRANCHES.map(br=>{
-      const e=eMap[br]||{}, bCol=brColors[br]||'#64748b';
+      const e=eMap[br]||{},bCol=brColors[br]||'#64748b';
       return`<tr><td style="padding:12px 14px;border-bottom:1px solid rgba(45,63,86,.3)">
         <span style="display:inline-block;padding:4px 12px;border-radius:6px;font-size:13px;font-weight:800;background:${bCol}22;color:${bCol}">${br}</span></td>
         ${KEYS.map(m=>{const val=e[`${m.key}_estimate`]?Math.round(e[`${m.key}_estimate`]/1000):'';
@@ -342,11 +404,11 @@ async function renderEstTable() {
               <span style="font-size:12px;color:#475569">K</span></div></td>`;
         }).join('')}</tr>`;
     }).join('');
-  } catch(e) { tbody.innerHTML=`<tr><td colspan="5" style="color:#ef4444;padding:16px">${e.message}</td></tr>`; }
+  }catch(e){tbody.innerHTML=`<tr><td colspan="5" style="color:#ef4444;padding:16px">${e.message}</td></tr>`;}
 }
 
-async function saveAllEstimates() {
-  const period=getPeriod(), branch=document.getElementById('selBranch').value;
+async function saveAllEstimates(){
+  const period=getPeriod(),branch=document.getElementById('selBranch').value;
   const msgEl=document.getElementById('estSaveMsg');
   if(!period){msgEl.textContent='請先選擇期間';msgEl.style.color='#ef4444';return;}
   const BRANCHES=branch?[branch]:['AMA','AMC','AMD'];
@@ -357,23 +419,19 @@ async function saveAllEstimates() {
   });
   const btn=document.querySelector('[onclick="saveAllEstimates()"]');
   if(btn){btn.disabled=true;btn.textContent='儲存中...';}
-  try {
+  try{
     const data=await(await fetch('/api/revenue-estimates/batch',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries})})).json();
     if(data.error)throw new Error(data.error);
     msgEl.textContent=`✅ 預估已儲存（${period.slice(0,4)}年${period.slice(4)}月）`;
     msgEl.style.color='#10b981';
-    switchPerfTab('progress'); await loadRevenueKPI(period,branch);
+    switchPerfTab('progress');await loadRevenueKPI(period,branch);
   }catch(e){msgEl.textContent='❌ '+e.message;msgEl.style.color='#ef4444';}
   finally{if(btn){btn.disabled=false;btn.textContent='💾 儲存預估';}}
 }
 
-async function doLoad() {
-  const period=getPeriod(), branch=document.getElementById('selBranch').value;
-  document.getElementById('lastUpdate').textContent='更新中...';
-  await Promise.all([loadRevenueKPI(period,branch),loadIncomeBreakdown(period,branch),loadPerformance(period,branch)]);
-  document.getElementById('lastUpdate').textContent=`更新於 ${new Date().toLocaleTimeString('zh-TW')}`;
-}
-
+// ══════════════════════════════════════════════
+// 有費 KPI
+// ══════════════════════════════════════════════
 async function loadRevenueKPI(period,branch){
   const section=document.getElementById('revenueKPISection');
   if(!period){section.style.display='none';return;}
@@ -390,84 +448,69 @@ async function loadRevenueKPI(period,branch){
     const eMap={};(Array.isArray(estRes)?estRes:[]).forEach(e=>{eMap[e.branch]=e;});
     const bdata=bkRes.branches||{};
 
-    // ============================================================
-    // 集團合計卡片 (新功能)
-    // ============================================================
-    const buildGroupCard = (metricKey, actualKey, label, color) => {
-      // 加總所有據點
-      const ALL_BRANCHES = ['AMA','AMC','AMD'];
-      const gActual = ALL_BRANCHES.reduce((s,br)=>s+(bdata[br]?.[actualKey]||0),0);
-      const gTarget = ALL_BRANCHES.reduce((s,br)=>s+parseFloat(tMap[br]?.[`${metricKey}_target`]||0),0);
-      const gLY     = ALL_BRANCHES.reduce((s,br)=>s+parseFloat(tMap[br]?.[`${metricKey}_last_year`]||0),0);
-      const gEst    = ALL_BRANCHES.reduce((s,br)=>s+parseFloat(eMap[br]?.[`${metricKey}_estimate`]||0),0);
-      const rate    = gTarget>0 ? gActual/gTarget*100 : null;
-      const estRate = gTarget>0&&gEst>0 ? gEst/gTarget*100 : null;
-      const yoy     = gLY>0 ? (gActual-gLY)/gLY*100 : null;
-      const rCol    = rate===null?'#64748b':rate>=100?'#10b981':rate>=80?'#f59e0b':'#ef4444';
-      const eCol    = estRate===null?'#64748b':estRate>=100?'#10b981':estRate>=80?'#f59e0b':'#f97316';
-      const barW    = rate!==null?Math.min(100,rate).toFixed(0):0;
-      const estBarW = estRate!==null?Math.min(100,estRate).toFixed(0):0;
+    // ── 儲存有費達成率，供工作天進度條比較 ──
+    _revRates={};
+    BRANCHES.forEach(br=>{
+      const actual=bdata[br]?.paid_total||0;
+      const target=parseFloat(tMap[br]?.paid_target||0);
+      _revRates[br]=target>0?(actual/target*100):null;
+    });
+    if(_wdSummary)renderWorkingDaysBar(); // 若工作天已載入，立刻更新狀態
 
-      // 三大指標合計欄（一般 / 鈑烤 / 延保）
-      const SUB_METRICS = [
-        { key:'general',  actualKey:'general_total', label:'💙 一般總營收', color:'#3b82f6' },
-        { key:'bodywork', actualKey:'bodywork_total', label:'🔨 鈑烤總營收', color:'#8b5cf6' },
-        { key:'extended', actualKey:'extended',       label:'🛡️ 延保總營收', color:'#10b981' },
+    // ── 集團合計卡片 ──
+    const buildGroupCard=(metricKey,actualKey,label,color)=>{
+      const ALL=['AMA','AMC','AMD'];
+      const gActual=ALL.reduce((s,br)=>s+(bdata[br]?.[actualKey]||0),0);
+      const gTarget=ALL.reduce((s,br)=>s+parseFloat(tMap[br]?.[`${metricKey}_target`]||0),0);
+      const gLY=ALL.reduce((s,br)=>s+parseFloat(tMap[br]?.[`${metricKey}_last_year`]||0),0);
+      const gEst=ALL.reduce((s,br)=>s+parseFloat(eMap[br]?.[`${metricKey}_estimate`]||0),0);
+      const rate=gTarget>0?gActual/gTarget*100:null;
+      const estRate=gTarget>0&&gEst>0?gEst/gTarget*100:null;
+      const yoy=gLY>0?(gActual-gLY)/gLY*100:null;
+      const rCol=rate===null?'#64748b':rate>=100?'#10b981':rate>=80?'#f59e0b':'#ef4444';
+      const eCol=estRate===null?'#64748b':estRate>=100?'#10b981':estRate>=80?'#f59e0b':'#f97316';
+      const barW=rate!==null?Math.min(100,rate).toFixed(0):0;
+      const estBarW=estRate!==null?Math.min(100,estRate).toFixed(0):0;
+      const SUB=[
+        {key:'general',actualKey:'general_total',label:'💙 一般總營收',color:'#3b82f6'},
+        {key:'bodywork',actualKey:'bodywork_total',label:'🔨 鈑烤總營收',color:'#8b5cf6'},
+        {key:'extended',actualKey:'extended',label:'🛡️ 延保總營收',color:'#10b981'},
       ];
-      const branchCells = SUB_METRICS.map((sm, si)=>{
-        const sAct = ALL_BRANCHES.reduce((s,br)=>s+(bdata[br]?.[sm.actualKey]||0), 0);
-        const sTgt = ALL_BRANCHES.reduce((s,br)=>s+parseFloat(tMap[br]?.[`${sm.key}_target`]||0), 0);
-        const sLY  = ALL_BRANCHES.reduce((s,br)=>s+parseFloat(tMap[br]?.[`${sm.key}_last_year`]||0), 0);
-        const sEst = ALL_BRANCHES.reduce((s,br)=>s+parseFloat(eMap[br]?.[`${sm.key}_estimate`]||0), 0);
-        const r  = sTgt>0 ? sAct/sTgt*100 : null;
-        const er = sTgt>0&&sEst>0 ? sEst/sTgt*100 : null;
-        const yoy= sLY>0 ? (sAct-sLY)/sLY*100 : null;
-        const rc = r===null?'#64748b':r>=100?'#10b981':r>=80?'#f59e0b':'#ef4444';
-        const ec = er===null?'#64748b':er>=100?'#10b981':er>=80?'#f59e0b':'#f97316';
-        const bw = r!==null?Math.min(100,r).toFixed(0):0;
-        const ebw= er!==null?Math.min(100,er).toFixed(0):0;
-        const borderR = si<SUB_METRICS.length-1 ? 'border-right:1px solid #2d3f56;' : '';
-        return `<div style="padding:16px 20px;${borderR}">
+      const branchCells=SUB.map((sm,si)=>{
+        const sAct=ALL.reduce((s,br)=>s+(bdata[br]?.[sm.actualKey]||0),0);
+        const sTgt=ALL.reduce((s,br)=>s+parseFloat(tMap[br]?.[`${sm.key}_target`]||0),0);
+        const sLY=ALL.reduce((s,br)=>s+parseFloat(tMap[br]?.[`${sm.key}_last_year`]||0),0);
+        const sEst=ALL.reduce((s,br)=>s+parseFloat(eMap[br]?.[`${sm.key}_estimate`]||0),0);
+        const r=sTgt>0?sAct/sTgt*100:null,er=sTgt>0&&sEst>0?sEst/sTgt*100:null,yoy=sLY>0?(sAct-sLY)/sLY*100:null;
+        const rc=r===null?'#64748b':r>=100?'#10b981':r>=80?'#f59e0b':'#ef4444';
+        const ec=er===null?'#64748b':er>=100?'#10b981':er>=80?'#f59e0b':'#f97316';
+        const bw=r!==null?Math.min(100,r).toFixed(0):0,ebw=er!==null?Math.min(100,er).toFixed(0):0;
+        const borderR=si<SUB.length-1?'border-right:1px solid #2d3f56;':'';
+        return`<div style="padding:16px 20px;${borderR}">
           <div style="font-size:12px;font-weight:800;color:${sm.color};margin-bottom:10px">${sm.label}</div>
           <div style="font-size:22px;font-weight:800;color:#e2e8f0;margin-bottom:6px">${fmtK(sAct)}</div>
           <div style="display:flex;align-items:center;gap:5px;margin-bottom:${sEst>0?'6px':'12px'}">
-            <div style="flex:1;background:#0f172a;border-radius:3px;height:5px">
-              <div style="width:${bw}%;height:5px;background:${rc};border-radius:3px;transition:width .4s"></div>
-            </div>
+            <div style="flex:1;background:#0f172a;border-radius:3px;height:5px"><div style="width:${bw}%;height:5px;background:${rc};border-radius:3px;transition:width .4s"></div></div>
             <span style="font-size:12px;font-weight:800;color:${rc};white-space:nowrap">${r!==null?r.toFixed(1)+'%':'—'}</span>
           </div>
           ${sEst>0?`<div style="display:flex;align-items:center;gap:5px;margin-bottom:12px">
-            <div style="flex:1;background:#0f172a;border-radius:3px;height:3px">
-              <div style="width:${ebw}%;height:3px;border-radius:3px;background:repeating-linear-gradient(90deg,${ec} 0,${ec} 4px,transparent 4px,transparent 7px)"></div>
-            </div>
+            <div style="flex:1;background:#0f172a;border-radius:3px;height:3px"><div style="width:${ebw}%;height:3px;border-radius:3px;background:repeating-linear-gradient(90deg,${ec} 0,${ec} 4px,transparent 4px,transparent 7px)"></div></div>
             <span style="font-size:11px;font-weight:700;color:${ec};white-space:nowrap">預 ${er!==null?er.toFixed(1)+'%':'—'}</span>
           </div>`:''}
           <div style="display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:12px;color:#64748b;align-items:center">
-            <span>目標</span>
-            <span style="text-align:right;color:#94a3b8;font-weight:700">${sTgt>0?fmtK(sTgt):'未設定'}</span>
-            ${sEst>0?`<span style="color:${ec}">預估</span>
-            <span style="text-align:right;color:${ec};font-weight:700">${fmtK(sEst)}</span>`:''}
-            <span>去年同期</span>
-            <span style="text-align:right">
-              <span style="color:#94a3b8;font-weight:600">${sLY>0?fmtK(sLY):'—'}</span>
-              ${yoy!==null?`<span style="color:${yoy>=0?'#10b981':'#ef4444'};margin-left:5px">${yoy>=0?'▲':'▼'}${Math.abs(yoy).toFixed(1)}%</span>`:''}
-            </span>
-          </div>
-        </div>`;
+            <span>目標</span><span style="text-align:right;color:#94a3b8;font-weight:700">${sTgt>0?fmtK(sTgt):'未設定'}</span>
+            ${sEst>0?`<span style="color:${ec}">預估</span><span style="text-align:right;color:${ec};font-weight:700">${fmtK(sEst)}</span>`:''}
+            <span>去年同期</span><span style="text-align:right"><span style="color:#94a3b8;font-weight:600">${sLY>0?fmtK(sLY):'—'}</span>${yoy!==null?`<span style="color:${yoy>=0?'#10b981':'#ef4444'};margin-left:5px">${yoy>=0?'▲':'▼'}${Math.abs(yoy).toFixed(1)}%</span>`:''}</span>
+          </div></div>`;
       }).join('');
-
-      return `<div style="background:#1a2332;border:2px solid ${color}44;border-radius:12px;overflow:hidden">
-        <!-- 集團合計橫幅 -->
+      return`<div style="background:#1a2332;border:2px solid ${color}44;border-radius:12px;overflow:hidden">
         <div style="background:linear-gradient(135deg,${color}18,${color}08);border-bottom:1px solid ${color}33;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
           <div style="display:flex;align-items:center;gap:10px">
             <span style="font-size:13px;font-weight:800;color:${color}">集團有費合計</span>
             <span style="font-size:11px;color:#475569">一般(含自費鈑烤)＋保險鈑烤＋延保 ｜ AMA＋AMC＋AMD</span>
           </div>
           <div style="display:flex;align-items:center;gap:16px;margin-left:auto;flex-wrap:wrap">
-            <div>
-              <div style="font-size:11px;color:#64748b;margin-bottom:2px">集團總計</div>
-              <div style="font-size:28px;font-weight:900;color:#fff;line-height:1">${fmtK(gActual)}</div>
-            </div>
+            <div><div style="font-size:11px;color:#64748b;margin-bottom:2px">集團總計</div><div style="font-size:28px;font-weight:900;color:#fff;line-height:1">${fmtK(gActual)}</div></div>
             <div style="display:flex;flex-direction:column;gap:4px;min-width:160px">
               <div style="display:flex;align-items:center;gap:6px">
                 <div style="flex:1;background:#0f172a;border-radius:3px;height:6px"><div style="width:${barW}%;height:6px;background:${rCol};border-radius:3px;transition:width .5s"></div></div>
@@ -481,26 +524,15 @@ async function loadRevenueKPI(period,branch){
             <div style="display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:12px;color:#64748b">
               <span>目標</span><span style="color:#94a3b8;font-weight:700">${gTarget>0?fmtK(gTarget):'未設定'}</span>
               ${gEst>0?`<span style="color:${eCol}">預估</span><span style="color:${eCol};font-weight:700">${fmtK(gEst)}</span>`:''}
-              <span>去年同期</span><span>
-                <span style="color:#94a3b8;font-weight:600">${gLY>0?fmtK(gLY):'—'}</span>
-                ${yoy!==null?`<span style="color:${yoy>=0?'#10b981':'#ef4444'};margin-left:4px">${yoy>=0?'▲':'▼'}${Math.abs(yoy).toFixed(1)}%</span>`:''}
-              </span>
+              <span>去年同期</span><span><span style="color:#94a3b8;font-weight:600">${gLY>0?fmtK(gLY):'—'}</span>${yoy!==null?`<span style="color:${yoy>=0?'#10b981':'#ef4444'};margin-left:4px">${yoy>=0?'▲':'▼'}${Math.abs(yoy).toFixed(1)}%</span>`:''}</span>
             </div>
           </div>
         </div>
-        <!-- 三大指標合計 -->
-        <div style="padding:10px 16px 8px;border-bottom:1px solid #2d3f56">
-          <span style="font-size:11px;color:#374151;font-weight:700;letter-spacing:.05em">集團各類營收合計</span>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr)">
-          ${branchCells}
-        </div>
+        <div style="padding:10px 16px 8px;border-bottom:1px solid #2d3f56"><span style="font-size:11px;color:#374151;font-weight:700;letter-spacing:.05em">集團各類營收合計</span></div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr)">${branchCells}</div>
       </div>`;
     };
 
-    // ============================================================
-    // 一般子卡片 (一般/鈑烤/延保)
-    // ============================================================
     const buildCard=(m,fullWidth)=>{
       let card=`<div style="background:#1a2332;border:1px solid #2d3f56;border-radius:12px;overflow:hidden">
         <div style="padding:12px 18px 10px;border-bottom:1px solid #2d3f56;display:flex;align-items:center;gap:8px">
@@ -534,21 +566,14 @@ async function loadRevenueKPI(period,branch){
               <span style="color:#94a3b8;font-weight:600">${ly>0?fmtK(ly):'—'}</span>
               ${yoy!==null?`<span style="color:${yoy>=0?'#10b981':'#ef4444'};margin-left:4px">${yoy>=0?'▲':'▼'}${Math.abs(yoy).toFixed(1)}%</span>`:''}
             </span>
-          </div>
-        </div>`;
+          </div></div>`;
       });
       card+=`</div></div>`;return card;
     };
 
-    // 只在「全部」模式下顯示集團合計
-    const groupEl = document.getElementById('revKPI-group');
-    if(!branch) {
-      groupEl.innerHTML = buildGroupCard('paid','paid_total','集團有費合計','#f97316');
-      groupEl.style.display = '';
-    } else {
-      groupEl.style.display = 'none';
-    }
-
+    const groupEl=document.getElementById('revKPI-group');
+    if(!branch){groupEl.innerHTML=buildGroupCard('paid','paid_total','集團有費合計','#f97316');groupEl.style.display='';}
+    else{groupEl.style.display='none';}
     document.getElementById('revKPI-paid').innerHTML=buildCard({key:'paid',label:'🔶 有費營收',color:'#f97316',actualKey:'paid_total'},true);
     document.getElementById('revKPI-sub').innerHTML=[
       {key:'general',label:'💙 一般營收',color:'#3b82f6',actualKey:'general_total'},
@@ -559,6 +584,9 @@ async function loadRevenueKPI(period,branch){
   }catch(e){document.getElementById('revKPI-paid').innerHTML=`<div style="color:#ef4444;padding:12px">${e.message}</div>`;section.style.display='';}
 }
 
+// ══════════════════════════════════════════════
+// 收入明細分解
+// ══════════════════════════════════════════════
 async function loadIncomeBreakdown(period,branch){
   const el=document.getElementById('perfBreakdown'),lblEl=document.getElementById('perfBreakdownPeriod');
   if(!period){el.innerHTML='<div style="color:#64748b;font-size:13px">請選擇期間後按查詢</div>';return;}
@@ -572,7 +600,6 @@ async function loadIncomeBreakdown(period,branch){
     const BRANCHES=branch?[branch]:['AMA','AMC','AMD'];
     const brColors={AMA:'#3b82f6',AMC:'#10b981',AMD:'#f59e0b'};
     const tot=k=>BRANCHES.reduce((s,br)=>s+(bdata[br]?.[k]||0),0);
-
     const ROWS=[
       {key:'general_no_bw',label:'一般收入（非鈑烤）',indent:1,color:'#60a5fa',note:'帳類=一般，不含鈑金/烤漆工單'},
       {key:'voucher',label:'票劵收入',indent:1,color:'#60a5fa',note:'帳類=票劵'},
@@ -586,7 +613,6 @@ async function loadIncomeBreakdown(period,branch){
       {key:'other_total',label:'無費成本（內結/保固/VSA/善意）',indent:0,color:'#64748b'},
       {key:'all_total',label:'📌 全部營收',indent:0,color:'#e2e8f0',bold:true,border:true,note:'有費＋無費'},
     ];
-
     let html=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>
       <th style="text-align:left;padding:10px 16px;background:#0f172a;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;min-width:220px">收入項目</th>`;
     BRANCHES.forEach(br=>{html+=`<th style="text-align:right;padding:10px 16px;background:#0f172a;color:${brColors[br]||'#94a3b8'};font-size:13px;font-weight:800;border-bottom:1px solid #2d3f56;min-width:140px">${br}</th>`;});
@@ -612,6 +638,9 @@ async function loadIncomeBreakdown(period,branch){
   }catch(e){el.innerHTML=`<div style="color:#ef4444;padding:16px">${e.message}</div>`;}
 }
 
+// ══════════════════════════════════════════════
+// 各指標業績進度
+// ══════════════════════════════════════════════
 async function loadPerformance(period,branch){
   const detailEl=document.getElementById('perfDetail'),noConfEl=document.getElementById('perfNoConfig'),achBar=document.getElementById('branchAchieveBar');
   if(!period){detailEl.innerHTML='';achBar.style.display='none';return;}
