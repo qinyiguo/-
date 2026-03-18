@@ -269,181 +269,142 @@ function renderWorkingDaysBar() {
   const el = document.getElementById('workingDaysBar');
   if (!_wdSummary || !_wdSummary.length) { el.style.display='none'; return; }
 
-  const branch = document.getElementById('selBranch').value;
+  const branch   = document.getElementById('selBranch').value;
   const BRANCHES = branch ? [branch] : ['AMA','AMC','AMD'];
   const brColors = { AMA:'#3b82f6', AMC:'#10b981', AMD:'#f59e0b' };
+  const ALL      = ['AMA','AMC','AMD'];
 
-  const cards = BRANCHES.map(br => {
-    const s   = _wdSummary.find(r => r.branch === br);
-    const col = brColors[br] || '#94a3b8';
+  // ── 計算集團數字（無論單廠/全廠都算，單廠時不顯示） ──
+  let gElapsed = 0, gTotal = 0;
+  ALL.forEach(br => {
+    const s = _wdSummary.find(r => r.branch === br);
+    if (s) { gElapsed += parseInt(s.auto_working_days||0); gTotal += parseInt(s.working_days||0); }
+  });
+  const gMonthPct  = gTotal > 0 ? gElapsed / gTotal * 100 : null;
+  const gMonthBarW = gMonthPct !== null ? Math.min(100, gMonthPct).toFixed(1) : 0;
+  const gActual    = _revData ? ALL.reduce((s,br)=>s+(_revData[br]?.actual||0),0) : 0;
+  const gTarget    = _revData ? ALL.reduce((s,br)=>s+(_revData[br]?.target||0),0) : 0;
+  const gEst       = _revData ? ALL.reduce((s,br)=>s+(_revData[br]?.est||0),0) : 0;
+  const gRevPct    = gTarget > 0 ? gActual / gTarget * 100 : null;
+  const gEstPct    = gTarget > 0 && gEst > 0 ? gEst / gTarget * 100 : null;
+  const gDelta     = (gRevPct !== null && gMonthPct !== null) ? gRevPct - gMonthPct : null;
+  const gDeltaCol  = gDelta === null ? '#64748b' : gDelta >= 3 ? '#10b981' : gDelta <= -5 ? '#ef4444' : '#f59e0b';
+  const gDeltaText = gDelta !== null ? `${gDelta >= 3 ? '🚀 超前' : gDelta <= -5 ? '⚠️ 落後' : '〜 符合'} ${gDelta >= 0 ? '+' : ''}${gDelta.toFixed(1)}%` : '—';
+  const gRevCol    = gRevPct === null ? '#64748b' : gRevPct >= 100 ? '#10b981' : gRevPct >= 80 ? '#f59e0b' : '#ef4444';
+  const gEstCol    = gEstPct === null ? '#64748b' : gEstPct >= 100 ? '#10b981' : gEstPct >= 80 ? '#f59e0b' : '#f97316';
+  const gFillCol   = gMonthPct === null ? '#64748b' : gMonthPct >= 90 ? '#10b981' : gMonthPct >= 50 ? '#94a3b8' : '#f59e0b';
+  const gMarker    = gRevPct !== null ? `<div class="wd-rev-marker" style="left:${Math.min(100,gRevPct).toFixed(1)}%" title="集團有費達成率 ${gRevPct.toFixed(1)}%"></div>` : '';
 
-    const elapsed  = s ? parseInt(s.auto_working_days || 0) : 0;
-    const total    = s ? parseInt(s.working_days || 0) : 0;
+  // ── 各廠迷你卡（放在集團卡內） ──
+  const branchMiniCards = BRANCHES.map((br, bi) => {
+    const s        = _wdSummary.find(r => r.branch === br);
+    const col      = brColors[br] || '#94a3b8';
+    const elapsed  = s ? parseInt(s.auto_working_days||0) : 0;
+    const total    = s ? parseInt(s.working_days||0) : 0;
     const isManual = s ? s.configured_working_days !== null : false;
     const wdPct    = total > 0 ? Math.min(100, elapsed / total * 100) : 0;
-
-    // 進度條顏色：根據進度多寡
     const fillColor = wdPct >= 90 ? '#10b981' : wdPct >= 50 ? col : '#f59e0b';
+    const revRate  = (_revRates && _revRates[br] != null) ? _revRates[br] : null;
+    const revBarW  = revRate !== null ? Math.min(100, revRate).toFixed(1) : 0;
+    const revCol   = revRate === null ? '#64748b' : revRate >= 100 ? '#10b981' : revRate >= 80 ? '#f59e0b' : '#ef4444';
+    const gap      = (revRate !== null && wdPct > 0) ? revRate - wdPct : null;
+    const gapCol   = gap === null ? '#64748b' : gap >= 3 ? '#10b981' : gap <= -5 ? '#ef4444' : '#f59e0b';
+    const gapText  = gap !== null ? `${gap >= 3 ? '🚀' : gap <= -5 ? '⚠️' : '〜'} ${gap >= 0 ? '+' : ''}${gap.toFixed(1)}%` : '—';
+    const markerHtml = revRate !== null ? `<div class="wd-rev-marker" style="left:${Math.min(100,revRate).toFixed(1)}%" title="有費達成率 ${revRate.toFixed(1)}%"></div>` : '';
+    const borderR  = bi < BRANCHES.length - 1 ? 'border-right:1px solid #2d3f56;' : '';
 
-    // 有費達成率（若已載入）
-    const revRate = (_revRates && _revRates[br] != null) ? _revRates[br] : null;
-
-    // 比較狀態
-    let statusHtml = '';
-    if (revRate !== null && wdPct > 0) {
-      const gap = revRate - wdPct;
-      if (gap >= 3) {
-        statusHtml = `<span class="wd-status" style="background:rgba(16,185,129,.15);color:#10b981">🚀 超前 ${Math.abs(gap).toFixed(1)}%</span>`;
-      } else if (gap <= -5) {
-        statusHtml = `<span class="wd-status" style="background:rgba(239,68,68,.15);color:#ef4444">⚠️ 落後 ${Math.abs(gap).toFixed(1)}%</span>`;
-      } else {
-        statusHtml = `<span class="wd-status" style="background:rgba(245,158,11,.12);color:#f59e0b">〜 符合進度</span>`;
-      }
-    }
-
-    // 有費達成率標記線位置（在進度條上）
-    const markerHtml = revRate !== null
-      ? `<div class="wd-rev-marker" style="left:${Math.min(100, revRate).toFixed(1)}%" title="有費達成率 ${revRate.toFixed(1)}%"></div>`
-      : '';
-
-    return `<div class="wd-card" style="border-color:${col}44">
+    return `<div style="padding:14px 16px;${borderR}display:flex;flex-direction:column;gap:8px">
       <!-- 標頭 -->
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-        <span style="font-size:13px;font-weight:800;color:${col}">📅 ${br}</span>
-        <div style="display:flex;align-items:center;gap:7px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:13px;font-weight:800;color:${col}">${br}</span>
           ${isManual
-            ? `<span style="font-size:10px;color:#10b981;background:rgba(16,185,129,.12);padding:1px 6px;border-radius:5px">✅ 手動</span>`
-            : `<span style="font-size:10px;color:#f59e0b;background:rgba(245,158,11,.1);padding:1px 6px;border-radius:5px">⚠️ 自動</span>`}
-          <span style="font-size:12px;color:#64748b">
-            <strong style="font-size:15px;color:#e2e8f0">${elapsed}</strong>
-            <span> / ${total > 0 ? total : '?'} 天</span>
-          </span>
+            ? `<span style="font-size:10px;color:#10b981;background:rgba(16,185,129,.12);padding:1px 5px;border-radius:4px">✅ 手動</span>`
+            : `<span style="font-size:10px;color:#f59e0b;background:rgba(245,158,11,.1);padding:1px 5px;border-radius:4px">⚠️ 自動</span>`}
+        </div>
+        <span style="font-size:11px;font-weight:700;padding:1px 7px;border-radius:6px;background:${gapCol}18;color:${gapCol}">${gapText}</span>
+      </div>
+      <!-- 天數 -->
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+          <span style="font-size:10px;color:#64748b">📅 天數進度</span>
+          <span style="font-size:11px;font-weight:800;color:${fillColor}">${wdPct.toFixed(0)}% <span style="font-size:10px;color:#475569;font-weight:400">${elapsed}/${total>0?total:'?'}天</span></span>
+        </div>
+        <div class="wd-track">
+          <div class="wd-fill" style="width:${wdPct.toFixed(1)}%;background:${fillColor}"></div>
+          ${markerHtml}
         </div>
       </div>
-      <!-- 進度條 -->
-      <div class="wd-track">
-        <div class="wd-fill" style="width:${wdPct.toFixed(1)}%;background:${fillColor}"></div>
-        ${markerHtml}
-      </div>
-      <!-- 數字 + 狀態 -->
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-        <div style="display:flex;align-items:center;gap:12px">
-          <!-- 工作天進度 -->
-          <div style="text-align:center">
-            <div style="font-size:20px;font-weight:900;color:${fillColor};line-height:1">${wdPct.toFixed(0)}%</div>
-            <div style="font-size:10px;color:#475569;margin-top:1px">天數進度</div>
-          </div>
-          ${revRate !== null ? `
-          <div style="width:1px;height:30px;background:#2d3f56"></div>
-          <!-- 有費達成率 -->
-          <div style="text-align:center">
-            <div style="font-size:20px;font-weight:900;color:#f97316;line-height:1">${revRate.toFixed(0)}%</div>
-            <div style="font-size:10px;color:#475569;margin-top:1px">有費達成</div>
-          </div>` : ''}
+      <!-- 有費達成 -->
+      ${revRate !== null ? `<div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+          <span style="font-size:10px;color:#64748b">🔶 有費達成</span>
+          <span style="font-size:11px;font-weight:800;color:${revCol}">${revRate.toFixed(0)}%</span>
         </div>
-        ${statusHtml}
-      </div>
+        <div class="wd-track">
+          <div class="wd-fill" style="width:${revBarW}%;background:${revCol}"></div>
+        </div>
+      </div>` : '<div style="font-size:10px;color:#475569">有費達成：未設目標</div>'}
     </div>`;
   }).join('');
 
-  // ── 集團合計卡 (只在顯示全部三廠時出現) ──
-  let groupCard = '';
-  if (BRANCHES.length === 3 && _revData) {
-    const ALL = ['AMA','AMC','AMD'];
-
-    // 工作天：各廠平均進度%（加權：分子加總 / 分母加總）
-    let gElapsed = 0, gTotal = 0;
-    ALL.forEach(br => {
-      const s = _wdSummary.find(r => r.branch === br);
-      if (s) {
-        gElapsed += parseInt(s.auto_working_days || 0);
-        gTotal   += parseInt(s.working_days || 0);
-      }
-    });
-    const gMonthPct = gTotal > 0 ? gElapsed / gTotal * 100 : null;
-    const gMonthBarW = gMonthPct !== null ? Math.min(100, gMonthPct).toFixed(1) : 0;
-
-    // 有費：三廠加總
-    const gActual = ALL.reduce((s, br) => s + (_revData[br]?.actual || 0), 0);
-    const gTarget = ALL.reduce((s, br) => s + (_revData[br]?.target || 0), 0);
-    const gEst    = ALL.reduce((s, br) => s + (_revData[br]?.est || 0), 0);
-    const gRevPct = gTarget > 0 ? gActual / gTarget * 100 : null;
-    const gEstPct = gTarget > 0 && gEst > 0 ? gEst / gTarget * 100 : null;
-    const gRevBarW = gRevPct !== null ? Math.min(100, gRevPct).toFixed(1) : 0;
-    const gEstBarW = gEstPct !== null ? Math.min(100, gEstPct).toFixed(1) : 0;
-
-    // 進度差
-    const gDelta = (gRevPct !== null && gMonthPct !== null) ? gRevPct - gMonthPct : null;
-    const gDeltaCol  = gDelta === null ? '#64748b' : gDelta >= 3 ? '#10b981' : gDelta <= -5 ? '#ef4444' : '#f59e0b';
-    const gDeltaIcon = gDelta === null ? '—' : gDelta >= 3 ? '🚀 超前' : gDelta <= -5 ? '⚠️ 落後' : '〜 符合';
-    const gDeltaText = gDelta !== null ? `${gDeltaIcon} ${gDelta >= 0 ? '+' : ''}${gDelta.toFixed(1)}%` : '—';
-
-    const gRevCol  = gRevPct === null ? '#64748b' : gRevPct >= 100 ? '#10b981' : gRevPct >= 80 ? '#f59e0b' : '#ef4444';
-    const gEstCol  = gEstPct === null ? '#64748b' : gEstPct >= 100 ? '#10b981' : gEstPct >= 80 ? '#f59e0b' : '#f97316';
-    const gFillCol = gMonthPct === null ? '#64748b' : gMonthPct >= 90 ? '#10b981' : gMonthPct >= 50 ? '#94a3b8' : '#f59e0b';
-
-    // 有費達成率標記線
-    const gMarker = gRevPct !== null
-      ? `<div class="wd-rev-marker" style="left:${Math.min(100, gRevPct).toFixed(1)}%" title="集團有費達成率 ${gRevPct.toFixed(1)}%"></div>`
-      : '';
-
-    groupCard = `<div class="wd-card" style="border:2px solid #f97316;background:linear-gradient(135deg,rgba(249,115,22,.06),rgba(249,115,22,.02))">
-      <!-- 標頭 -->
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
-        <span style="font-size:13px;font-weight:800;color:#f97316">🏢 集團合計</span>
-        <span style="font-size:11px;padding:2px 8px;border-radius:6px;font-weight:700;background:${gDeltaCol}18;color:${gDeltaCol}">${gDeltaText}</span>
-      </div>
-      <div style="font-size:10px;color:#475569;margin-bottom:10px">AMA + AMC + AMD 加總</div>
-
-      <!-- 工作天進度條 -->
-      <div style="font-size:10px;color:#64748b;margin-bottom:3px;display:flex;justify-content:space-between">
-        <span>📅 天數進度（加權平均）</span>
-        <span style="color:#94a3b8;font-weight:700">${gMonthPct !== null ? gMonthPct.toFixed(1)+'%' : '—'}</span>
-      </div>
-      <div class="wd-track" style="margin-bottom:10px">
-        <div class="wd-fill" style="width:${gMonthBarW}%;background:${gFillCol}"></div>
-        ${gMarker}
-      </div>
-
-      <!-- 數字 -->
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-        <div style="text-align:center">
-          <div style="font-size:22px;font-weight:900;color:${gFillCol};line-height:1">${gMonthPct !== null ? gMonthPct.toFixed(0)+'%' : '—'}</div>
-          <div style="font-size:10px;color:#475569;margin-top:1px">天數進度</div>
-        </div>
-        ${gRevPct !== null ? `
-        <div style="width:1px;height:30px;background:#2d3f56"></div>
-        <div style="text-align:center">
-          <div style="font-size:22px;font-weight:900;color:${gRevCol};line-height:1">${gRevPct.toFixed(0)}%</div>
-          <div style="font-size:10px;color:#475569;margin-top:1px">有費達成</div>
-        </div>` : ''}
-        ${gEstPct !== null ? `
-        <div style="width:1px;height:30px;background:#2d3f56"></div>
-        <div style="text-align:center">
-          <div style="font-size:22px;font-weight:900;color:${gEstCol};line-height:1">${gEstPct.toFixed(0)}%</div>
-          <div style="font-size:10px;color:#475569;margin-top:1px">預估達成</div>
-        </div>` : ''}
-      </div>
-
-      <!-- 金額明細 -->
-      <div style="display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:11px;color:#64748b">
-        <span>實際</span><span style="color:#f97316;font-weight:800">${fmtK(gActual)}</span>
-        <span>目標</span><span style="color:#94a3b8;font-weight:600">${gTarget > 0 ? fmtK(gTarget) : '未設定'}</span>
-        ${gEst > 0 ? `<span style="color:${gEstCol}">預估</span><span style="color:${gEstCol};font-weight:700">${fmtK(gEst)}</span>` : ''}
-      </div>
-    </div>`;
-  }
-
+  // ── 圖例 ──
   const legend = `<div class="wd-legend">
     <span>📅 天數進度 = 已有進廠資料天數 ÷ 本月工作天</span>
     <span style="display:inline-flex;align-items:center;gap:4px">
       <span style="display:inline-block;width:8px;height:8px;background:rgba(255,255,255,.4);border-radius:1px;flex-shrink:0"></span>
       條上白線 = 有費達成率位置
     </span>
-    <span>超前 / 落後判斷：有費達成率 − 天數進度，差距 ≥3% 為超前，≤−5% 為落後</span>
+    <span>進度差 = 有費達成率 − 天數進度 ｜ 🚀 超前≥3% ／ 〜 符合 ／ ⚠️ 落後≤-5%</span>
   </div>`;
 
-  el.innerHTML = `<div class="wd-progress-wrap">${cards}${groupCard}</div>${legend}`;
+  // ── 單廠模式：直接顯示單廠卡 ──
+  if (branch) {
+    el.innerHTML = `<div class="wd-progress-wrap">${branchMiniCards}</div>${legend}`;
+    el.style.display = '';
+    return;
+  }
+
+  // ── 全廠模式：集團大卡包住三廠 ──
+  el.innerHTML = `
+  <div style="background:#1a2332;border:2px solid #f97316;border-radius:12px;overflow:hidden;margin-bottom:0">
+    <!-- 集團標頭 -->
+    <div style="background:linear-gradient(135deg,rgba(249,115,22,.1),rgba(249,115,22,.04));border-bottom:1px solid rgba(249,115,22,.3);padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:13px;font-weight:800;color:#f97316;margin-bottom:2px">🏢 集團進度總覽</div>
+        <div style="font-size:11px;color:#475569">AMA + AMC + AMD 加權合計</div>
+      </div>
+      <!-- 集團大進度條 -->
+      <div style="flex:1;min-width:200px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:11px;color:#64748b">📅 天數進度（加權）</span>
+          <span style="font-size:12px;font-weight:800;color:${gFillCol}">${gMonthPct !== null ? gMonthPct.toFixed(1)+'%' : '—'}</span>
+        </div>
+        <div class="wd-track" style="height:8px">
+          <div class="wd-fill" style="width:${gMonthBarW}%;background:${gFillCol};height:8px"></div>
+          ${gMarker}
+        </div>
+      </div>
+      <!-- 集團數字 -->
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        ${gMonthPct !== null ? `<div style="text-align:center"><div style="font-size:24px;font-weight:900;color:${gFillCol};line-height:1">${gMonthPct.toFixed(0)}%</div><div style="font-size:10px;color:#475569">天數進度</div></div>` : ''}
+        ${gRevPct !== null ? `<div style="width:1px;height:36px;background:rgba(249,115,22,.3)"></div><div style="text-align:center"><div style="font-size:24px;font-weight:900;color:${gRevCol};line-height:1">${gRevPct.toFixed(0)}%</div><div style="font-size:10px;color:#475569">有費達成</div></div>` : ''}
+        ${gEstPct !== null ? `<div style="width:1px;height:36px;background:rgba(249,115,22,.3)"></div><div style="text-align:center"><div style="font-size:24px;font-weight:900;color:${gEstCol};line-height:1">${gEstPct.toFixed(0)}%</div><div style="font-size:10px;color:#475569">預估達成</div></div>` : ''}
+        <div style="width:1px;height:36px;background:rgba(249,115,22,.3)"></div>
+        <div>
+          <div style="font-size:10px;color:#64748b;margin-bottom:2px">有費實際 / 目標</div>
+          <div style="font-size:14px;font-weight:800;color:#f97316">${fmtK(gActual)} <span style="font-size:11px;color:#64748b;font-weight:400">/ ${gTarget > 0 ? fmtK(gTarget) : '未設定'}</span></div>
+          ${gEst > 0 ? `<div style="font-size:11px;color:${gEstCol};margin-top:1px">預估 ${fmtK(gEst)}</div>` : ''}
+        </div>
+        <span style="padding:4px 12px;border-radius:8px;font-size:12px;font-weight:800;background:${gDeltaCol}18;color:${gDeltaCol};border:1px solid ${gDeltaCol}33">${gDeltaText}</span>
+      </div>
+    </div>
+    <!-- 三廠細節 -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr)">
+      ${branchMiniCards}
+    </div>
+  </div>
+  ${legend}`;
   el.style.display = '';
 }
 
