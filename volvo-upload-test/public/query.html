@@ -7,18 +7,35 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+
+  /* ── Nav ── */
   .sticky-header { position: sticky; top: 0; z-index: 200; background: #0f172a; box-shadow: 0 2px 20px rgba(0,0,0,.6); }
-  .nav { background: #1e293b; border-bottom: 1px solid #2d3f56; padding: 0 24px; display: flex; align-items: center; flex-wrap: wrap; }
-  .nav-brand { font-size: 15px; font-weight: 700; color: #fff; padding: 16px 0; margin-right: 24px; white-space: nowrap; }
-  .nav-link { padding: 16px 14px; color: #64748b; font-size: 13px; font-weight: 600; text-decoration: none; border-bottom: 2px solid transparent; white-space: nowrap; }
+  .nav { background: #1e293b; border-bottom: 1px solid #2d3f56; padding: 0 24px; display: flex; align-items: center; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav-brand { font-size: 15px; font-weight: 700; color: #fff; padding: 16px 0; margin-right: 24px; white-space: nowrap; flex-shrink: 0; }
+  .nav-link { padding: 16px 14px; color: #64748b; font-size: 13px; font-weight: 600; text-decoration: none; border-bottom: 2px solid transparent; white-space: nowrap; flex-shrink: 0; }
   .nav-link:hover { color: #e2e8f0; }
   .nav-link.active { color: #3b82f6; border-bottom-color: #3b82f6; }
+
+  /* ── Header / Filter ── */
   .header-inner { padding: 10px 24px; border-bottom: 1px solid #2d3f56; }
+
+  /* Desktop filter: single row */
   .filter-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .filter-bar label { font-size: 12px; color: #64748b; font-weight: 600; white-space: nowrap; }
-  .filter-bar select, .filter-bar input { background: #1e293b; border: 1px solid #2d3f56; color: #e2e8f0; padding: 7px 10px; border-radius: 6px; font-size: 13px; outline: none; transition: border-color .15s; }
-  .filter-bar select:focus, .filter-bar input:focus { border-color: #3b82f6; }
+  .filter-bar select,
+  .filter-bar input { background: #1e293b; border: 1px solid #2d3f56; color: #e2e8f0; padding: 7px 10px; border-radius: 6px; font-size: 13px; outline: none; transition: border-color .15s; }
+  .filter-bar select:focus,
+  .filter-bar input:focus { border-color: #3b82f6; }
+
+  /* Mobile filter: stacked rows */
+  .filter-row-1,
+  .filter-row-2 { display: none; }
+
+  /* ── Container ── */
   .container { padding: 20px 24px 48px; max-width: 1600px; margin: 0 auto; }
+
+  /* ── Buttons ── */
   .btn { display: inline-flex; align-items: center; gap: 5px; padding: 7px 14px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; white-space: nowrap; }
   .btn-primary { background: #3b82f6; color: #fff; }
   .btn-primary:hover { background: #2563eb; }
@@ -27,20 +44,22 @@
   .btn-green { background: rgba(16,185,129,.15); color: #10b981; border: 1px solid rgba(16,185,129,.3); }
   .btn-green:hover { background: rgba(16,185,129,.25); }
   .btn:disabled { opacity: .5; cursor: not-allowed; }
-  .tab-bar { display: flex; gap: 2px; background: #1e293b; border: 1px solid #2d3f56; border-radius: 9px; padding: 4px; flex-wrap: wrap; width: fit-content; margin-bottom: 16px; }
-  .tab-btn { padding: 8px 18px; border: none; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; background: transparent; color: #64748b; transition: all .15s; white-space: nowrap; }
-  .tab-btn.active { background: #3b82f6; color: #fff; }
-  .tab-btn:hover:not(.active) { color: #e2e8f0; background: #253347; }
+
+  /* ── Card ── */
   .card { background: #1a2332; border: 1px solid #2d3f56; border-radius: 12px; overflow: hidden; }
   .card-head { padding: 14px 20px; border-bottom: 1px solid #2d3f56; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .card-head-title { font-size: 14px; font-weight: 700; }
+
+  /* ── Badges ── */
   .badge { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 600; }
-  .badge-blue { background: rgba(59,130,246,.15); color: #3b82f6; }
-  .badge-green { background: rgba(16,185,129,.15); color: #10b981; }
+  .badge-blue   { background: rgba(59,130,246,.15); color: #3b82f6; }
+  .badge-green  { background: rgba(16,185,129,.15); color: #10b981; }
   .badge-yellow { background: rgba(245,158,11,.15); color: #f59e0b; }
   .badge-purple { background: rgba(139,92,246,.15); color: #8b5cf6; }
-  .badge-gray { background: rgba(100,116,139,.15); color: #94a3b8; }
-  .table-wrap { overflow-x: auto; }
+  .badge-gray   { background: rgba(100,116,139,.15); color: #94a3b8; }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
   th { background: #0f172a; color: #64748b; font-size: 11px; font-weight: 700; text-align: left; padding: 9px 10px; border-bottom: 1px solid #2d3f56; white-space: nowrap; position: sticky; top: 0; z-index: 2; }
   th.sortable { cursor: pointer; user-select: none; }
@@ -50,13 +69,18 @@
   th.sort-desc .sort-icon::after { content: '▼'; color: #3b82f6; }
   th:not(.sort-asc):not(.sort-desc) .sort-icon::after { content: '⇅'; }
   td { padding: 8px 10px; border-bottom: 1px solid rgba(45,63,86,.4); vertical-align: middle; white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
-  td.wrap { white-space: normal; max-width: 260px; word-break: break-all; }
+  td.wrap { white-space: normal; max-width: 220px; word-break: break-all; }
   tr:hover td { background: rgba(37,51,71,.5); }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* ── States ── */
   .loading { text-align: center; padding: 48px; color: #64748b; font-size: 14px; }
   .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #2d3f56; border-top-color: #3b82f6; border-radius: 50%; animation: spin .7s linear infinite; margin-right: 8px; vertical-align: middle; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .empty { text-align: center; padding: 48px; color: #64748b; }
+  .search-highlight { background: rgba(251,191,36,.25); color: #fbbf24; border-radius: 2px; }
+
+  /* ── Pagination ── */
   .pagination { display: flex; align-items: center; gap: 6px; padding: 12px 16px; border-top: 1px solid #2d3f56; flex-wrap: wrap; }
   .page-btn { width: 32px; height: 32px; border: 1px solid #2d3f56; border-radius: 6px; background: #0f172a; color: #64748b; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; }
   .page-btn:hover { border-color: #3b82f6; color: #3b82f6; }
@@ -64,8 +88,8 @@
   .page-btn:disabled { opacity: .4; cursor: not-allowed; }
   .page-info { font-size: 12px; color: #64748b; margin-left: 4px; }
   .row-count { font-size: 12px; color: #475569; background: #0f172a; padding: 4px 10px; border-radius: 5px; border: 1px solid #2d3f56; }
-  .search-highlight { background: rgba(251,191,36,.25); color: #fbbf24; border-radius: 2px; }
-  /* Period custom selector */
+
+  /* ── Period selector ── */
   .period-selector { position: relative; }
   .period-btn { display: flex; align-items: center; gap: 6px; background: #1e293b; border: 1px solid #2d3f56; color: #e2e8f0; padding: 7px 10px; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; user-select: none; min-width: 120px; justify-content: space-between; outline: none; transition: border-color .15s; }
   .period-btn:hover, .period-btn.open { border-color: #3b82f6; }
@@ -80,15 +104,86 @@
   .period-dd-mo { padding: 6px 4px; border-radius: 6px; cursor: pointer; text-align: center; font-size: 12px; font-weight: 700; color: #64748b; border: 1px solid transparent; transition: all .1s; }
   .period-dd-mo:hover { background: rgba(59,130,246,.1); border-color: rgba(59,130,246,.3); color: #93c5fd; }
   .period-dd-mo.selected { background: rgba(59,130,246,.18); border-color: #3b82f6; color: #3b82f6; }
-  .period-dd-mo.has-data { color: #e2e8f0; }
+  .period-dd-mo.has-data { color: #94a3b8; }
   .period-dd-mo.has-data:not(.selected) { color: #94a3b8; }
-  /* Column visibility toggle */
+
+  /* ── Column toggle ── */
   .col-toggle-wrap { position: relative; }
-  .col-toggle-dropdown { position: absolute; top: calc(100% + 4px); right: 0; background: #1a2740; border: 1px solid #334155; border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.8); z-index: 999; width: 200px; padding: 10px 0; display: none; }
+  .col-toggle-dropdown { position: absolute; top: calc(100% + 4px); right: 0; background: #1a2740; border: 1px solid #334155; border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,.8); z-index: 999; width: 200px; padding: 10px 0; display: none; max-height: 60vh; overflow-y: auto; }
   .col-toggle-dropdown.open { display: block; }
-  .col-toggle-item { display: flex; align-items: center; gap: 8px; padding: 7px 14px; cursor: pointer; font-size: 13px; color: #94a3b8; transition: background .1s; }
+  .col-toggle-item { display: flex; align-items: center; gap: 8px; padding: 8px 14px; cursor: pointer; font-size: 13px; color: #94a3b8; transition: background .1s; }
   .col-toggle-item:hover { background: rgba(59,130,246,.08); color: #e2e8f0; }
   .col-toggle-item input[type=checkbox] { accent-color: #3b82f6; width: 14px; height: 14px; cursor: pointer; flex-shrink: 0; }
+
+  /* ════════════════════════════
+     MOBILE RESPONSIVE
+  ════════════════════════════ */
+  @media (max-width: 768px) {
+    /* Nav */
+    .nav { padding: 0 16px; }
+    .nav-brand { font-size: 13px; padding: 12px 0; margin-right: 16px; }
+    .nav-link { padding: 12px 10px; font-size: 12px; }
+
+    /* Header */
+    .header-inner { padding: 8px 12px; }
+
+    /* Hide desktop filter bar */
+    .filter-bar { display: none; }
+
+    /* Show mobile filter rows */
+    .filter-row-1,
+    .filter-row-2 { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+    .filter-row-2 { margin-bottom: 0; }
+
+    .filter-label { font-size: 11px; color: #64748b; font-weight: 600; white-space: nowrap; }
+    .filter-select { background: #1e293b; border: 1px solid #2d3f56; color: #e2e8f0; padding: 7px 8px; border-radius: 6px; font-size: 12px; outline: none; flex: 1; min-width: 0; }
+    .filter-select:focus { border-color: #3b82f6; }
+    .filter-input { background: #1e293b; border: 1px solid #2d3f56; color: #e2e8f0; padding: 7px 10px; border-radius: 6px; font-size: 12px; outline: none; flex: 1; min-width: 0; }
+    .filter-input:focus { border-color: #3b82f6; }
+
+    /* Container */
+    .container { padding: 10px 12px 32px; }
+
+    /* Card head */
+    .card-head { padding: 10px 14px; gap: 8px; }
+    .card-head-title { font-size: 13px; }
+    .row-count { font-size: 11px; padding: 3px 8px; }
+
+    /* Page size selector in card head */
+    #selPageSize { font-size: 11px; padding: 3px 6px; }
+
+    /* Summary bar */
+    #summaryBar > div { gap: 8px !important; }
+    #summaryBar > div > div { min-width: 120px; padding: 12px 14px !important; }
+    #summaryBar > div > div > div:first-child { font-size: 10px !important; }
+    #summaryBar > div > div > div:nth-child(2) { font-size: 18px !important; }
+
+    /* Table container */
+    .table-wrap { max-height: calc(100vh - 280px); overflow-y: auto; }
+    table { font-size: 11px; }
+    th { padding: 7px 8px; font-size: 10px; }
+    td { padding: 7px 8px; }
+
+    /* Pagination */
+    .pagination { padding: 10px 12px; gap: 4px; }
+    .page-btn { width: 28px; height: 28px; font-size: 12px; }
+    .page-info { font-size: 11px; margin-left: 2px; flex-basis: 100%; }
+
+    /* Period dropdown on mobile — full width-ish */
+    .period-dropdown { width: calc(100vw - 32px); max-width: 300px; }
+
+    /* Col toggle dropdown */
+    .col-toggle-dropdown { right: -4px; width: 180px; }
+  }
+
+  @media (max-width: 480px) {
+    .nav-brand { font-size: 12px; }
+    .nav-link { font-size: 11px; padding: 12px 8px; }
+    .container { padding: 8px 10px 24px; }
+    .card-head { padding: 9px 12px; }
+    .btn { padding: 6px 10px; font-size: 11px; }
+    .page-btn { width: 26px; height: 26px; font-size: 11px; }
+  }
 </style>
 </head>
 <body>
@@ -96,12 +191,14 @@
 <div class="sticky-header">
   <nav class="nav">
     <span class="nav-brand">🚗 Volvo 營運統計</span>
-    <a href="/performance.html" class="nav-link">🎯 業績指標與預估</a>
+    <a href="/performance.html" class="nav-link">🎯 業績指標</a>
     <a href="/stats.html" class="nav-link">📊 各廠明細</a>
     <a href="/query.html" class="nav-link active">🔍 資料查詢</a>
     <a href="/settings.html" class="nav-link">⚙️ 設定</a>
   </nav>
   <div class="header-inner">
+
+    <!-- ── Desktop filter (single row) ── -->
     <div class="filter-bar">
       <label>資料表</label>
       <select id="selTable" onchange="onTableChange()">
@@ -120,17 +217,49 @@
         <option value="AMD">AMD</option>
       </select>
       <label>關鍵字</label>
-      <input type="text" id="txtSearch" placeholder="工單號 / 車牌 / 姓名..." style="min-width:180px" onkeydown="if(event.key==='Enter')doQuery()">
+      <input type="text" id="txtSearch" placeholder="工單號 / 車牌 / 姓名..." style="min-width:160px" onkeydown="if(event.key==='Enter')doQuery()">
       <button class="btn btn-primary" onclick="doQuery()">🔍 查詢</button>
       <button class="btn btn-secondary" onclick="resetFilters()">重置</button>
       <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
         <div class="col-toggle-wrap">
-          <button class="btn btn-secondary" id="colToggleBtn" onclick="toggleColMenu()">⚙️ 欄位</button>
+          <button class="btn btn-secondary" onclick="toggleColMenu()">⚙️ 欄位</button>
           <div class="col-toggle-dropdown" id="colToggleDropdown"></div>
         </div>
-        <button class="btn btn-green" id="btnExport" onclick="doExport()">⬇️ 匯出 CSV</button>
+        <button class="btn btn-green" onclick="doExport()">⬇️ 匯出 CSV</button>
       </div>
     </div>
+
+    <!-- ── Mobile filter row 1: 資料表 + 期間 + 據點 ── -->
+    <div class="filter-row-1">
+      <select class="filter-select" id="selTableMobile" onchange="onTableChangeMobile()" style="flex:2;min-width:0">
+        <option value="repair_income">🔧 維修收入</option>
+        <option value="tech_performance">👨‍🔧 技師工資</option>
+        <option value="parts_sales">🔩 零件銷售</option>
+        <option value="business_query">🚗 業務查詢</option>
+      </select>
+      <div class="period-selector" id="periodSelectorWrapMobile"></div>
+      <select class="filter-select" id="selBranchMobile" style="flex:0 0 auto;width:70px">
+        <option value="">全部</option>
+        <option value="AMA">AMA</option>
+        <option value="AMC">AMC</option>
+        <option value="AMD">AMD</option>
+      </select>
+    </div>
+
+    <!-- ── Mobile filter row 2: 搜尋 + 動作按鈕 ── -->
+    <div class="filter-row-2">
+      <input type="text" class="filter-input" id="txtSearchMobile" placeholder="工單號 / 車牌 / 姓名..." onkeydown="if(event.key==='Enter')doQueryMobile()">
+      <button class="btn btn-primary" onclick="doQueryMobile()">🔍</button>
+      <button class="btn btn-secondary" onclick="resetFiltersMobile()">重置</button>
+      <div style="margin-left:auto;display:flex;gap:5px">
+        <div class="col-toggle-wrap">
+          <button class="btn btn-secondary" onclick="toggleColMenu()" style="padding:7px 10px">⚙️</button>
+          <div class="col-toggle-dropdown" id="colToggleDropdownMobile"></div>
+        </div>
+        <button class="btn btn-green" onclick="doExport()" style="padding:7px 10px">⬇️</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -140,15 +269,14 @@
     <div class="card-head">
       <div class="card-head-title" id="tableTitle">🔧 維修收入分類明細</div>
       <span id="rowCountBadge" class="row-count">0 筆</span>
-      <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+      <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
         <label style="font-size:12px;color:#64748b">每頁</label>
-        <select id="selPageSize" style="background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:4px 8px;border-radius:5px;font-size:12px" onchange="goPage(1)">
+        <select id="selPageSize" style="background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:4px 6px;border-radius:5px;font-size:12px" onchange="goPage(1)">
           <option value="50">50</option>
           <option value="100" selected>100</option>
           <option value="200">200</option>
           <option value="500">500</option>
         </select>
-        <label style="font-size:12px;color:#64748b">筆</label>
       </div>
     </div>
     <div class="table-wrap" id="tableWrap" style="max-height:calc(100vh - 300px);overflow-y:auto">
@@ -159,21 +287,37 @@
 </div>
 
 <script>
-// ═══════════════════════════════════════════════
-// State
-// ═══════════════════════════════════════════════
+// ═══ State ═══
 let _allPeriods = [];
 let _currentPeriod = '';
-let _allRows = [];        // full result set
-let _filteredRows = [];   // after client-side keyword filter
+let _allRows = [];
+let _filteredRows = [];
 let _currentPage = 1;
 let _sortCol = '';
 let _sortDir = 'asc';
 let _hiddenCols = new Set();
+const _isMobile = () => window.innerWidth <= 768;
 
-// ═══════════════════════════════════════════════
-// Table definitions
-// ═══════════════════════════════════════════════
+// ═══ Sync desktop <-> mobile selectors ═══
+function _getTable()  { return _isMobile() ? document.getElementById('selTableMobile').value  : document.getElementById('selTable').value; }
+function _getBranch() { return _isMobile() ? document.getElementById('selBranchMobile').value : document.getElementById('selBranch').value; }
+function _getSearch() { return _isMobile() ? document.getElementById('txtSearchMobile').value  : document.getElementById('txtSearch').value; }
+
+// Keep both selectors in sync
+function _syncSelectors(){
+  const tbl    = document.getElementById('selTable').value;
+  const branch = document.getElementById('selBranch').value;
+  const search = document.getElementById('txtSearch').value;
+  document.getElementById('selTableMobile').value  = tbl;
+  document.getElementById('selBranchMobile').value = branch;
+  document.getElementById('txtSearchMobile').value  = search;
+  // sync title
+  document.getElementById('tableTitle').textContent = TABLE_DEFS[tbl].title;
+  // sync col toggle menus
+  buildColMenu();
+}
+
+// ═══ Table definitions ═══
 const TABLE_DEFS = {
   repair_income: {
     title: '🔧 維修收入分類明細',
@@ -257,7 +401,7 @@ const TABLE_DEFS = {
       { key:'branch', label:'據點', badge:true },
       { key:'period', label:'期間' },
       { key:'work_order', label:'工單號' },
-      { key:'open_time', label:'開單時間', wrap:false },
+      { key:'open_time', label:'開單時間' },
       { key:'settle_date', label:'結算日期' },
       { key:'plate_no', label:'車牌' },
       { key:'vin', label:'車身號碼' },
@@ -280,12 +424,10 @@ const TABLE_DEFS = {
   },
 };
 
-// ═══════════════════════════════════════════════
-// Period selector
-// ═══════════════════════════════════════════════
-function renderPeriodSelector(){
-  const wrap = document.getElementById('periodSelectorWrap');
-  if(!wrap) return;
+// ═══ Period selector (shared logic, renders into a container) ═══
+function _buildPeriodSelector(containerId, onSelect) {
+  const wrap = document.getElementById(containerId);
+  if (!wrap) return;
   const now = new Date();
   const thisMonth = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}`;
   const groups = {};
@@ -299,17 +441,44 @@ function renderPeriodSelector(){
     for(let mo=12;mo>=1;mo--){
       const p=yr+String(mo).padStart(2,'0');
       const exists=groups[yr].includes(p);
-      const isSel=p===_currentPeriod, isCur=p===thisMonth;
-      listHtml+=`<div class="period-dd-mo ${isSel?'selected':''} ${exists?'has-data':''}" onclick="_selPeriod('${p}')">${mo}月</div>`;
+      const isSel=p===_currentPeriod;
+      listHtml+=`<div class="period-dd-mo ${isSel?'selected':''} ${exists?'has-data':''}" onclick="${onSelect}('${p}')">${mo}月</div>`;
     }
     listHtml+='</div>';
   });
-  wrap.innerHTML=`<div class="period-selector"><button class="period-btn" id="pd-btn" type="button" onclick="_tPD(event)"><span>${label}</span><span class="pb-arrow">▼</span></button><div class="period-dropdown" id="pd-dd"><div class="period-dd-list">${listHtml}</div></div></div>`;
+  const ddId  = containerId + '_dd';
+  const btnId = containerId + '_btn';
+  wrap.innerHTML=`<div class="period-selector">
+    <button class="period-btn" id="${btnId}" type="button" onclick="_tPDC('${btnId}','${ddId}',event)">
+      <span>${label}</span><span class="pb-arrow">▼</span>
+    </button>
+    <div class="period-dropdown" id="${ddId}">
+      <div class="period-dd-list">${listHtml}</div>
+    </div>
+  </div>`;
 }
-window._tPD=function(e){e.stopPropagation();const btn=document.getElementById('pd-btn'),dd=document.getElementById('pd-dd');if(!dd)return;const open=dd.classList.contains('open');_closePD();if(!open){btn.classList.add('open');dd.classList.add('open');}};
-window._selPeriod=function(p){_currentPeriod=p;_closePD();renderPeriodSelector();};
-window._closePD=function(){document.querySelectorAll('.period-btn.open').forEach(b=>b.classList.remove('open'));document.querySelectorAll('.period-dropdown.open').forEach(d=>d.classList.remove('open'));};
-document.addEventListener('click', _closePD);
+
+window._tPDC = function(btnId, ddId, e) {
+  e.stopPropagation();
+  const btn=document.getElementById(btnId), dd=document.getElementById(ddId);
+  if(!dd)return;
+  const open=dd.classList.contains('open');
+  _closeAllPD();
+  if(!open){ btn.classList.add('open'); dd.classList.add('open'); }
+};
+window._closeAllPD = function() {
+  document.querySelectorAll('.period-btn.open').forEach(b=>b.classList.remove('open'));
+  document.querySelectorAll('.period-dropdown.open').forEach(d=>d.classList.remove('open'));
+};
+document.addEventListener('click', _closeAllPD);
+
+function _selectPeriodDesktop(p)  { _currentPeriod=p; _closeAllPD(); _rebuildPeriodSelectors(); }
+function _selectPeriodMobile(p)   { _currentPeriod=p; _closeAllPD(); _rebuildPeriodSelectors(); }
+
+function _rebuildPeriodSelectors() {
+  _buildPeriodSelector('periodSelectorWrap',       '_selectPeriodDesktop');
+  _buildPeriodSelector('periodSelectorWrapMobile', '_selectPeriodMobile');
+}
 
 async function loadPeriods(){
   try{
@@ -318,18 +487,34 @@ async function loadPeriods(){
     const now = new Date();
     const cur = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}`;
     _currentPeriod = periods.includes(cur) ? cur : (periods[0]||'');
-    renderPeriodSelector();
+    _rebuildPeriodSelectors();
   }catch(e){}
 }
 
-// ═══════════════════════════════════════════════
-// Column visibility
-// ═══════════════════════════════════════════════
+// ═══ Column visibility ═══
 function onTableChange(){
   const tbl = document.getElementById('selTable').value;
+  _applyTableChange(tbl);
+  document.getElementById('selTableMobile').value = tbl;
+}
+function onTableChangeMobile(){
+  const tbl = document.getElementById('selTableMobile').value;
+  _applyTableChange(tbl);
+  document.getElementById('selTable').value = tbl;
+}
+function _applyTableChange(tbl){
   const def = TABLE_DEFS[tbl];
   document.getElementById('tableTitle').textContent = def.title;
   _hiddenCols = new Set(def.defaultHidden);
+  // On mobile, hide even more columns by default
+  if (_isMobile()) {
+    def.cols.forEach(c => {
+      if (!['branch','work_order','plate_no','total_untaxed','wage','sale_price_untaxed','service_advisor',
+            'tech_name_clean','part_name','sale_qty','open_time','repair_type','car_series','period'].includes(c.key)) {
+        // Already in defaultHidden or not a key column — keep as is
+      }
+    });
+  }
   buildColMenu();
   _allRows = [];
   _filteredRows = [];
@@ -340,55 +525,77 @@ function onTableChange(){
 }
 
 function buildColMenu(){
-  const tbl = document.getElementById('selTable').value;
+  const tbl = _getTable();
   const def = TABLE_DEFS[tbl];
-  const dd = document.getElementById('colToggleDropdown');
-  dd.innerHTML = def.cols.map(c=>`
+  // Build both desktop and mobile dropdowns
+  const html = def.cols.map(c=>`
     <label class="col-toggle-item">
       <input type="checkbox" ${_hiddenCols.has(c.key)?'':'checked'} onchange="toggleCol('${c.key}',this.checked)">
       ${c.label}
     </label>`).join('');
+  document.getElementById('colToggleDropdown').innerHTML = html;
+  const mob = document.getElementById('colToggleDropdownMobile');
+  if (mob) mob.innerHTML = html;
 }
 
 function toggleCol(key, visible){
   if(visible) _hiddenCols.delete(key);
   else _hiddenCols.add(key);
+  // Sync checkboxes
+  document.querySelectorAll(`.col-toggle-item input[onchange*="'${key}'"]`).forEach(cb=>cb.checked=visible);
   renderTable();
 }
 
 function toggleColMenu(){
-  const dd = document.getElementById('colToggleDropdown');
+  const isMob = _isMobile();
+  const ddId = isMob ? 'colToggleDropdownMobile' : 'colToggleDropdown';
+  const dd = document.getElementById(ddId);
   dd.classList.toggle('open');
   if(dd.classList.contains('open')) buildColMenu();
 }
+
 document.addEventListener('click', e=>{
-  const wrap = document.querySelector('.col-toggle-wrap');
-  if(wrap && !wrap.contains(e.target)) document.getElementById('colToggleDropdown').classList.remove('open');
+  document.querySelectorAll('.col-toggle-wrap').forEach(wrap => {
+    if (!wrap.contains(e.target)) {
+      wrap.querySelectorAll('.col-toggle-dropdown').forEach(d=>d.classList.remove('open'));
+    }
+  });
 });
 
-// ═══════════════════════════════════════════════
-// Query
-// ═══════════════════════════════════════════════
+// ═══ Query ═══
 function resetFilters(){
   _currentPeriod = _allPeriods[0]||'';
-  renderPeriodSelector();
+  _rebuildPeriodSelectors();
   document.getElementById('selBranch').value = '';
+  document.getElementById('selBranchMobile').value = '';
   document.getElementById('txtSearch').value = '';
+  document.getElementById('txtSearchMobile').value = '';
 }
+function resetFiltersMobile() { resetFilters(); }
 
 async function doQuery(){
-  const tbl = document.getElementById('selTable').value;
+  const tbl    = document.getElementById('selTable').value;
   const branch = document.getElementById('selBranch').value;
   const period = _currentPeriod;
+  _executeQuery(tbl, branch, period);
+}
+async function doQueryMobile(){
+  const tbl    = document.getElementById('selTableMobile').value;
+  const branch = document.getElementById('selBranchMobile').value;
+  // sync desktop search text
+  document.getElementById('txtSearch').value = document.getElementById('txtSearchMobile').value;
+  const period = _currentPeriod;
+  _executeQuery(tbl, branch, period);
+}
+
+async function _executeQuery(tbl, branch, period){
   const wrap = document.getElementById('tableWrap');
   wrap.innerHTML = '<div class="loading"><span class="spinner"></span>查詢中...</div>';
   document.getElementById('paginationWrap').style.display = 'none';
   document.getElementById('summaryBar').innerHTML = '';
-
   const params = new URLSearchParams();
   if(period) params.set('period', period);
   if(branch) params.set('branch', branch);
-
   try{
     const data = await (await fetch(`/api/query/${tbl}?${params}`)).json();
     if(data.error) throw new Error(data.error);
@@ -403,9 +610,9 @@ async function doQuery(){
 }
 
 function applySearch(){
-  const tbl = document.getElementById('selTable').value;
+  const tbl = _getTable();
   const def = TABLE_DEFS[tbl];
-  const q = document.getElementById('txtSearch').value.trim().toLowerCase();
+  const q = _getSearch().trim().toLowerCase();
   if(!q){
     _filteredRows = [..._allRows];
   } else {
@@ -436,21 +643,18 @@ function doSort(col){
   renderTable();
 }
 
-// ═══════════════════════════════════════════════
-// Render table
-// ═══════════════════════════════════════════════
+// ═══ Render table ═══
 function renderTable(){
-  const tbl = document.getElementById('selTable').value;
+  const tbl = _getTable();
   const def = TABLE_DEFS[tbl];
   const visibleCols = def.cols.filter(c => !_hiddenCols.has(c.key));
-  const q = document.getElementById('txtSearch').value.trim().toLowerCase();
+  const q = _getSearch().trim().toLowerCase();
   const pageSize = parseInt(document.getElementById('selPageSize').value)||100;
   const totalRows = _filteredRows.length;
   const totalPages = Math.max(1, Math.ceil(totalRows/pageSize));
   if(_currentPage > totalPages) _currentPage = totalPages;
   const start = (_currentPage-1)*pageSize;
   const pageRows = _filteredRows.slice(start, start+pageSize);
-
   document.getElementById('rowCountBadge').textContent = `${totalRows.toLocaleString()} 筆`;
 
   const branchColor = {AMA:'#3b82f6', AMC:'#10b981', AMD:'#f59e0b'};
@@ -469,7 +673,7 @@ function renderTable(){
   };
 
   let thead = '<thead><tr>';
-  thead += `<th style="width:40px;color:#475569">#</th>`;
+  thead += `<th style="width:36px;color:#475569">#</th>`;
   visibleCols.forEach(c=>{
     const sortClass = _sortCol===c.key?`sort-${_sortDir}`:'';
     thead += `<th class="sortable ${sortClass}" onclick="doSort('${c.key}')">${c.label}<span class="sort-icon"></span></th>`;
@@ -488,7 +692,7 @@ function renderTable(){
         let cellContent;
         if(c.badge && raw){
           const col=branchColor[raw]||'#94a3b8';
-          cellContent=`<span style="display:inline-block;padding:1px 7px;border-radius:5px;font-size:11px;font-weight:700;background:${col}22;color:${col}">${raw}</span>`;
+          cellContent=`<span style="display:inline-block;padding:1px 6px;border-radius:5px;font-size:10px;font-weight:700;background:${col}22;color:${col}">${raw}</span>`;
         } else if(c.num){
           cellContent = fmtNum(raw, c.fmt);
         } else {
@@ -522,13 +726,13 @@ function renderPagination(totalPages, pageSize, totalRows){
   };
   addBtn('«', 1, false, _currentPage===1);
   addBtn('‹', _currentPage-1, false, _currentPage===1);
-  const range=2;
+  const range = _isMobile() ? 1 : 2;
   for(let p=Math.max(1,_currentPage-range);p<=Math.min(totalPages,_currentPage+range);p++){
     addBtn(p, p, p===_currentPage);
   }
   addBtn('›', _currentPage+1, false, _currentPage===totalPages);
   addBtn('»', totalPages, false, _currentPage===totalPages);
-  pgWrap.innerHTML = btns + `<span class="page-info">第 ${_currentPage}/${totalPages} 頁 · 顯示 ${start.toLocaleString()}–${end.toLocaleString()} / 共 ${totalRows.toLocaleString()} 筆</span>`;
+  pgWrap.innerHTML = btns + `<span class="page-info">第 ${_currentPage}/${totalPages} 頁 · ${start.toLocaleString()}–${end.toLocaleString()} / 共 ${totalRows.toLocaleString()} 筆</span>`;
 }
 
 function goPage(p){
@@ -539,23 +743,19 @@ function goPage(p){
   document.getElementById('tableWrap').scrollTop = 0;
 }
 
-// ═══════════════════════════════════════════════
-// Summary KPIs per table type
-// ═══════════════════════════════════════════════
+// ═══ Summary KPIs ═══
 function renderSummary(tbl, rows){
   const bar = document.getElementById('summaryBar');
   if(!rows.length){ bar.innerHTML=''; return; }
   const n=v=>parseFloat(v||0);
   const fmtK=v=>Math.round(v/1000).toLocaleString()+'K';
   const branchColors={AMA:'#3b82f6',AMC:'#10b981',AMD:'#f59e0b'};
-
   const kpiCard=(label,value,sub='',color='#e2e8f0')=>`
-    <div style="background:#1e293b;border:1px solid #2d3f56;border-radius:10px;padding:14px 18px;min-width:140px">
+    <div style="background:#1e293b;border:1px solid #2d3f56;border-radius:10px;padding:14px 18px;min-width:120px">
       <div style="font-size:11px;color:#64748b;margin-bottom:4px">${label}</div>
-      <div style="font-size:22px;font-weight:800;color:${color}">${value}</div>
+      <div style="font-size:20px;font-weight:800;color:${color}">${value}</div>
       ${sub?`<div style="font-size:11px;color:#64748b;margin-top:3px">${sub}</div>`:''}
     </div>`;
-
   let html='';
   if(tbl==='repair_income'){
     const total=rows.reduce((s,r)=>s+n(r.total_untaxed),0);
@@ -566,12 +766,11 @@ function renderSummary(tbl, rows){
     html+=kpiCard('總營收(未稅)',fmtK(total),'元','#10b981');
     html+=kpiCard('引擎工資',fmtK(engine),'元');
     html+=kpiCard('零件收入',fmtK(parts),'元');
-    // By branch
     const branches=[...new Set(rows.map(r=>r.branch))].sort();
     branches.forEach(br=>{
       const brTotal=rows.filter(r=>r.branch===br).reduce((s,r)=>s+n(r.total_untaxed),0);
       const brCnt=new Set(rows.filter(r=>r.branch===br).map(r=>r.work_order)).size;
-      html+=kpiCard(`${br} 營收`,fmtK(brTotal),`${brCnt} 張工單`,branchColors[br]||'#94a3b8');
+      html+=kpiCard(`${br} 營收`,fmtK(brTotal),`${brCnt} 張`,branchColors[br]||'#94a3b8');
     });
   } else if(tbl==='tech_performance'){
     const totalWage=rows.reduce((s,r)=>s+n(r.wage),0);
@@ -599,14 +798,12 @@ function renderSummary(tbl, rows){
       html+=kpiCard(`${br} 工單`,brCnt.toLocaleString(),'張',branchColors[br]||'#94a3b8');
     });
   }
-  bar.innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap">${html}</div>`;
+  bar.innerHTML=`<div style="display:flex;gap:8px;flex-wrap:wrap">${html}</div>`;
 }
 
-// ═══════════════════════════════════════════════
-// Export CSV
-// ═══════════════════════════════════════════════
+// ═══ Export CSV ═══
 function doExport(){
-  const tbl = document.getElementById('selTable').value;
+  const tbl = _getTable();
   const def = TABLE_DEFS[tbl];
   const visibleCols = def.cols.filter(c => !_hiddenCols.has(c.key));
   if(!_filteredRows.length){ alert('無資料可匯出'); return; }
@@ -624,30 +821,29 @@ function doExport(){
   const a = document.createElement('a');
   a.href = url;
   const period = _currentPeriod||'全部';
-  const branch = document.getElementById('selBranch').value||'全部';
+  const branch = _getBranch()||'全部';
   a.download = `${tbl}_${period}_${branch}_${Date.now()}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
 
-// ═══════════════════════════════════════════════
-// Search debounce
-// ═══════════════════════════════════════════════
+// ═══ Search debounce ═══
 let _searchTimer;
-document.getElementById('txtSearch').addEventListener('input', ()=>{
-  clearTimeout(_searchTimer);
-  _searchTimer = setTimeout(()=>{ if(_allRows.length) applySearch(); }, 300);
+function _onSearchInput(){ clearTimeout(_searchTimer); _searchTimer = setTimeout(()=>{ if(_allRows.length) applySearch(); }, 300); }
+document.getElementById('txtSearch').addEventListener('input', _onSearchInput);
+document.getElementById('txtSearchMobile').addEventListener('input', ()=>{
+  // sync to desktop input
+  document.getElementById('txtSearch').value = document.getElementById('txtSearchMobile').value;
+  _onSearchInput();
 });
 
-// ═══════════════════════════════════════════════
-// Init
-// ═══════════════════════════════════════════════
+// ═══ Init ═══
 (async()=>{
   await loadPeriods();
   const tbl = document.getElementById('selTable').value;
   _hiddenCols = new Set(TABLE_DEFS[tbl].defaultHidden);
   document.getElementById('tableTitle').textContent = TABLE_DEFS[tbl].title;
-  // Auto-query current period on load
+  buildColMenu();
   await doQuery();
 })();
 </script>
