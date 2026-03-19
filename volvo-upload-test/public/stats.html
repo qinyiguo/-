@@ -864,14 +864,9 @@ function renderWipSummary(summary){
     </tr>`;
 
     // 計算扣PDI小計
-    const pdiRows=_wipRows.filter(r=>r.is_pdi);
-    const pdiFiltered=filterType==='open_period'
-      ?pdiRows.filter(r=>(r.open_period||'（未知）')===items.find(i=>true)?.label||true)
-      :pdiRows;
-    // 從各 item 的 label 反查對應 pdi rows
     const pdiInScope=_wipRows.filter(r=>{
       if(!r.is_pdi)return false;
-      const val=filterType==='open_period'?(r.open_period||'（未知）'):filterType==='account_type'?(r.account_type||'（未知）'):(r.repair_type||'（未知）');
+      const val=clickType==='open_period'?(r.open_period||'（未知）'):clickType==='account_type'?(r.account_type||'（未知）'):(r.repair_type||'（未知）');
       return items.some(i=>i.label===val);
     });
     const pdiSum=pdiInScope.reduce((s,r)=>({
