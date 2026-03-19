@@ -1,194 +1,153 @@
 const { pick, num, parseDate, parseDateTime } = require('./utils');
 
-// ── 只排除完全空白的列，不用中文字判斷（避免過濾掉合法資料）──
-const isCellEmpty = (v) => {
+// 只排除「完全空白」或「純中文且無數字/英文」的值（真正的標題/合計列）
+// 原本 isNoteRow 用 /[\u4e00-\u9fff]/ 太激進，把正常資料也過濾掉了
+const isTitleRow = (v) => {
   if (v === null || v === undefined) return true;
   const s = String(v).trim();
-  return s === '' || s === 'undefined' || s === 'null';
+  if (!s || s === 'undefined' || s === 'null') return true;
+  // 純中文（含全形括號空格）且無任何數字或英文 → 標題/合計列
+  if (/^[\u4e00-\u9fff（）【】〔〕「」\s]+$/.test(s) && !/[A-Za-z0-9]/.test(s)) return true;
+  return false;
 };
 
-// 工單號是否為合法值（非空、非純中文標題）
-const isValidWorkOrder = (v) => {
-  if (isCellEmpty(v)) return false;
-  const s = String(v).trim();
-  // 只有純中文且沒有數字的視為標題列（例如「工作單號」「合計」「小計」）
-  if (/^[\u4e00-\u9fff\s]+$/.test(s)) return false;
-  return true;
-};
+// 舊名稱保留供相容（若其他地方有用到）
+const isNoteRow = isTitleRow;
 
-// ── 維修收入分類明細 ──
-const parseRepairIncome = (rows, branch, period) => {
-  const results = [];
-  for (const r of rows) {
-    const wo = String(pick(r, '工作單號', '工單號', 'WorkOrder', '单号') || '').trim();
-    if (!isValidWorkOrder(wo)) continue;
+const parseRepairIncome = (rows, branch, period) => rows
+  .filter(r => !isTitleRow(pick(r, '工作單號', '工單號')))
+  .map(r => ({
+    period, branch,
+    work_order:           String(pick(r, '工作單號', '工單號')).trim(),
+    settle_date:          parseDate(pick(r, '結算日期')),
+    customer:             String(pick(r, '客戶名稱', '客戶') || '').trim(),
+    plate_no:             String(pick(r, '車牌號碼', '車牌') || '').trim(),
+    account_type_code:    String(pick(r, '帳類代碼') || '').trim(),
+    account_type:         String(pick(r, '帳類') || '').trim(),
+    parts_income:         num(pick(r, '零件收入')),
+    accessories_income:   num(pick(r, '配件收入')),
+    boutique_income:      num(pick(r, '精品收入')),
+    engine_wage:          num(pick(r, '引擎工資', '工資收入')),
+    bodywork_income:      num(pick(r, '鈑金收入')),
+    paint_income:         num(pick(r, '烤漆收入')),
+    carwash_income:       num(pick(r, '洗車美容收入', '洗車收入')),
+    outsource_income:     num(pick(r, '外包收入')),
+    addon_income:         num(pick(r, '附加服務收入', '附加服務')),
+    total_untaxed:        num(pick(r, '收入合計（未稅）', '收入合計(未稅)', '收入合計')),
+    total_taxed:          num(pick(r, '收入合計(含稅)', '收入合計（含稅）')),
+    parts_cost:           num(pick(r, '零件成本（未稅）', '零件成本(未稅)', '零件成本')),
+    service_advisor:      String(pick(r, '服務顧問', '接待員') || '').trim(),
+  }));
 
-    results.push({
-      period,
-      branch,
-      work_order:           wo,
-      settle_date:          parseDate(pick(r, '結算日期', '结算日期', 'SettleDate')),
-      customer:             String(pick(r, '客戶名稱', '客户名称', '客戶', '客户') || '').trim(),
-      plate_no:             String(pick(r, '車牌號碼', '车牌号码', '車牌', '车牌') || '').trim(),
-      account_type_code:    String(pick(r, '帳類代碼', '帐类代码', '帳類碼') || '').trim(),
-      account_type:         String(pick(r, '帳類', '帐类', 'AccountType') || '').trim(),
-      parts_income:         num(pick(r, '零件收入')),
-      accessories_income:   num(pick(r, '配件收入')),
-      boutique_income:      num(pick(r, '精品收入')),
-      engine_wage:          num(pick(r, '引擎工資', '工資收入', '引擎工资', '工资收入')),
-      bodywork_income:      num(pick(r, '鈑金收入', '钣金收入')),
-      paint_income:         num(pick(r, '烤漆收入')),
-      carwash_income:       num(pick(r, '洗車美容收入', '洗车美容收入', '洗車收入', '洗车收入')),
-      outsource_income:     num(pick(r, '外包收入')),
-      addon_income:         num(pick(r, '附加服務收入', '附加服务收入', '附加服務', '附加服务')),
-      total_untaxed:        num(pick(r, '收入合計（未稅）', '收入合计（未税）', '收入合計(未稅)', '收入合计(未税)', '收入合計', '收入合计')),
-      total_taxed:          num(pick(r, '收入合計(含稅)', '收入合计(含税)', '收入合計（含稅）', '收入合计（含税）')),
-      parts_cost:           num(pick(r, '零件成本（未稅）', '零件成本（未税）', '零件成本(未稅)', '零件成本(未税)', '零件成本')),
-      service_advisor:      String(pick(r, '服務顧問', '服务顾问', '接待員', '接待员') || '').trim(),
-    });
-  }
-  return results;
-};
+const parseTechPerformance = (rows, branch, period) => rows
+  .filter(r => !isTitleRow(pick(r, '工作單號', '工單號')))
+  .map(r => ({
+    period, branch,
+    tech_name_raw:   String(pick(r, '技師姓名', '姓名') || '').trim(),
+    tech_name_clean: String(pick(r, '技師姓名', '姓名') || '').trim().replace(/\s+/g, ''),
+    dispatch_date:   parseDate(pick(r, '出廠日期')),
+    work_order:      String(pick(r, '工作單號', '工單號')).trim(),
+    work_code:       String(pick(r, '維修工時代碼', '工時代碼') || '').trim(),
+    task_content:    String(pick(r, '作業內容') || '').trim(),
+    standard_hours:  num(pick(r, '標準工時')),
+    wage:            num(pick(r, '工資')),
+    account_type:    String(pick(r, '帳類') || '').trim(),
+    discount:        num(pick(r, '折扣')),
+    wage_category:   String(pick(r, '工資類別') || '').trim(),
+  }));
 
-// ── 技師績效報表 ──
-const parseTechPerformance = (rows, branch, period) => {
-  const results = [];
-  for (const r of rows) {
-    const wo = String(pick(r, '工作單號', '工單號', '工作单号', '工单号') || '').trim();
-    if (!isValidWorkOrder(wo)) continue;
-
-    const techRaw = String(pick(r, '技師姓名', '技师姓名', '姓名') || '').trim();
-    // 若技師姓名是純中文標題也跳過
-    if (!techRaw || /^[\u4e00-\u9fff\s]+$/.test(techRaw) && techRaw === '技師姓名') continue;
-
-    results.push({
-      period,
-      branch,
-      tech_name_raw:   techRaw,
-      tech_name_clean: techRaw.replace(/\s+/g, ''),
-      dispatch_date:   parseDate(pick(r, '出廠日期', '出厂日期')),
-      work_order:      wo,
-      work_code:       String(pick(r, '維修工時代碼', '维修工时代码', '工時代碼', '工时代码') || '').trim(),
-      task_content:    String(pick(r, '作業內容', '作业内容') || '').trim(),
-      standard_hours:  num(pick(r, '標準工時', '标准工时')),
-      wage:            num(pick(r, '工資', '工资')),
-      account_type:    String(pick(r, '帳類', '帐类') || '').trim(),
-      discount:        num(pick(r, '折扣')),
-      wage_category:   String(pick(r, '工資類別', '工资类别') || '').trim(),
-    });
-  }
-  return results;
-};
-
-// ── 零件銷售明細 ──
-const parsePartsSales = (rows, branch, period) => {
-  const results = [];
-  for (const r of rows) {
-    // 零件銷售沒有固定主鍵，用結帳單號或零件編號判斷是否有效列
-    const orderNo  = String(pick(r, '結帳單號', '结帐单号') || '').trim();
-    const partNum  = String(pick(r, '零件編號', '零件编号') || '').trim();
-    const partName = String(pick(r, '零件名稱', '零件名称') || '').trim();
-
-    // 若三個欄位都空，視為無效列
-    if (isCellEmpty(orderNo) && isCellEmpty(partNum) && isCellEmpty(partName)) continue;
-
-    // 偵測是否為標題行（全中文且沒有任何數字）
-    const firstVal = String(Object.values(r)[0] || '').trim();
-    if (/^[\u4e00-\u9fff\s]+$/.test(firstVal) && !/\d/.test(firstVal) && firstVal.length < 10) continue;
-
+const parsePartsSales = (rows, branch, period) => rows
+  .filter(r => {
+    const orderNo = String(pick(r, '結帳單號') || '').trim();
+    const partNum = String(pick(r, '零件編號') || '').trim();
+    // 兩者都空 → 無效列
+    if (!orderNo && !partNum) return false;
+    // 兩者都是純中文 → 標題列
+    if (isTitleRow(orderNo) && isTitleRow(partNum)) return false;
+    return true;
+  })
+  .map(r => {
     const rowBranch = branch || (() => {
-      const b = String(r['據點代碼'] || r['据点代码'] || r['據點'] || r['据点'] || r['點'] || r['分店'] || '').toUpperCase().trim();
+      const b = String(r['據點代碼'] || r['據點'] || r['點'] || r['分店'] || '').toUpperCase().trim();
       return ['AMA', 'AMC', 'AMD'].includes(b) ? b : null;
     })();
+    return {
+      period, branch: rowBranch,
+      category:            String(pick(r, '類別') || '').trim(),
+      category_detail:     String(pick(r, '類別細節', '類別明細') || '').trim(),
+      order_no:            String(pick(r, '結帳單號') || '').trim(),
+      work_order:          String(pick(r, '工單號', '工作單號') || '').trim(),
+      part_number:         String(pick(r, '零件編號') || '').trim(),
+      part_name:           String(pick(r, '零件名稱') || '').trim(),
+      part_type:           String(pick(r, 'Paycode', '種類', '零件種類') || '').trim(),
+      category_code:       String(pick(r, '零件類別') || '').trim(),
+      function_code:       String(pick(r, '功能碼') || '').trim(),
+      sale_qty:            num(pick(r, '銷售數量', '數量')),
+      retail_price:        num(pick(r, '零售價')),
+      sale_price_untaxed:  num(pick(r, '實際售價(稅前)', '實際售價(未稅)', '實際售價')),
+      cost_untaxed:        num(pick(r, '成本總價(稅前)', '成本(未稅)', '成本')),
+      discount_rate:       num(pick(r, '折扣率')),
+      department:          String(pick(r, '付款部門', '部門') || '').trim(),
+      pickup_person:       String(pick(r, '領料人員', '領料人', '接待人員') || '').trim(),
+      sales_person:        String(pick(r, '銷售人員', '業務員') || '').trim(),
+      plate_no:            String(pick(r, '車牌號碼', '車牌') || '').trim(),
+    };
+  });
 
-    results.push({
-      period,
-      branch: rowBranch,
-      category:            String(pick(r, '類別', '类别') || '').trim(),
-      category_detail:     String(pick(r, '類別細節', '类别细节', '類別明細', '类别明细') || '').trim(),
-      order_no:            orderNo,
-      work_order:          String(pick(r, '工單號', '工单号', '工作單號', '工作单号') || '').trim(),
-      part_number:         partNum,
-      part_name:           partName,
-      part_type:           String(pick(r, 'Paycode', '種類', '种类', '零件種類', '零件种类') || '').trim(),
-      category_code:       String(pick(r, '零件類別', '零件类别') || '').trim(),
-      function_code:       String(pick(r, '功能碼', '功能码') || '').trim(),
-      sale_qty:            num(pick(r, '銷售數量', '销售数量', '數量', '数量')),
-      retail_price:        num(pick(r, '零售價', '零售价')),
-      sale_price_untaxed:  num(pick(r, '實際售價(稅前)', '实际售价(税前)', '實際售價(未稅)', '实际售价(未税)', '實際售價', '实际售价')),
-      cost_untaxed:        num(pick(r, '成本總價(稅前)', '成本总价(税前)', '成本(未稅)', '成本(未税)', '成本')),
-      discount_rate:       num(pick(r, '折扣率', '折扣')),
-      department:          String(pick(r, '付款部門', '付款部门', '部門', '部门') || '').trim(),
-      pickup_person:       String(pick(r, '領料人員', '领料人员', '領料人', '领料人', '接待人員', '接待人员') || '').trim(),
-      sales_person:        String(pick(r, '銷售人員', '销售人员', '業務員', '业务员') || '').trim(),
-      plate_no:            String(pick(r, '車牌號碼', '车牌号码', '車牌', '车牌') || '').trim(),
-    });
-  }
-  return results;
-};
-
-// ── 業務查詢 ──
-const parseBusinessQuery = (rows, branch, period) => {
-  const results = [];
-  for (const r of rows) {
-    const wo = String(pick(r, '工單號', '工单号', '工作單號', '工作单号') || '').trim();
-    // 業務查詢至少要有工單號或車牌才算有效列
-    const plate = String(pick(r, '車牌號碼', '车牌号码', '車牌號', '车牌号', '車牌', '车牌') || '').trim();
-    if (isCellEmpty(wo) && isCellEmpty(plate)) continue;
-    if (/^[\u4e00-\u9fff\s]+$/.test(wo) && wo !== '') continue; // 純中文 = 標題
-
+const parseBusinessQuery = (rows, branch, period) => rows
+  .filter(r => {
+    const wo    = String(pick(r, '工單號', '工作單號') || '').trim();
+    const plate = String(pick(r, '車牌號碼', '車牌號', '車牌') || '').trim();
+    if (!wo && !plate) return false;
+    if (isTitleRow(wo) && isTitleRow(plate)) return false;
+    return true;
+  })
+  .map(r => {
     const rowBranch = branch || (() => {
-      const b = String(r['據點代碼'] || r['据点代码'] || r['據點'] || r['据点'] || r['點'] || r['分店'] || '').toUpperCase().trim();
+      const b = String(r['據點代碼'] || r['據點'] || r['點'] || r['分店'] || '').toUpperCase().trim();
       return ['AMA', 'AMC', 'AMD'].includes(b) ? b : null;
     })();
+    return {
+      period, branch: rowBranch,
+      work_order:     String(pick(r, '工單號', '工作單號') || '').trim(),
+      open_time:      parseDateTime(pick(r, '工單開單時間', '開單時間', '開工時間', '進廠時間', '開立時間', '開單日期', '接車時間')),
+      settle_date:    parseDate(pick(r, '結算日期')),
+      plate_no:       String(pick(r, '車牌號碼', '車牌號', '車牌') || '').trim(),
+      vin:            String(pick(r, '車身號碼', 'VIN') || '').trim(),
+      status:         String(pick(r, '工單狀態', '狀態') || '').trim(),
+      repair_item:    String(pick(r, '交修項目') || '').trim(),
+      service_advisor:String(pick(r, '服務顧問') || '').trim(),
+      assigned_tech:  String(pick(r, '指定技師') || '').trim(),
+      repair_tech:    String(pick(r, '維修技師') || '').trim(),
+      repair_type:    String(pick(r, '維修類型') || '').trim(),
+      car_series:     String(pick(r, '車系') || '').trim(),
+      car_model:      String(pick(r, '車型') || '').trim(),
+      model_year:     String(pick(r, '年式') || '').trim(),
+      owner:          String(pick(r, '車主') || '').trim(),
+      is_ev:          String(pick(r, '電車', '油電', '動力') || '').trim(),
+      mileage_in:     parseInt(pick(r, '進廠里程')) || null,
+      mileage_out:    parseInt(pick(r, '出廠里程')) || null,
+    };
+  });
 
-    results.push({
-      period,
-      branch: rowBranch,
-      work_order:     wo,
-      open_time:      parseDateTime(pick(r, '工單開單時間', '工单开单时间', '開單時間', '开单时间', '開工時間', '开工时间', '進廠時間', '进厂时间', '開立時間', '开立时间', '開單日期', '开单日期', '接車時間', '接车时间')),
-      settle_date:    parseDate(pick(r, '結算日期', '结算日期')),
-      plate_no:       plate,
-      vin:            String(pick(r, '車身號碼', '车身号码', 'VIN') || '').trim(),
-      status:         String(pick(r, '工單狀態', '工单状态', '狀態', '状态') || '').trim(),
-      repair_item:    String(pick(r, '交修項目', '交修项目') || '').trim(),
-      service_advisor:String(pick(r, '服務顧問', '服务顾问') || '').trim(),
-      assigned_tech:  String(pick(r, '指定技師', '指定技师') || '').trim(),
-      repair_tech:    String(pick(r, '維修技師', '维修技师') || '').trim(),
-      repair_type:    String(pick(r, '維修類型', '维修类型') || '').trim(),
-      car_series:     String(pick(r, '車系', '车系') || '').trim(),
-      car_model:      String(pick(r, '車型', '车型') || '').trim(),
-      model_year:     String(pick(r, '年式', '年份') || '').trim(),
-      owner:          String(pick(r, '車主', '车主') || '').trim(),
-      is_ev:          String(pick(r, '電車', '油電', '動力', '动力') || '').trim(),
-      mileage_in:     parseInt(pick(r, '進廠里程', '进厂里程')) || null,
-      mileage_out:    parseInt(pick(r, '出廠里程', '出厂里程')) || null,
-    });
-  }
-  return results;
-};
-
-// ── 零配件比對（型錄）──
-const parsePartsCatalog = (rows) => {
-  const results = [];
-  for (const r of rows) {
-    const pn = String(pick(r, '零件編號', '零件编号', '料號', '料号') || '').trim();
-    if (isCellEmpty(pn) || /^[\u4e00-\u9fff\s]+$/.test(pn)) continue;
-
-    results.push({
-      part_number:   pn,
-      part_name:     String(pick(r, '零件名稱', '零件名称', '品名') || '').trim(),
-      part_category: String(pick(r, '零件類別', '零件类别') || '').trim(),
-      part_type:     String(pick(r, '零件種類', '零件种类', '種類', '种类') || '').trim(),
-      category_code: String(pick(r, '零件類別', '零件类别') || '').trim(),
-      function_code: String(pick(r, '功能碼', '功能码') || '').trim(),
-      branch:        String(pick(r, '據點', '据点') || '').trim() || null,
-    });
-  }
-  return results;
-};
+const parsePartsCatalog = (rows) => rows
+  .filter(r => {
+    const p = String(pick(r, '零件編號', '料號') || '').trim();
+    return p && !isTitleRow(p);
+  })
+  .map(r => ({
+    part_number:   String(pick(r, '零件編號', '料號') || '').trim(),
+    part_name:     String(pick(r, '零件名稱', '品名') || '').trim(),
+    part_category: String(pick(r, '零件類別') || '').trim(),
+    part_type:     String(pick(r, '零件種類', '種類') || '').trim(),
+    category_code: String(pick(r, '零件類別') || '').trim(),
+    function_code: String(pick(r, '功能碼') || '').trim(),
+    branch:        String(pick(r, '據點') || '').trim() || null,
+  }));
 
 module.exports = {
+  isNoteRow,
+  isTitleRow,
   parseRepairIncome,
   parseTechPerformance,
   parsePartsSales,
