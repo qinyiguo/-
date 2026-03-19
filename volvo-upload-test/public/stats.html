@@ -1030,6 +1030,7 @@ function exportWipModalCSV(){
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download=`wip_detail_${Date.now()}.csv`;a.click();URL.revokeObjectURL(url);
 }
+(async()=>{ await loadPeriods(); await loadAll(); })();
 </script>
 </body>
 </html>
