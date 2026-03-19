@@ -8,9 +8,10 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
   .sticky-header { position: sticky; top: 0; z-index: 200; background: #0f172a; box-shadow: 0 4px 24px rgba(0,0,0,.6); }
-  .nav { background: #1e293b; border-bottom: 1px solid #2d3f56; padding: 0 24px; display: flex; align-items: center; }
-  .nav-brand { font-size: 15px; font-weight: 700; color: #fff; padding: 16px 0; margin-right: 24px; }
-  .nav-link { padding: 16px 16px; color: #64748b; font-size: 13px; font-weight: 600; text-decoration: none; border-bottom: 2px solid transparent; }
+  .nav { background: #1e293b; border-bottom: 1px solid #2d3f56; padding: 0 24px; display: flex; align-items: center; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav-brand { font-size: 15px; font-weight: 700; color: #fff; padding: 16px 0; margin-right: 24px; white-space: nowrap; flex-shrink: 0; }
+  .nav-link { padding: 16px 16px; color: #64748b; font-size: 13px; font-weight: 600; text-decoration: none; border-bottom: 2px solid transparent; white-space: nowrap; flex-shrink: 0; }
   .nav-link:hover { color: #e2e8f0; }
   .nav-link.active { color: #3b82f6; border-bottom-color: #3b82f6; }
   .header-body { padding: 10px 24px 8px; }
@@ -19,7 +20,7 @@
   .branch-select { background: #0f172a; border: 1px solid #2d3f56; color: #e2e8f0; padding: 7px 10px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; outline: none; transition: border-color .15s; }
   .branch-select:hover, .branch-select:focus { border-color: #3b82f6; }
   .tab-bar-wrap { display: flex; gap: 0; background: #0f172a; border: 1px solid #2d3f56; border-radius: 10px; padding: 4px; width: fit-content; }
-  .tab-btn { padding: 8px 20px; border: none; border-radius: 7px; font-size: 13px; font-weight: 700; cursor: pointer; background: transparent; color: #64748b; transition: all .15s; }
+  .tab-btn { padding: 8px 20px; border: none; border-radius: 7px; font-size: 13px; font-weight: 700; cursor: pointer; background: transparent; color: #64748b; transition: all .15s; white-space: nowrap; }
   .tab-btn.active { background: #3b82f6; color: #fff; }
   .tab-btn:hover:not(.active) { color: #e2e8f0; }
   .container { padding: 16px 24px 24px; max-width: 1400px; margin: 0 auto; }
@@ -83,6 +84,100 @@
   .wd-rev-marker { position: absolute; top: -3px; width: 2px; height: 13px; background: rgba(255,255,255,.55); border-radius: 1px; transition: left .5s; pointer-events: none; }
   .wd-status { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
   .wd-legend { width: 100%; display: flex; gap: 14px; align-items: center; font-size: 11px; color: #475569; padding: 4px 2px 0; flex-wrap: wrap; }
+
+  /* ══════════════ MOBILE RESPONSIVE ══════════════ */
+  @media (max-width: 768px) {
+    /* Nav */
+    .nav { padding: 0 16px; }
+    .nav-brand { font-size: 13px; padding: 12px 0; margin-right: 16px; }
+    .nav-link { padding: 12px 10px; font-size: 12px; }
+
+    /* Header body */
+    .header-body { padding: 8px 12px 6px; }
+
+    /* Filter bar */
+    .filter-bar { padding: 8px 12px; gap: 6px; border-radius: 8px; }
+    .filter-bar label { font-size: 11px; }
+    .branch-select { font-size: 12px; padding: 6px 8px; }
+
+    /* Period btn */
+    .period-btn { min-width: 120px; padding: 6px 10px; font-size: 12px; }
+    .period-btn .pb-month { font-size: 13px; }
+
+    /* Period dropdown — make it wider / right-aligned on small screens */
+    .period-dropdown { width: calc(100vw - 32px); max-width: 320px; }
+
+    /* Tab bar */
+    .tab-bar-wrap { width: 100%; border-radius: 8px; }
+    .tab-btn { flex: 1; padding: 9px 8px; font-size: 12px; text-align: center; }
+
+    /* Container */
+    .container { padding: 10px 12px 24px; }
+
+    /* Card */
+    .card { padding: 14px 12px; border-radius: 10px; }
+    .card-title { font-size: 13px; margin-bottom: 10px; }
+
+    /* Btn primary in card title */
+    .card-title a[href="/settings.html"] { font-size: 11px; padding: 3px 7px; }
+
+    /* ── Revenue KPI sub-grid → single column ── */
+    #revKPI-sub { grid-template-columns: 1fr !important; }
+
+    /* ── Revenue KPI card inner branch grid → stack ── */
+    .rev-branch-grid { grid-template-columns: 1fr !important; }
+    .rev-branch-cell { border-right: none !important; border-bottom: 1px solid #2d3f56; }
+
+    /* ── Group card sub-metrics → stack ── */
+    .group-sub-grid { grid-template-columns: 1fr !important; }
+    .group-sub-cell { border-right: none !important; border-bottom: 1px solid #2d3f56; }
+
+    /* ── Working days branch mini cards → stack ── */
+    .wd-branch-grid { grid-template-columns: 1fr !important; }
+    .wd-branch-cell { border-right: none !important; border-bottom: 1px solid #2d3f56; }
+    .wd-branch-cell:last-child { border-bottom: none; }
+
+    /* ── Perf block → single column ── */
+    .perf-block-body { grid-template-columns: 1fr !important; }
+    .perf-cell { border-right: none !important; border-bottom: 1px solid #2d3f56; padding: 14px 14px; }
+    .perf-cell:last-child { border-bottom: none; }
+
+    /* Achieve chips → wrap nicely */
+    .achieve-bar { gap: 8px; }
+    .achieve-chip { flex: 1; min-width: 120px; }
+
+    /* WD legend → smaller */
+    .wd-legend { font-size: 10px; gap: 8px; }
+
+    /* Estimate table → scrollable */
+    #tab-estimate .card > div:last-of-type { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    #tab-estimate table { min-width: 500px; }
+    #tab-estimate input[type="number"] { width: 90px !important; font-size: 12px !important; padding: 6px 8px !important; }
+
+    /* Income breakdown table */
+    #perfBreakdown { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    #perfBreakdown table { min-width: 480px; }
+
+    /* Group card header → stack */
+    .group-card-header { flex-direction: column !important; gap: 10px !important; }
+    .group-card-stats { margin-left: 0 !important; flex-wrap: wrap; gap: 10px !important; }
+
+    /* KPI numbers */
+    .group-total-num { font-size: 22px !important; }
+  }
+
+  @media (max-width: 480px) {
+    .nav-brand { font-size: 12px; }
+    .nav-link { font-size: 11px; padding: 12px 8px; }
+    .container { padding: 8px 10px 20px; }
+    .card { padding: 12px 10px; }
+    .tab-btn { font-size: 11px; padding: 8px 6px; }
+    .period-btn { min-width: 105px; font-size: 11px; }
+    .branch-select { font-size: 11px; }
+    .btn { padding: 6px 12px; font-size: 12px; }
+    .perf-cell { padding: 12px 12px; }
+    .achieve-chip { padding: 6px 10px; gap: 6px; }
+  }
 </style>
 </head>
 <body>
@@ -90,7 +185,7 @@
 <div class="sticky-header">
   <nav class="nav">
     <span class="nav-brand">🚗 Volvo DMS</span>
-    <a href="/performance.html" class="nav-link active">🎯 業績指標與預估</a>
+    <a href="/performance.html" class="nav-link active">🎯 業績指標</a>
     <a href="/stats.html" class="nav-link">📊 各廠明細</a>
     <a href="/query.html" class="nav-link">🔍 資料查詢</a>
     <a href="/settings.html" class="nav-link">⚙️ 設定</a>
@@ -107,21 +202,18 @@
         <option value="AMD">AMD</option>
       </select>
       <button class="btn btn-primary" onclick="doLoad()">查詢</button>
-      <span id="lastUpdate" style="margin-left:auto;font-size:12px;color:#64748b"></span>
+      <span id="lastUpdate" style="margin-left:auto;font-size:11px;color:#64748b;white-space:nowrap"></span>
     </div>
     <div class="tab-bar-wrap">
       <button id="tab-btn-progress" class="tab-btn active" onclick="switchPerfTab('progress')">📊 業績進度</button>
-      <button id="tab-btn-estimate" class="tab-btn" onclick="switchPerfTab('estimate')">✏️ 業績預估設定</button>
+      <button id="tab-btn-estimate" class="tab-btn" onclick="switchPerfTab('estimate')">✏️ 業績預估</button>
     </div>
   </div>
 </div>
 
 <div class="container">
   <div id="tab-progress">
-
-    <!-- ══ 工作天進度 ══ -->
     <div id="workingDaysBar" style="display:none"></div>
-
     <div id="revenueKPISection" style="margin-bottom:20px;display:none">
       <div id="revKPI-group" style="margin-bottom:12px"></div>
       <div id="revKPI-paid" style="margin-bottom:12px"></div>
@@ -129,7 +221,7 @@
     </div>
     <div class="card">
       <div class="card-title">📊 收入明細分解<span id="perfBreakdownPeriod" class="card-title-note"></span></div>
-      <div id="perfBreakdown"><div class="loading"><span class="spinner"></span>載入中</div></div>
+      <div id="perfBreakdown" style="overflow-x:auto;-webkit-overflow-scrolling:touch"><div class="loading"><span class="spinner"></span>載入中</div></div>
     </div>
     <div class="card">
       <div class="card-title">
@@ -155,14 +247,14 @@
       <div style="background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:11px 14px;font-size:12px;color:#94a3b8;line-height:1.8;margin-bottom:14px">
         輸入各據點本月各項營收預估值（千元 K）。💡 例如預估 AMA 有費營收約 25,000K，就填入 <strong>25000</strong>
       </div>
-      <div style="overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:480px">
           <thead><tr>
             <th style="text-align:left;padding:10px 14px;background:#0f172a;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56">據點</th>
-            <th style="text-align:right;padding:10px 14px;background:#0f172a;color:#f97316;font-size:12px;font-weight:800;border-bottom:1px solid #2d3f56">🔶 有費營收 (K)</th>
-            <th style="text-align:right;padding:10px 14px;background:#0f172a;color:#3b82f6;font-size:12px;font-weight:800;border-bottom:1px solid #2d3f56">💙 一般營收 (K)</th>
-            <th style="text-align:right;padding:10px 14px;background:#0f172a;color:#8b5cf6;font-size:12px;font-weight:800;border-bottom:1px solid #2d3f56">🔨 鈑烤營收 (K)</th>
-            <th style="text-align:right;padding:10px 14px;background:#0f172a;color:#10b981;font-size:12px;font-weight:800;border-bottom:1px solid #2d3f56">🛡️ 延保營收 (K)</th>
+            <th style="text-align:right;padding:10px 14px;background:#0f172a;color:#f97316;font-size:12px;font-weight:800;border-bottom:1px solid #2d3f56">🔶 有費 (K)</th>
+            <th style="text-align:right;padding:10px 14px;background:#0f172a;color:#3b82f6;font-size:12px;font-weight:800;border-bottom:1px solid #2d3f56">💙 一般 (K)</th>
+            <th style="text-align:right;padding:10px 14px;background:#0f172a;color:#8b5cf6;font-size:12px;font-weight:800;border-bottom:1px solid #2d3f56">🔨 鈑烤 (K)</th>
+            <th style="text-align:right;padding:10px 14px;background:#0f172a;color:#10b981;font-size:12px;font-weight:800;border-bottom:1px solid #2d3f56">🛡️ 延保 (K)</th>
           </tr></thead>
           <tbody id="estTableBody"><tr><td colspan="5" style="padding:24px;text-align:center;color:#64748b"><span class="spinner"></span>載入中</td></tr></tbody>
         </table>
@@ -179,11 +271,12 @@ const fmtK = (v) => Math.round(n(v) / 1000).toLocaleString() + 'K';
 
 let _currentPeriod = '';
 let _allPeriods    = [];
-let _wdSummary     = null;   // from /api/stats/daily summary
-let _revRates      = null;   // { AMA: paidRate%, AMC: ..., AMD: ... }
-let _revData       = null;   // { AMA: {actual, target, est}, ... }  for group total
+let _wdSummary     = null;
+let _revRates      = null;
+let _revData       = null;
 
 function getPeriod() { return _currentPeriod; }
+function isMobile() { return window.innerWidth <= 768; }
 
 // ── Period selector ──
 function initPeriodSelector(periods) {
@@ -273,8 +366,8 @@ function renderWorkingDaysBar() {
   const BRANCHES = branch ? [branch] : ['AMA','AMC','AMD'];
   const brColors = { AMA:'#3b82f6', AMC:'#10b981', AMD:'#f59e0b' };
   const ALL      = ['AMA','AMC','AMD'];
+  const mobile   = isMobile();
 
-  // ── 計算集團數字（無論單廠/全廠都算，單廠時不顯示） ──
   let gElapsed = 0, gTotal = 0;
   ALL.forEach(br => {
     const s = _wdSummary.find(r => r.branch === br);
@@ -295,7 +388,7 @@ function renderWorkingDaysBar() {
   const gFillCol   = gMonthPct === null ? '#64748b' : gMonthPct >= 90 ? '#10b981' : gMonthPct >= 50 ? '#94a3b8' : '#f59e0b';
   const gMarker    = gRevPct !== null ? `<div class="wd-rev-marker" style="left:${Math.min(100,gRevPct).toFixed(1)}%" title="集團有費達成率 ${gRevPct.toFixed(1)}%"></div>` : '';
 
-  // ── 各廠迷你卡（放在集團卡內） ──
+  // Branch mini cards — add class for CSS override on mobile
   const branchMiniCards = BRANCHES.map((br, bi) => {
     const s        = _wdSummary.find(r => r.branch === br);
     const col      = brColors[br] || '#94a3b8';
@@ -313,8 +406,7 @@ function renderWorkingDaysBar() {
     const markerHtml = revRate !== null ? `<div class="wd-rev-marker" style="left:${Math.min(100,revRate).toFixed(1)}%" title="有費達成率 ${revRate.toFixed(1)}%"></div>` : '';
     const borderR  = bi < BRANCHES.length - 1 ? 'border-right:1px solid #2d3f56;' : '';
 
-    return `<div style="padding:14px 16px;${borderR}display:flex;flex-direction:column;gap:8px">
-      <!-- 標頭 -->
+    return `<div class="wd-branch-cell" style="padding:14px 16px;${borderR}display:flex;flex-direction:column;gap:8px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:13px;font-weight:800;color:${col}">${br}</span>
@@ -324,7 +416,6 @@ function renderWorkingDaysBar() {
         </div>
         <span style="font-size:11px;font-weight:700;padding:1px 7px;border-radius:6px;background:${gapCol}18;color:${gapCol}">${gapText}</span>
       </div>
-      <!-- 天數 -->
       <div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
           <span style="font-size:10px;color:#64748b">📅 天數進度</span>
@@ -335,7 +426,6 @@ function renderWorkingDaysBar() {
           ${markerHtml}
         </div>
       </div>
-      <!-- 有費達成 -->
       ${revRate !== null ? `<div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
           <span style="font-size:10px;color:#64748b">🔶 有費達成</span>
@@ -348,34 +438,26 @@ function renderWorkingDaysBar() {
     </div>`;
   }).join('');
 
-  // ── 圖例 ──
   const legend = `<div class="wd-legend">
-    <span>📅 天數進度 = 已有進廠資料天數 ÷ 本月工作天</span>
-    <span style="display:inline-flex;align-items:center;gap:4px">
-      <span style="display:inline-block;width:8px;height:8px;background:rgba(255,255,255,.4);border-radius:1px;flex-shrink:0"></span>
-      條上白線 = 有費達成率位置
-    </span>
-    <span>進度差 = 有費達成率 − 天數進度 ｜ 🚀 超前≥3% ／ 〜 符合 ／ ⚠️ 落後≤-5%</span>
+    <span>📅 天數進度 = 已有資料天數 ÷ 本月工作天</span>
+    <span>進度差 = 有費達成率 − 天數進度 ｜ 🚀≥3% ／ 〜 符合 ／ ⚠️≤-5%</span>
   </div>`;
 
-  // ── 單廠模式：直接顯示單廠卡 ──
   if (branch) {
     el.innerHTML = `<div class="wd-progress-wrap">${branchMiniCards}</div>${legend}`;
     el.style.display = '';
     return;
   }
 
-  // ── 全廠模式：集團大卡包住三廠 ──
+  // 全廠模式 — 集團大卡使用 wd-branch-grid class for mobile override
   el.innerHTML = `
   <div style="background:#1a2332;border:2px solid #f97316;border-radius:12px;overflow:hidden;margin-bottom:0">
-    <!-- 集團標頭 -->
-    <div style="background:linear-gradient(135deg,rgba(249,115,22,.1),rgba(249,115,22,.04));border-bottom:1px solid rgba(249,115,22,.3);padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div class="group-card-header" style="background:linear-gradient(135deg,rgba(249,115,22,.1),rgba(249,115,22,.04));border-bottom:1px solid rgba(249,115,22,.3);padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
       <div>
         <div style="font-size:13px;font-weight:800;color:#f97316;margin-bottom:2px">🏢 集團進度總覽</div>
         <div style="font-size:11px;color:#475569">AMA + AMC + AMD 加權合計</div>
       </div>
-      <!-- 集團大進度條 -->
-      <div style="flex:1;min-width:200px">
+      <div style="flex:1;min-width:160px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
           <span style="font-size:11px;color:#64748b">📅 天數進度（加權）</span>
           <span style="font-size:12px;font-weight:800;color:${gFillCol}">${gMonthPct !== null ? gMonthPct.toFixed(1)+'%' : '—'}</span>
@@ -385,22 +467,19 @@ function renderWorkingDaysBar() {
           ${gMarker}
         </div>
       </div>
-      <!-- 集團數字 -->
-      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-        ${gMonthPct !== null ? `<div style="text-align:center"><div style="font-size:24px;font-weight:900;color:${gFillCol};line-height:1">${gMonthPct.toFixed(0)}%</div><div style="font-size:10px;color:#475569">天數進度</div></div>` : ''}
-        ${gRevPct !== null ? `<div style="width:1px;height:36px;background:rgba(249,115,22,.3)"></div><div style="text-align:center"><div style="font-size:24px;font-weight:900;color:${gRevCol};line-height:1">${gRevPct.toFixed(0)}%</div><div style="font-size:10px;color:#475569">有費達成</div></div>` : ''}
-        ${gEstPct !== null ? `<div style="width:1px;height:36px;background:rgba(249,115,22,.3)"></div><div style="text-align:center"><div style="font-size:24px;font-weight:900;color:${gEstCol};line-height:1">${gEstPct.toFixed(0)}%</div><div style="font-size:10px;color:#475569">預估達成</div></div>` : ''}
-        <div style="width:1px;height:36px;background:rgba(249,115,22,.3)"></div>
+      <div class="group-card-stats" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        ${gMonthPct !== null ? `<div style="text-align:center"><div class="group-total-num" style="font-size:24px;font-weight:900;color:${gFillCol};line-height:1">${gMonthPct.toFixed(0)}%</div><div style="font-size:10px;color:#475569">天數進度</div></div>` : ''}
+        ${gRevPct !== null ? `<div style="text-align:center"><div class="group-total-num" style="font-size:24px;font-weight:900;color:${gRevCol};line-height:1">${gRevPct.toFixed(0)}%</div><div style="font-size:10px;color:#475569">有費達成</div></div>` : ''}
+        ${gEstPct !== null ? `<div style="text-align:center"><div class="group-total-num" style="font-size:24px;font-weight:900;color:${gEstCol};line-height:1">${gEstPct.toFixed(0)}%</div><div style="font-size:10px;color:#475569">預估達成</div></div>` : ''}
         <div>
           <div style="font-size:10px;color:#64748b;margin-bottom:2px">有費實際 / 目標</div>
           <div style="font-size:14px;font-weight:800;color:#f97316">${fmtK(gActual)} <span style="font-size:11px;color:#64748b;font-weight:400">/ ${gTarget > 0 ? fmtK(gTarget) : '未設定'}</span></div>
           ${gEst > 0 ? `<div style="font-size:11px;color:${gEstCol};margin-top:1px">預估 ${fmtK(gEst)}</div>` : ''}
         </div>
-        <span style="padding:4px 12px;border-radius:8px;font-size:12px;font-weight:800;background:${gDeltaCol}18;color:${gDeltaCol};border:1px solid ${gDeltaCol}33">${gDeltaText}</span>
+        <span style="padding:4px 10px;border-radius:8px;font-size:12px;font-weight:800;background:${gDeltaCol}18;color:${gDeltaCol};border:1px solid ${gDeltaCol}33">${gDeltaText}</span>
       </div>
     </div>
-    <!-- 三廠細節 -->
-    <div style="display:grid;grid-template-columns:repeat(3,1fr)">
+    <div class="wd-branch-grid" style="display:grid;grid-template-columns:repeat(3,1fr)">
       ${branchMiniCards}
     </div>
   </div>
@@ -423,7 +502,7 @@ async function doLoad() {
     loadIncomeBreakdown(period, branch),
     loadPerformance(period, branch),
   ]);
-  document.getElementById('lastUpdate').textContent=`更新於 ${new Date().toLocaleTimeString('zh-TW')}`;
+  document.getElementById('lastUpdate').textContent=`${new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})} 更新`;
 }
 
 // ══════════════════════════════════════════════
@@ -447,12 +526,12 @@ async function renderEstTable() {
       return`<tr><td style="padding:12px 14px;border-bottom:1px solid rgba(45,63,86,.3)">
         <span style="display:inline-block;padding:4px 12px;border-radius:6px;font-size:13px;font-weight:800;background:${bCol}22;color:${bCol}">${br}</span></td>
         ${KEYS.map(m=>{const val=e[`${m.key}_estimate`]?Math.round(e[`${m.key}_estimate`]/1000):'';
-          return`<td style="padding:8px 14px;border-bottom:1px solid rgba(45,63,86,.3)">
-            <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+          return`<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.3)">
+            <div style="display:flex;align-items:center;gap:4px;justify-content:flex-end">
               <input type="number" id="est-${m.key}-${br}" value="${val}" placeholder="—" min="0" step="1"
-                style="background:#0f172a;border:1px solid #2d3f56;color:${m.col};padding:8px 12px;border-radius:6px;font-size:13px;font-weight:700;width:130px;text-align:right;outline:none"
+                style="background:#0f172a;border:1px solid #2d3f56;color:${m.col};padding:8px 10px;border-radius:6px;font-size:13px;font-weight:700;width:110px;text-align:right;outline:none"
                 onfocus="this.style.borderColor='${m.col}'" onblur="this.style.borderColor='#2d3f56'">
-              <span style="font-size:12px;color:#475569">K</span></div></td>`;
+              <span style="font-size:11px;color:#475569">K</span></div></td>`;
         }).join('')}</tr>`;
     }).join('');
   }catch(e){tbody.innerHTML=`<tr><td colspan="5" style="color:#ef4444;padding:16px">${e.message}</td></tr>`;}
@@ -499,7 +578,6 @@ async function loadRevenueKPI(period,branch){
     const eMap={};(Array.isArray(estRes)?estRes:[]).forEach(e=>{eMap[e.branch]=e;});
     const bdata=bkRes.branches||{};
 
-    // ── 儲存有費達成率，供工作天進度條比較 ──
     _revRates={}; _revData={};
     BRANCHES.forEach(br=>{
       const actual=bdata[br]?.paid_total||0;
@@ -508,9 +586,9 @@ async function loadRevenueKPI(period,branch){
       _revRates[br]=target>0?(actual/target*100):null;
       _revData[br]={actual, target, est};
     });
-    if(_wdSummary)renderWorkingDaysBar(); // 若工作天已載入，立刻更新狀態
+    if(_wdSummary)renderWorkingDaysBar();
 
-    // ── 集團合計卡片 ──
+    // ── 集團合計卡片 ── (uses group-sub-grid class for mobile CSS override)
     const buildGroupCard=(metricKey,actualKey,label,color)=>{
       const ALL=['AMA','AMC','AMD'];
       const gActual=ALL.reduce((s,br)=>s+(bdata[br]?.[actualKey]||0),0);
@@ -539,7 +617,7 @@ async function loadRevenueKPI(period,branch){
         const ec=er===null?'#64748b':er>=100?'#10b981':er>=80?'#f59e0b':'#f97316';
         const bw=r!==null?Math.min(100,r).toFixed(0):0,ebw=er!==null?Math.min(100,er).toFixed(0):0;
         const borderR=si<SUB.length-1?'border-right:1px solid #2d3f56;':'';
-        return`<div style="padding:16px 20px;${borderR}">
+        return`<div class="group-sub-cell" style="padding:16px 20px;${borderR}">
           <div style="font-size:12px;font-weight:800;color:${sm.color};margin-bottom:10px">${sm.label}</div>
           <div style="font-size:22px;font-weight:800;color:#e2e8f0;margin-bottom:6px">${fmtK(sAct)}</div>
           <div style="display:flex;align-items:center;gap:5px;margin-bottom:${sEst>0?'6px':'12px'}">
@@ -558,20 +636,20 @@ async function loadRevenueKPI(period,branch){
       }).join('');
       return`<div style="background:#1a2332;border:2px solid ${color}44;border-radius:12px;overflow:hidden">
         <div style="background:linear-gradient(135deg,${color}18,${color}08);border-bottom:1px solid ${color}33;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-          <div style="display:flex;align-items:center;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <span style="font-size:13px;font-weight:800;color:${color}">集團有費合計</span>
-            <span style="font-size:11px;color:#475569">一般(含自費鈑烤)＋保險鈑烤＋延保 ｜ AMA＋AMC＋AMD</span>
+            <span style="font-size:11px;color:#475569">一般(含自費鈑烤)＋保險鈑烤＋延保</span>
           </div>
-          <div style="display:flex;align-items:center;gap:16px;margin-left:auto;flex-wrap:wrap">
-            <div><div style="font-size:11px;color:#64748b;margin-bottom:2px">集團總計</div><div style="font-size:28px;font-weight:900;color:#fff;line-height:1">${fmtK(gActual)}</div></div>
-            <div style="display:flex;flex-direction:column;gap:4px;min-width:160px">
+          <div style="display:flex;align-items:center;gap:12px;margin-left:auto;flex-wrap:wrap">
+            <div><div style="font-size:11px;color:#64748b;margin-bottom:2px">集團總計</div><div style="font-size:26px;font-weight:900;color:#fff;line-height:1">${fmtK(gActual)}</div></div>
+            <div style="display:flex;flex-direction:column;gap:4px;min-width:140px">
               <div style="display:flex;align-items:center;gap:6px">
                 <div style="flex:1;background:#0f172a;border-radius:3px;height:6px"><div style="width:${barW}%;height:6px;background:${rCol};border-radius:3px;transition:width .5s"></div></div>
-                <span style="font-size:13px;font-weight:900;color:${rCol};white-space:nowrap;min-width:52px;text-align:right">${rate!==null?rate.toFixed(1)+'%':'—'}</span>
+                <span style="font-size:13px;font-weight:900;color:${rCol};white-space:nowrap;min-width:48px;text-align:right">${rate!==null?rate.toFixed(1)+'%':'—'}</span>
               </div>
               ${gEst>0?`<div style="display:flex;align-items:center;gap:6px">
                 <div style="flex:1;background:#0f172a;border-radius:3px;height:4px"><div style="width:${estBarW}%;height:4px;border-radius:3px;background:repeating-linear-gradient(90deg,${eCol} 0,${eCol} 4px,transparent 4px,transparent 8px)"></div></div>
-                <span style="font-size:11px;font-weight:700;color:${eCol};white-space:nowrap;min-width:52px;text-align:right">預 ${estRate!==null?estRate.toFixed(1)+'%':'—'}</span>
+                <span style="font-size:11px;font-weight:700;color:${eCol};white-space:nowrap;min-width:48px;text-align:right">預 ${estRate!==null?estRate.toFixed(1)+'%':'—'}</span>
               </div>`:''}
             </div>
             <div style="display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:12px;color:#64748b">
@@ -582,17 +660,18 @@ async function loadRevenueKPI(period,branch){
           </div>
         </div>
         <div style="padding:10px 16px 8px;border-bottom:1px solid #2d3f56"><span style="font-size:11px;color:#374151;font-weight:700;letter-spacing:.05em">集團各類營收合計</span></div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr)">${branchCells}</div>
+        <div class="group-sub-grid" style="display:grid;grid-template-columns:repeat(3,1fr)">${branchCells}</div>
       </div>`;
     };
 
+    // ── 各據點單一指標卡片 (使用 rev-branch-grid class) ──
     const buildCard=(m,fullWidth)=>{
       let card=`<div style="background:#1a2332;border:1px solid #2d3f56;border-radius:12px;overflow:hidden">
-        <div style="padding:12px 18px 10px;border-bottom:1px solid #2d3f56;display:flex;align-items:center;gap:8px">
+        <div style="padding:12px 18px 10px;border-bottom:1px solid #2d3f56;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <span style="font-size:14px;font-weight:800;color:${m.color}">${m.label}</span>
           ${fullWidth?`<span style="font-size:11px;color:#475569;margin-left:4px">一般(含自費鈑烤)＋保險鈑烤＋延保</span>`:''}
         </div>
-        <div style="display:grid;grid-template-columns:repeat(${BRANCHES.length},1fr)">`;
+        <div class="rev-branch-grid" style="display:grid;grid-template-columns:repeat(${BRANCHES.length},1fr)">`;
       BRANCHES.forEach((br,bi)=>{
         const col=brColors[br]||'#64748b',t=tMap[br]||{},e=eMap[br]||{},bd=bdata[br]||{};
         const actual=bd[m.actualKey]||0,target=parseFloat(t[`${m.key}_target`]||0),ly=parseFloat(t[`${m.key}_last_year`]||0),est=parseFloat(e[`${m.key}_estimate`]||0);
@@ -601,7 +680,7 @@ async function loadRevenueKPI(period,branch){
         const eCol=estRate===null?'#64748b':estRate>=100?'#10b981':estRate>=80?'#f59e0b':'#f97316';
         const barW=rate!==null?Math.min(100,rate).toFixed(0):0,estBarW=estRate!==null?Math.min(100,estRate).toFixed(0):0;
         const borderR=bi<BRANCHES.length-1?'border-right:1px solid #2d3f56;':'';
-        card+=`<div style="padding:${fullWidth?'16px 20px':'14px 16px'};${borderR}">
+        card+=`<div class="rev-branch-cell" style="padding:${fullWidth?'16px 20px':'14px 16px'};${borderR}">
           <div style="font-size:11px;font-weight:800;color:${col};margin-bottom:8px">${br}</div>
           <div style="font-size:${fullWidth?'24px':'20px'};font-weight:800;color:#e2e8f0;margin-bottom:4px">${fmtK(actual)}</div>
           <div style="display:flex;align-items:center;gap:5px;margin-bottom:${est>0?'6px':'10px'}">
@@ -654,39 +733,39 @@ async function loadIncomeBreakdown(period,branch){
     const brColors={AMA:'#3b82f6',AMC:'#10b981',AMD:'#f59e0b'};
     const tot=k=>BRANCHES.reduce((s,br)=>s+(bdata[br]?.[k]||0),0);
     const ROWS=[
-      {key:'general_no_bw',label:'一般收入（非鈑烤）',indent:1,color:'#60a5fa',note:'帳類=一般，不含鈑金/烤漆工單'},
+      {key:'general_no_bw',label:'一般收入（非鈑烤）',indent:1,color:'#60a5fa',note:'帳類=一般，不含鈑金/烤漆'},
       {key:'voucher',label:'票劵收入',indent:1,color:'#60a5fa',note:'帳類=票劵'},
       {key:'external',label:'外賣收入',indent:1,color:'#2dd4bf',note:'來自零件銷售'},
-      {key:'general_total',label:'💙 一般營收',indent:0,color:'#3b82f6',bold:true,note:'一般(非鈑烤)＋票劵＋外賣'},
-      {key:'bodywork_self',label:'自費鈑烤',indent:1,color:'#a78bfa',note:'帳類=一般，含鈑金/烤漆工單'},
+      {key:'general_total',label:'💙 一般營收',indent:0,color:'#3b82f6',bold:true,note:'一般+票劵+外賣'},
+      {key:'bodywork_self',label:'自費鈑烤',indent:1,color:'#a78bfa',note:'帳類=一般，含鈑烤'},
       {key:'bodywork_insurance',label:'保險鈑烤',indent:1,color:'#a78bfa',note:'帳類=保險'},
       {key:'bodywork_total',label:'🔨 鈑烤營收',indent:0,color:'#8b5cf6',bold:true},
       {key:'extended',label:'🛡️ 延保營收',indent:0,color:'#10b981',bold:true},
-      {key:'paid_total',label:'🔶 有費營收',indent:0,color:'#f97316',bold:true,border:true,note:'一般(含自費鈑烤)＋保險鈑烤＋延保'},
+      {key:'paid_total',label:'🔶 有費營收',indent:0,color:'#f97316',bold:true,border:true,note:'一般+鈑烤+延保'},
       {key:'other_total',label:'無費成本（內結/保固/VSA/善意）',indent:0,color:'#64748b'},
       {key:'all_total',label:'📌 全部營收',indent:0,color:'#e2e8f0',bold:true,border:true,note:'有費＋無費'},
     ];
-    let html=`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>
-      <th style="text-align:left;padding:10px 16px;background:#0f172a;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;min-width:220px">收入項目</th>`;
-    BRANCHES.forEach(br=>{html+=`<th style="text-align:right;padding:10px 16px;background:#0f172a;color:${brColors[br]||'#94a3b8'};font-size:13px;font-weight:800;border-bottom:1px solid #2d3f56;min-width:140px">${br}</th>`;});
-    if(BRANCHES.length>1)html+=`<th style="text-align:right;padding:10px 16px;background:#0f172a;color:#94a3b8;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;min-width:120px;border-left:1px solid #374151">三站合計</th>`;
+    let html=`<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:420px"><thead><tr>
+      <th style="text-align:left;padding:10px 12px;background:#0f172a;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;min-width:180px">收入項目</th>`;
+    BRANCHES.forEach(br=>{html+=`<th style="text-align:right;padding:10px 12px;background:#0f172a;color:${brColors[br]||'#94a3b8'};font-size:13px;font-weight:800;border-bottom:1px solid #2d3f56;min-width:100px">${br}</th>`;});
+    if(BRANCHES.length>1)html+=`<th style="text-align:right;padding:10px 12px;background:#0f172a;color:#94a3b8;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;min-width:100px;border-left:1px solid #374151">合計</th>`;
     html+=`</tr></thead><tbody>`;
     const allOD=[];BRANCHES.forEach(br=>(bdata[br]?.other_detail||[]).forEach(od=>{if(!allOD.find(x=>x.account_type===od.account_type))allOD.push(od);}));
-    const odHtml=allOD.map(od=>{let r=`<tr><td style="padding:6px 16px 6px 36px;border-bottom:1px solid rgba(45,63,86,.2)"><div style="display:flex;align-items:center;gap:6px"><div style="width:3px;height:12px;background:#1e293b;border-radius:2px;flex-shrink:0"></div><span style="font-size:12px;color:#475569">${od.account_type}</span></div></td>`;BRANCHES.forEach(br=>{const m=(bdata[br]?.other_detail||[]).find(x=>x.account_type===od.account_type);r+=`<td style="text-align:right;padding:6px 16px;border-bottom:1px solid rgba(45,63,86,.2);font-size:12px;color:#475569">${m?.total>0?fmtK(m.total):'—'}</td>`;});if(BRANCHES.length>1)r+=`<td style="border-bottom:1px solid rgba(45,63,86,.2);border-left:1px solid #374151"></td>`;return r+`</tr>`;}).join('');
+    const odHtml=allOD.map(od=>{let r=`<tr><td style="padding:6px 12px 6px 28px;border-bottom:1px solid rgba(45,63,86,.2)"><span style="font-size:12px;color:#475569">${od.account_type}</span></td>`;BRANCHES.forEach(br=>{const m=(bdata[br]?.other_detail||[]).find(x=>x.account_type===od.account_type);r+=`<td style="text-align:right;padding:6px 12px;border-bottom:1px solid rgba(45,63,86,.2);font-size:12px;color:#475569">${m?.total>0?fmtK(m.total):'—'}</td>`;});if(BRANCHES.length>1)r+=`<td style="border-bottom:1px solid rgba(45,63,86,.2);border-left:1px solid #374151"></td>`;return r+`</tr>`;}).join('');
     ROWS.forEach(row=>{
       const bg=row.bold?'rgba(255,255,255,.03)':'transparent',bt=row.border?'border-top:2px solid #374151;':'';
       if(row.key==='other_total')html+=odHtml;
-      html+=`<tr style="background:${bg}"><td style="padding:10px 16px;border-bottom:1px solid rgba(45,63,86,.3);${bt}">
-        <div style="display:flex;align-items:center;gap:8px;padding-left:${row.indent?20:0}px">
-          ${row.indent?'<div style="width:3px;height:14px;background:#2d3f56;border-radius:2px;flex-shrink:0"></div>':''}
-          <span style="font-size:${row.bold?14:13}px;font-weight:${row.bold?800:600};color:${row.color||'#e2e8f0'}">${row.label}</span>
-          ${row.note?`<span style="font-size:11px;color:#475569">${row.note}</span>`:''}
+      html+=`<tr style="background:${bg}"><td style="padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.3);${bt}">
+        <div style="display:flex;align-items:center;gap:6px;padding-left:${row.indent?16:0}px">
+          ${row.indent?'<div style="width:3px;height:12px;background:#2d3f56;border-radius:2px;flex-shrink:0"></div>':''}
+          <span style="font-size:${row.bold?13:12}px;font-weight:${row.bold?800:600};color:${row.color||'#e2e8f0'}">${row.label}</span>
+          ${row.note?`<span style="font-size:10px;color:#475569">${row.note}</span>`:''}
         </div></td>`;
-      BRANCHES.forEach(br=>{const v=bdata[br]?.[row.key]||0;html+=`<td style="text-align:right;padding:10px 16px;border-bottom:1px solid rgba(45,63,86,.3);${bt}font-variant-numeric:tabular-nums"><span style="font-size:${row.bold?15:13}px;font-weight:${row.bold?800:600};color:${row.color||'#e2e8f0'}">${fmtK(v)}</span></td>`;});
-      if(BRANCHES.length>1){const total=tot(row.key);html+=`<td style="text-align:right;padding:10px 16px;border-bottom:1px solid rgba(45,63,86,.3);${bt}font-variant-numeric:tabular-nums;background:rgba(255,255,255,.02);border-left:1px solid #374151"><span style="font-size:${row.bold?15:13}px;font-weight:${row.bold?800:600};color:${row.color||'#94a3b8'}">${fmtK(total)}</span></td>`;}
+      BRANCHES.forEach(br=>{const v=bdata[br]?.[row.key]||0;html+=`<td style="text-align:right;padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.3);${bt}font-variant-numeric:tabular-nums"><span style="font-size:${row.bold?14:12}px;font-weight:${row.bold?800:600};color:${row.color||'#e2e8f0'}">${fmtK(v)}</span></td>`;});
+      if(BRANCHES.length>1){const total=tot(row.key);html+=`<td style="text-align:right;padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.3);${bt}font-variant-numeric:tabular-nums;background:rgba(255,255,255,.02);border-left:1px solid #374151"><span style="font-size:${row.bold?14:12}px;font-weight:${row.bold?800:600};color:${row.color||'#94a3b8'}">${fmtK(total)}</span></td>`;}
       html+=`</tr>`;
     });
-    html+=`</tbody></table></div><div style="font-size:11px;color:#475569;margin-top:10px;line-height:2">💡 金額單位：千元（K）｜未稅</div>`;
+    html+=`</tbody></table><div style="font-size:11px;color:#475569;margin-top:10px;line-height:2">💡 金額單位：千元（K）｜未稅</div>`;
     el.innerHTML=html;
   }catch(e){el.innerHTML=`<div style="color:#ef4444;padding:16px">${e.message}</div>`;}
 }
@@ -713,22 +792,25 @@ async function loadPerformance(period,branch){
     const metricMap={};metrics.forEach(m=>{metricMap[m.id]=m;});
     const brStats={};BRANCHES.forEach(br=>{brStats[br]={achieved:0,total:metrics.length};});
     results.forEach(r=>{BRANCHES.forEach(br=>{const d=r.branches[br]||{};if(d.achieve_rate!==null&&d.achieve_rate>=100)brStats[br].achieved++;});});
-    achBar.innerHTML=`<span class="achieve-bar-label">各據點達標情況</span>`+BRANCHES.map(br=>{
+
+    // Achieve bar — on mobile show compact version
+    achBar.innerHTML=`<span class="achieve-bar-label">各據點達標</span>`+BRANCHES.map(br=>{
       const s=brStats[br],col=brColors[br]||'#64748b',isAll=s.achieved===s.total&&s.total>0;
       const pct=s.total>0?Math.round(s.achieved/s.total*100):0;
       const aCol=isAll?'#10b981':s.achieved>0?'#f59e0b':'#ef4444';
       return`<div class="achieve-chip" style="border-color:${aCol}33">
         <span style="font-size:12px;font-weight:800;color:${col}">${br}</span>
-        <span style="font-size:22px;font-weight:800;color:${aCol};line-height:1">${s.achieved}</span>
-        <span style="font-size:12px;color:#475569">/ ${s.total} 項</span>
+        <span style="font-size:20px;font-weight:800;color:${aCol};line-height:1">${s.achieved}</span>
+        <span style="font-size:12px;color:#475569">/ ${s.total}</span>
         <div style="display:flex;flex-direction:column;gap:3px">
-          <div style="width:48px;background:#0f172a;border-radius:3px;height:4px"><div style="width:${pct}%;height:4px;border-radius:3px;background:${aCol};transition:width .4s"></div></div>
+          <div style="width:40px;background:#0f172a;border-radius:3px;height:4px"><div style="width:${pct}%;height:4px;border-radius:3px;background:${aCol};transition:width .4s"></div></div>
           <span style="font-size:10px;font-weight:700;color:${aCol}">${pct}%</span>
         </div>
-        ${isAll?'<span class="full-badge">全達標 🎉</span>':''}
+        ${isAll?'<span class="full-badge">🎉</span>':''}
       </div>`;
     }).join('');
     achBar.style.display='flex';
+
     let html='';
     results.forEach(r=>{
       const metric=metricMap[r.metric_id];if(!metric)return;
