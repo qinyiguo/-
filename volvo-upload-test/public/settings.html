@@ -975,17 +975,15 @@ document.addEventListener('keydown',e=>{
 // ══ Sidebar ══
 const sections=['upload','dbstatus','sa-config','working-days','tech-wage-config','revenue-targets','performance','password'];
 function showSection(id){
-  sections.forEach(s => { ... });
-document.querySelectorAll('.mob-sec-btn').forEach(...)  // ← 獨立，只跑一次
-const mobBtn = document.getElementById(...)
-mobBtn.scrollIntoView(...)
+  sections.forEach(s=>{
+    document.getElementById(`section-${s}`).classList.toggle('active',s===id);
+    document.getElementById(`menu-${s}`)?.classList.toggle('active',s===id);
+  });
 
-  // ① 同步手機 nav 按鈕
   document.querySelectorAll('.mob-sec-btn').forEach(btn=>{
     btn.classList.toggle('active', btn.id===`mob-menu-${id}`);
   });
 
-  // ② 手機：捲到對應按鈕 + 頁面回頂
   const mobBtn=document.getElementById(`mob-menu-${id}`);
   if(mobBtn) mobBtn.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
   if(window.innerWidth<=768) window.scrollTo({top:0,behavior:'smooth'});
