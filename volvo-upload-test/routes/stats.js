@@ -526,41 +526,52 @@ router.get('/stats/performance', async (req, res) => {
 });
 
 // ── WIP 未結工單 ──
-// 邏輯：business_query（本期進廠） LEFT JOIN repair_income（已結算）
-//       on 據點 + 工單號，repair_income 無對應 = 尚未結算 = WIP
+// 邏輯：
+//   來源：tech_performance + parts_sales（本期有工作紀錄，財務數字在這裡）
+//   結算檢查：repair_income（不加 period，跨月結算也能比對）
+//   有工作紀錄但 repair_income 無對應工單 = 未結
 router.get('/stats/wip', async (req, res) => {
   const { period, branch } = req.query;
   if (!period) return res.status(400).json({ error: 'period 為必填' });
   try {
     const params = [period]; let idx = 2;
-    const bqBranchCond = branch ? ` AND bq.branch=$${idx++}` : '';
+    const branchCond = branch ? ` AND branch=$${idx++}` : '';
     if (branch) params.push(branch);
 
-    // 額外 params 給 tp_agg / ps_agg（同 period + branch）
-    const subParams = [period];
-    const subBranchCond = branch ? ` AND branch=$${subParams.length + 1}` : '';
-    if (branch) subParams.push(branch);
-
     const r = await pool.query(`
-      WITH tp_agg AS (
+      WITH
+      -- 本期 tech_performance 有工資紀錄的工單（含金額）
+      tp_agg AS (
         SELECT work_order, branch,
           SUM(wage)         AS wage,
           MAX(account_type) AS account_type
         FROM tech_performance
-        WHERE period=$1${subBranchCond}
+        WHERE period=$1${branchCond}
         GROUP BY work_order, branch
       ),
+      -- 本期 parts_sales 有材料銷售紀錄的工單（含金額）
       ps_agg AS (
         SELECT work_order, branch,
           SUM(sale_price_untaxed) AS sales_amt,
           SUM(cost_untaxed)       AS cost_amt
         FROM parts_sales
-        WHERE period=$1${subBranchCond}
+        WHERE period=$1${branchCond}
         GROUP BY work_order, branch
+      ),
+      -- 合併：本期有任何工作紀錄的工單
+      all_orders AS (
+        SELECT work_order, branch FROM tp_agg
+        UNION
+        SELECT work_order, branch FROM ps_agg
+      ),
+      -- 已結算：repair_income 不限 period（跨月結算也算結清）
+      settled AS (
+        SELECT DISTINCT work_order, branch
+        FROM repair_income
       )
       SELECT
-        bq.work_order,
-        bq.branch,
+        ao.work_order,
+        ao.branch,
         COALESCE(bq.plate_no, '')        AS plate_no,
         COALESCE(bq.repair_type, '')     AS repair_type,
         COALESCE(bq.repair_item, '')     AS repair_item,
@@ -569,6 +580,7 @@ router.get('/stats/wip', async (req, res) => {
         COALESCE(bq.status, '')          AS status,
         COALESCE(bq.service_advisor, '') AS service_advisor,
         COALESCE(bq.car_series, '')      AS car_series,
+        -- 金額來源：tp_agg / ps_agg，不是 business_query
         COALESCE(tp.wage, 0)             AS wage,
         COALESCE(tp.account_type,
           bq.repair_type, '')            AS account_type,
@@ -584,20 +596,23 @@ router.get('/stats/wip', async (req, res) => {
           THEN EXTRACT(DAY FROM (NOW() - bq.open_time))
           ELSE NULL
         END                              AS days_open
-      FROM business_query bq
-      -- 不限 repair_income 的 period，確保跨期結算也能比對到
-      LEFT JOIN repair_income ri
-        ON ri.work_order = bq.work_order
-       AND ri.branch     = bq.branch
+      FROM all_orders ao
+      -- business_query 提供車輛/日期資訊（不限 period，跨月開單也能撈到）
+      LEFT JOIN business_query bq
+        ON bq.work_order = ao.work_order
+       AND bq.branch     = ao.branch
       LEFT JOIN tp_agg tp
-        ON tp.work_order = bq.work_order
-       AND tp.branch     = bq.branch
+        ON tp.work_order = ao.work_order
+       AND tp.branch     = ao.branch
       LEFT JOIN ps_agg ps
-        ON ps.work_order = bq.work_order
-       AND ps.branch     = bq.branch
-      WHERE bq.period = $1${bqBranchCond}
-        AND ri.work_order IS NULL          -- repair_income 無對應 = 未結
-      ORDER BY bq.branch, bq.open_time NULLS LAST, bq.work_order
+        ON ps.work_order = ao.work_order
+       AND ps.branch     = ao.branch
+      -- repair_income 無對應 = 尚未結算 = WIP
+      LEFT JOIN settled s
+        ON s.work_order = ao.work_order
+       AND s.branch     = ao.branch
+      WHERE s.work_order IS NULL
+      ORDER BY ao.branch, bq.open_time NULLS LAST, ao.work_order
     `, params);
 
     const rows = r.rows;
