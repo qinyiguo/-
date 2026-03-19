@@ -527,104 +527,63 @@ router.get('/stats/performance', async (req, res) => {
 
 // ── WIP 未結工單 ──
 // 邏輯：
-//   來源：tech_performance + parts_sales（本期有工作紀錄，財務數字在這裡）
-//   結算檢查：repair_income（不加 period，跨月結算也能比對）
-//   有工作紀錄但 repair_income 無對應工單 = 未結
+//   來源：business_query（本期進廠工單）
+//   結算檢查：repair_income（不限 period，跨月結算也算結清）
+//   WIP = business_query 有記錄，但 repair_income 無對應工單
+//   排除：PDI、PV 類型（在 SQL 層過濾，不需再做 is_pdi 判斷）
+//   金額：直接取 business_query.labor_fee / sales_material_fee / repair_material_fee
 router.get('/stats/wip', async (req, res) => {
   const { period, branch } = req.query;
   if (!period) return res.status(400).json({ error: 'period 為必填' });
   try {
     const params = [period]; let idx = 2;
-    const branchCond = branch ? ` AND branch=$${idx++}` : '';
+    const branchCond = branch ? ` AND bq.branch=$${idx++}` : '';
     if (branch) params.push(branch);
 
     const r = await pool.query(`
-      WITH
-      -- 本期 tech_performance 有工資紀錄的工單（含金額）
-      tp_agg AS (
-        SELECT work_order, branch,
-          SUM(wage)         AS wage,
-          MAX(account_type) AS account_type
-        FROM tech_performance
-        WHERE period=$1${branchCond}
-        GROUP BY work_order, branch
-      ),
-      -- 本期 parts_sales 有材料銷售紀錄的工單（含金額）
-      ps_agg AS (
-        SELECT work_order, branch,
-          SUM(sale_price_untaxed) AS sales_amt,
-          SUM(cost_untaxed)       AS cost_amt
-        FROM parts_sales
-        WHERE period=$1${branchCond}
-        GROUP BY work_order, branch
-      ),
-      -- 合併：本期有任何工作紀錄的工單
-      all_orders AS (
-        SELECT work_order, branch FROM tp_agg
-        UNION
-        SELECT work_order, branch FROM ps_agg
-      ),
-      -- 已結算：repair_income 不限 period（跨月結算也算結清）
-      settled AS (
-        SELECT DISTINCT work_order, branch
-        FROM repair_income
-      )
       SELECT
-        ao.work_order,
-        ao.branch,
-        COALESCE(bq.plate_no, '')        AS plate_no,
-        COALESCE(bq.repair_type, '')     AS repair_type,
-        COALESCE(bq.repair_item, '')     AS repair_item,
+        bq.work_order,
+        bq.branch,
+        COALESCE(bq.plate_no, '')            AS plate_no,
+        COALESCE(bq.repair_type, '')         AS repair_type,
+        COALESCE(bq.repair_item, '')         AS repair_item,
         bq.open_time,
         bq.settle_date,
-        COALESCE(bq.status, '')          AS status,
-        COALESCE(bq.service_advisor, '') AS service_advisor,
-        COALESCE(bq.car_series, '')      AS car_series,
-        -- 金額來源：tp_agg / ps_agg，不是 business_query
-        COALESCE(tp.wage, 0)             AS wage,
-        COALESCE(tp.account_type,
-          bq.repair_type, '')            AS account_type,
-        COALESCE(ps.sales_amt, 0)        AS sales_amt,
-        COALESCE(ps.cost_amt, 0)         AS cost_amt,
-        COALESCE(
-          bq.repair_type ILIKE '%PDI%'
-          OR bq.repair_item ILIKE '%PDI%',
-          false
-        )                                AS is_pdi,
+        COALESCE(bq.status, '')              AS status,
+        COALESCE(bq.service_advisor, '')     AS service_advisor,
+        COALESCE(bq.car_series, '')          AS car_series,
+        COALESCE(bq.repair_type, '')         AS account_type,
+        COALESCE(bq.labor_fee, 0)            AS wage,
+        COALESCE(bq.sales_material_fee, 0)   AS sales_amt,
+        COALESCE(bq.repair_material_fee, 0)  AS cost_amt,
+        COALESCE(bq.repair_amount, 0)        AS repair_amount,
+        false                                AS is_pdi,
         CASE
           WHEN bq.open_time IS NOT NULL
           THEN EXTRACT(DAY FROM (NOW() - bq.open_time))
           ELSE NULL
-        END                              AS days_open
-      FROM all_orders ao
-      -- business_query 提供車輛/日期資訊（不限 period，跨月開單也能撈到）
-      LEFT JOIN business_query bq
-        ON bq.work_order = ao.work_order
-       AND bq.branch     = ao.branch
-      LEFT JOIN tp_agg tp
-        ON tp.work_order = ao.work_order
-       AND tp.branch     = ao.branch
-      LEFT JOIN ps_agg ps
-        ON ps.work_order = ao.work_order
-       AND ps.branch     = ao.branch
-      -- repair_income 無對應 = 尚未結算 = WIP
-      LEFT JOIN settled s
-        ON s.work_order = ao.work_order
-       AND s.branch     = ao.branch
-      WHERE s.work_order IS NULL
-      ORDER BY ao.branch, bq.open_time NULLS LAST, ao.work_order
+        END AS days_open
+      FROM business_query bq
+      WHERE bq.period = $1${branchCond}
+        AND COALESCE(bq.repair_type, '') NOT ILIKE '%PDI%'
+        AND COALESCE(bq.repair_item,  '') NOT ILIKE '%PDI%'
+        AND COALESCE(bq.repair_type, '') NOT ILIKE '%PV%'
+        AND NOT EXISTS (
+          SELECT 1 FROM repair_income ri
+          WHERE ri.work_order = bq.work_order
+            AND ri.branch     = bq.branch
+        )
+      ORDER BY bq.branch, bq.open_time NULLS LAST, bq.work_order
     `, params);
 
     const rows = r.rows;
 
-    const byAccountType = {};
     const byRepairType  = {};
     let total   = { count: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
     let exclPdi = { count: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
 
     for (const row of rows) {
-      const at   = row.account_type || '（未知）';
-      const rt   = row.repair_type  || '（未知）';
+      const rt   = row.repair_type || '（未知）';
       const w    = parseFloat(row.wage      || 0);
       const s    = parseFloat(row.sales_amt || 0);
       const c    = parseFloat(row.cost_amt  || 0);
@@ -641,14 +600,10 @@ router.get('/stats/wip', async (req, res) => {
         }
       };
 
-      if (!byAccountType[at]) byAccountType[at] = { label: at, count: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
-      inc(byAccountType[at]);
-
       if (!byRepairType[rt]) byRepairType[rt] = { label: rt, count: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
       inc(byRepairType[rt]);
-
       inc(total);
-      if (!row.is_pdi) inc(exclPdi);
+      inc(exclPdi); // PDI already excluded at SQL level
     }
 
     res.json({
@@ -656,8 +611,8 @@ router.get('/stats/wip', async (req, res) => {
       summary: {
         total,
         exclPdi,
-        byAccountType: Object.values(byAccountType).sort((a,b) => b.count - a.count),
-        byRepairType:  Object.values(byRepairType).sort((a,b) => b.count - a.count),
+        byAccountType: [],  // 已合併到 byRepairType
+        byRepairType: Object.values(byRepairType).sort((a,b) => b.count - a.count),
       },
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
