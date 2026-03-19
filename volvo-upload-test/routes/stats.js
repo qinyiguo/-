@@ -525,17 +525,19 @@ router.get('/stats/performance', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── WIP 未結工單 ──
+// ── WIP 未結工單（累計制）──
 // 邏輯：
-//   來源：business_query（本期進廠工單）
-//   結算檢查：repair_income（不限 period，跨月結算也算結清）
-//   WIP = business_query 有記錄，但 repair_income 無對應工單
-//   排除：PDI、PV 類型（在 SQL 層過濾，不需再做 is_pdi 判斷）
-//   金額：直接取 business_query.labor_fee / sales_material_fee / repair_material_fee
+//   來源：business_query，open_time 在「選定月份月底」之前的所有工單（跨月累計）
+//   結算檢查：repair_income 不限 period（跨月結算也算結清）
+//   WIP = 截至月底仍未出現在 repair_income 的工單
+//   排除：PDI、PV（SQL 層過濾）
+//   金額：business_query 的 labor_fee / sales_material_fee / repair_material_fee
 router.get('/stats/wip', async (req, res) => {
   const { period, branch } = req.query;
   if (!period) return res.status(400).json({ error: 'period 為必填' });
   try {
+    // 計算「選定月份下個月初」，作為 open_time 上限（累計至月底）
+    // period = YYYYMM，e.g. 202503 → cutoff = 2025-04-01
     const params = [period]; let idx = 2;
     const branchCond = branch ? ` AND bq.branch=$${idx++}` : '';
     if (branch) params.push(branch);
@@ -544,6 +546,7 @@ router.get('/stats/wip', async (req, res) => {
       SELECT
         bq.work_order,
         bq.branch,
+        bq.period                            AS open_period,
         COALESCE(bq.plate_no, '')            AS plate_no,
         COALESCE(bq.repair_type, '')         AS repair_type,
         COALESCE(bq.repair_item, '')         AS repair_item,
@@ -557,17 +560,21 @@ router.get('/stats/wip', async (req, res) => {
         COALESCE(bq.sales_material_fee, 0)   AS sales_amt,
         COALESCE(bq.repair_material_fee, 0)  AS cost_amt,
         COALESCE(bq.repair_amount, 0)        AS repair_amount,
-        false                                AS is_pdi,
         CASE
           WHEN bq.open_time IS NOT NULL
           THEN EXTRACT(DAY FROM (NOW() - bq.open_time))
           ELSE NULL
         END AS days_open
       FROM business_query bq
-      WHERE bq.period = $1${branchCond}
+      WHERE
+        -- 累計：open_time 在選定月份月底之前（含當月整月）
+        bq.open_time < (to_date($1 || '01', 'YYYYMMDD') + interval '1 month')
+        ${branchCond}
+        -- 排除 PDI / PV
         AND COALESCE(bq.repair_type, '') NOT ILIKE '%PDI%'
         AND COALESCE(bq.repair_item,  '') NOT ILIKE '%PDI%'
         AND COALESCE(bq.repair_type, '') NOT ILIKE '%PV%'
+        -- 未結：repair_income 無對應工單（不限 period）
         AND NOT EXISTS (
           SELECT 1 FROM repair_income ri
           WHERE ri.work_order = bq.work_order
@@ -578,41 +585,43 @@ router.get('/stats/wip', async (req, res) => {
 
     const rows = r.rows;
 
-    const byRepairType  = {};
-    let total   = { count: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
-    let exclPdi = { count: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
+    const byRepairType = {};
+    const byPeriod     = {};
+    let total = { count: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
 
     for (const row of rows) {
-      const rt   = row.repair_type || '（未知）';
+      const rt   = row.repair_type  || '（未知）';
+      const per  = row.open_period  || '（未知）';
       const w    = parseFloat(row.wage      || 0);
       const s    = parseFloat(row.sales_amt || 0);
       const c    = parseFloat(row.cost_amt  || 0);
       const days = row.days_open !== null ? parseFloat(row.days_open) : null;
-      const isOver30 = days !== null ? days > 30 : false;
+      const isOver30 = days !== null && days > 30;
 
       const inc = (obj) => {
         obj.count++;
         obj.wage  += w;
         obj.sales += s;
         obj.cost  += c;
-        if (days !== null) {
-          if (isOver30) obj.cOver30++; else obj.c30++;
-        }
+        if (days !== null) { if (isOver30) obj.cOver30++; else obj.c30++; }
       };
 
       if (!byRepairType[rt]) byRepairType[rt] = { label: rt, count: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
       inc(byRepairType[rt]);
+
+      if (!byPeriod[per]) byPeriod[per] = { label: per, count: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
+      inc(byPeriod[per]);
+
       inc(total);
-      inc(exclPdi); // PDI already excluded at SQL level
     }
 
     res.json({
       rows,
       summary: {
         total,
-        exclPdi,
-        byAccountType: [],  // 已合併到 byRepairType
-        byRepairType: Object.values(byRepairType).sort((a,b) => b.count - a.count),
+        exclPdi: total,   // PDI 已在 SQL 排除，exclPdi = total
+        byAccountType: Object.values(byPeriod).sort((a,b) => b.label < a.label ? 1 : -1), // 用「進廠月份」替代帳類
+        byRepairType:  Object.values(byRepairType).sort((a,b) => b.count - a.count),
       },
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
