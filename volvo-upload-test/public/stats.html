@@ -893,6 +893,277 @@ window._renderDailyChart=function(){
   if(wrap)wrap.innerHTML=svg;
 };
 
+// ══ WIP 未結工單 ══
+let _wipRows = [];
+let _wipModalFiltered = [];
+
+async function loadWip(period, branch) {
+  const kpiEl  = document.getElementById('wipKPI');
+  const wrapEl = document.getElementById('wipSummaryWrap');
+  if (!kpiEl || !wrapEl) return;
+  kpiEl.innerHTML = '';
+  wrapEl.innerHTML = '<div class="loading"><span class="spinner"></span>載入中</div>';
+  if (!period) {
+    wrapEl.innerHTML = '<div class="empty">請選擇期間後按查詢</div>';
+    return;
+  }
+  try {
+    const p = new URLSearchParams({ period });
+    if (branch) p.set('branch', branch);
+    const data = await (await fetch(`/api/stats/wip?${p}`)).json();
+    if (data.error) throw new Error(data.error);
+    _wipRows = data.rows || [];
+    const { summary } = data;
+    renderWipKPI(summary);
+    renderWipSummary(summary);
+  } catch (e) {
+    wrapEl.innerHTML = `<div style="color:#ef4444;padding:16px">${e.message}</div>`;
+  }
+}
+
+function renderWipKPI(summary) {
+  const kpiEl = document.getElementById('wipKPI');
+  const { total, exclPdi } = summary;
+  const fmtH = v => parseFloat(v || 0).toFixed(1);
+  const fmtK = v => Math.round(parseFloat(v || 0)).toLocaleString();
+  kpiEl.innerHTML = `
+    <div class="kpi-card" style="border-color:#f97316">
+      <div class="kpi-label" style="color:#f97316">🔧 未結工單台數</div>
+      <div class="kpi-value kpi-orange">${total.count}</div>
+      <div class="kpi-sub">扣PDI：${exclPdi.count} 台</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">⏱️ 工時合計</div>
+      <div class="kpi-value kpi-blue">${fmtH(total.hours)}</div>
+      <div class="kpi-sub">小時（扣PDI：${fmtH(exclPdi.hours)}）</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">💰 工資合計</div>
+      <div class="kpi-value kpi-green">${fmtK(total.wage)}</div>
+      <div class="kpi-sub">元（扣PDI：${fmtK(exclPdi.wage)}）</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">📦 銷售材料費</div>
+      <div class="kpi-value kpi-yellow">${fmtK(total.sales)}</div>
+      <div class="kpi-sub">元未稅（扣PDI：${fmtK(exclPdi.sales)}）</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">🏷️ 維修材料成本</div>
+      <div class="kpi-value">${fmtK(total.cost)}</div>
+      <div class="kpi-sub">元未稅（成本價）</div>
+    </div>`;
+}
+
+function renderWipSummary(summary) {
+  const wrapEl = document.getElementById('wipSummaryWrap');
+  const { byAccountType, byRepairType } = summary;
+  const fmtH = v => parseFloat(v || 0).toFixed(1);
+  const fmtN = v => Math.round(parseFloat(v || 0)).toLocaleString();
+
+  // PDI stats for total excl PDI row
+  const pdiRows = _wipRows.filter(r => r.is_pdi);
+  const pdiSum = {
+    count: pdiRows.length,
+    hours: pdiRows.reduce((s, r) => s + parseFloat(r.hours || 0), 0),
+    wage:  pdiRows.reduce((s, r) => s + parseFloat(r.wage  || 0), 0),
+    sales: pdiRows.reduce((s, r) => s + parseFloat(r.sales_amt || 0), 0),
+    cost:  pdiRows.reduce((s, r) => s + parseFloat(r.cost_amt  || 0), 0),
+  };
+
+  const thStyle = 'background:#0f172a;color:#64748b;font-size:11px;font-weight:700;padding:9px 12px;border-bottom:1px solid #2d3f56;white-space:nowrap;';
+  const buildTable = (items, groupLabel, clickType) => {
+    if (!items.length) return '';
+    const total = items.reduce((s, i) => ({
+      count: s.count + i.count, hours: s.hours + i.hours,
+      wage:  s.wage  + i.wage,  sales: s.sales + i.sales, cost: s.cost + i.cost
+    }), { count: 0, hours: 0, wage: 0, sales: 0, cost: 0 });
+
+    const rowsHtml = items.map(item => {
+      const esc = item.label.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      return `<tr style="cursor:pointer;transition:background .1s"
+        onclick="openWipDetail('${clickType}','${esc}')"
+        onmouseover="this.querySelectorAll('td').forEach(c=>c.style.background='rgba(59,130,246,.07)')"
+        onmouseout="this.querySelectorAll('td').forEach(c=>c.style.background='')">
+        <td style="padding:10px 12px;border-bottom:1px solid rgba(45,63,86,.3)">
+          <span style="font-weight:700;color:#e2e8f0">${item.label}</span>
+        </td>
+        <td style="text-align:right;padding:10px 12px;border-bottom:1px solid rgba(45,63,86,.3);font-weight:800;color:#f97316">${item.count}</td>
+        <td style="text-align:right;padding:10px 12px;border-bottom:1px solid rgba(45,63,86,.3);color:#3b82f6">${fmtH(item.hours)}</td>
+        <td style="text-align:right;padding:10px 12px;border-bottom:1px solid rgba(45,63,86,.3);color:#10b981;font-weight:700">${fmtN(item.wage)}</td>
+        <td style="text-align:right;padding:10px 12px;border-bottom:1px solid rgba(45,63,86,.3);color:#f59e0b;font-weight:700">${fmtN(item.sales)}</td>
+        <td style="text-align:right;padding:10px 12px;border-bottom:1px solid rgba(45,63,86,.3);color:#64748b">${fmtN(item.cost)}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid rgba(45,63,86,.3);color:#475569;font-size:11px">🔍</td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div style="margin-bottom:20px">
+        <div style="font-size:12px;font-weight:700;color:#475569;display:flex;align-items:center;gap:8px;margin-bottom:10px;letter-spacing:.04em">
+          依 ${groupLabel} 分組
+          <div style="flex:1;height:1px;background:#2d3f56"></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th style="${thStyle}min-width:120px">${groupLabel}</th>
+              <th style="${thStyle}text-align:right">台數</th>
+              <th style="${thStyle}text-align:right">工時(hr)</th>
+              <th style="${thStyle}text-align:right">工資(元)</th>
+              <th style="${thStyle}text-align:right">銷售材料費(元)</th>
+              <th style="${thStyle}text-align:right">維修材料成本(元)</th>
+              <th style="${thStyle}width:30px"></th>
+            </tr></thead>
+            <tbody>
+              ${rowsHtml}
+              <tr style="background:rgba(249,115,22,.07)">
+                <td style="padding:10px 12px;font-weight:800;color:#f97316">合計</td>
+                <td style="text-align:right;padding:10px 12px;font-weight:800;color:#f97316">${total.count}</td>
+                <td style="text-align:right;padding:10px 12px;color:#3b82f6">${fmtH(total.hours)}</td>
+                <td style="text-align:right;padding:10px 12px;color:#10b981;font-weight:800">${fmtN(total.wage)}</td>
+                <td style="text-align:right;padding:10px 12px;color:#f59e0b;font-weight:800">${fmtN(total.sales)}</td>
+                <td style="text-align:right;padding:10px 12px;color:#64748b">${fmtN(total.cost)}</td>
+                <td></td>
+              </tr>
+              <tr style="background:rgba(100,116,139,.05)">
+                <td style="padding:8px 12px;font-size:12px;color:#64748b">合計（扣 PDI ${pdiSum.count} 台）</td>
+                <td style="text-align:right;padding:8px 12px;font-size:12px;color:#64748b">${total.count - pdiSum.count}</td>
+                <td style="text-align:right;padding:8px 12px;font-size:12px;color:#64748b">${fmtH(total.hours - pdiSum.hours)}</td>
+                <td style="text-align:right;padding:8px 12px;font-size:12px;color:#64748b">${fmtN(total.wage - pdiSum.wage)}</td>
+                <td style="text-align:right;padding:8px 12px;font-size:12px;color:#64748b">${fmtN(total.sales - pdiSum.sales)}</td>
+                <td style="text-align:right;padding:8px 12px;font-size:12px;color:#64748b">${fmtN(total.cost - pdiSum.cost)}</td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  };
+
+  const html = (buildTable(byAccountType, '帳類', 'account_type') || '') +
+               (buildTable(byRepairType,  '維修類型', 'repair_type') || '') ||
+               '<div class="empty">此期間無未結工單</div>';
+  wrapEl.innerHTML = html;
+}
+
+function openWipDetail(filterType, filterValue) {
+  let filtered;
+  if (filterType === 'account_type') {
+    filtered = _wipRows.filter(r => (r.account_type || '（未知）') === filterValue);
+  } else {
+    filtered = _wipRows.filter(r => (r.repair_type || '（未知）') === filterValue);
+  }
+  _wipModalFiltered = filtered;
+
+  const typeLabel = filterType === 'account_type' ? '帳類' : '維修類型';
+  document.getElementById('wipModalTitle').textContent = `WIP 未結工單 — ${typeLabel}：${filterValue}`;
+  document.getElementById('wipModalCount').textContent = `共 ${filtered.length} 筆`;
+
+  const bCol = { AMA: '#3b82f6', AMC: '#10b981', AMD: '#f59e0b' };
+  const fmtH = v => parseFloat(v || 0).toFixed(1);
+  const fmtN = v => Math.round(parseFloat(v || 0)).toLocaleString();
+  const fmtDate = v => {
+    if (!v) return '—';
+    const s = String(v);
+    return s.length >= 10 ? s.slice(0, 10) : s;
+  };
+
+  const thS = 'background:#0f172a;color:#64748b;font-size:11px;font-weight:700;padding:8px 10px;border-bottom:1px solid #2d3f56;white-space:nowrap;position:sticky;top:0;z-index:2;';
+  const thR = thS + 'text-align:right;';
+
+  let totH = 0, totW = 0, totS = 0, totC = 0;
+  const bodyHtml = filtered.map((row, i) => {
+    const col = bCol[row.branch] || '#94a3b8';
+    const h = parseFloat(row.hours    || 0);
+    const w = parseFloat(row.wage     || 0);
+    const s = parseFloat(row.sales_amt|| 0);
+    const c = parseFloat(row.cost_amt || 0);
+    totH += h; totW += w; totS += s; totC += c;
+    return `<tr>
+      <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.3);color:#475569;font-size:11px">${i+1}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.3);font-family:monospace;font-size:11px;white-space:nowrap">${row.work_order}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.3)">
+        <span style="background:${col}22;color:${col};padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700">${row.branch}</span>
+      </td>
+      <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.3);white-space:nowrap">${row.plate_no || '—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.3)">${row.account_type || '—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.3)">${row.repair_type || '—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.3);white-space:nowrap;font-size:11px">${fmtDate(row.open_time)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.3);text-align:right;color:#3b82f6">${fmtH(h)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.3);text-align:right;color:#10b981;font-weight:700">${fmtN(w)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.3);text-align:right;color:#f59e0b;font-weight:700">${fmtN(s)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.3);text-align:right;color:#64748b">${fmtN(c)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.3);font-size:11px">${row.service_advisor || '—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.3)">${row.car_series || '—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.3)">
+        ${row.is_pdi ? '<span style="background:rgba(245,158,11,.15);color:#f59e0b;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700">PDI</span>' : ''}
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('wipModalTable').innerHTML = `
+    <thead><tr>
+      <th style="${thS}width:28px">#</th>
+      <th style="${thS}">工單號</th>
+      <th style="${thS}">據點</th>
+      <th style="${thS}">車牌</th>
+      <th style="${thS}">帳類</th>
+      <th style="${thS}">維修類型</th>
+      <th style="${thS}">開單時間</th>
+      <th style="${thR}">工時(hr)</th>
+      <th style="${thR}">工資(元)</th>
+      <th style="${thR}">銷售材料費(元)</th>
+      <th style="${thR}">維修材料成本(元)</th>
+      <th style="${thS}">SA</th>
+      <th style="${thS}">車系</th>
+      <th style="${thS}">標記</th>
+    </tr></thead>
+    <tbody>
+      ${bodyHtml || '<tr><td colspan="14" class="empty">無資料</td></tr>'}
+      <tr style="background:rgba(249,115,22,.08);font-weight:800;border-top:2px solid #374151">
+        <td colspan="7" style="padding:9px 10px;color:#f97316">合計（${filtered.length} 筆）</td>
+        <td style="padding:9px 10px;text-align:right;color:#3b82f6">${totH.toFixed(1)}</td>
+        <td style="padding:9px 10px;text-align:right;color:#10b981">${fmtN(totW)}</td>
+        <td style="padding:9px 10px;text-align:right;color:#f59e0b">${fmtN(totS)}</td>
+        <td style="padding:9px 10px;text-align:right;color:#64748b">${fmtN(totC)}</td>
+        <td colspan="3"></td>
+      </tr>
+    </tbody>`;
+
+  document.getElementById('wipModalStats').textContent =
+    `工時 ${totH.toFixed(1)} hr｜工資 ${fmtN(totW)} 元｜銷售材料費 ${fmtN(totS)} 元｜材料成本 ${fmtN(totC)} 元`;
+
+  document.getElementById('wipDetailModal').style.display = 'flex';
+}
+
+function closeWipModal() {
+  document.getElementById('wipDetailModal').style.display = 'none';
+}
+
+function exportWipModalCSV() {
+  if (!_wipModalFiltered.length) return;
+  const cols = [
+    ['work_order','工單號'],['branch','據點'],['plate_no','車牌'],
+    ['account_type','帳類'],['repair_type','維修類型'],['open_time','開單時間'],
+    ['hours','工時'],['wage','工資'],['sales_amt','銷售材料費'],
+    ['cost_amt','維修材料成本'],['service_advisor','SA'],['car_series','車系'],
+  ];
+  const header = cols.map(c => c[1]).join(',');
+  const rows = _wipModalFiltered.map(r =>
+    cols.map(([key]) => {
+      const v = r[key] === null || r[key] === undefined ? '' : String(r[key]);
+      return v.includes(',') || v.includes('"') ? `"${v.replace(/"/g,'""')}"` : v;
+    }).join(',')
+  );
+  const csv = '\uFEFF' + [header, ...rows].join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `wip_detail_${Date.now()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+ 
 (async()=>{ await loadPeriods(); await loadAll(); })();
 </script>
 </body>
