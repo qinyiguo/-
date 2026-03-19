@@ -526,7 +526,7 @@ router.get('/stats/performance', async (req, res) => {
 });
 
 // ── WIP 未結工單 ──
-// ── WIP 未結工單 ── (取代 stats.js 中原有的 /stats/wip 路由)
+// 判斷邏輯：tech_performance 或 parts_sales 有紀錄，但 repair_income 無紀錄 = 未結
 router.get('/stats/wip', async (req, res) => {
   const { period, branch } = req.query;
   if (!period) return res.status(400).json({ error: 'period 為必填' });
@@ -538,7 +538,6 @@ router.get('/stats/wip', async (req, res) => {
     const r = await pool.query(`
       WITH tp_agg AS (
         SELECT work_order, branch,
-          SUM(standard_hours) AS hours,
           SUM(wage)           AS wage,
           MAX(account_type)   AS account_type
         FROM tech_performance
@@ -552,6 +551,11 @@ router.get('/stats/wip', async (req, res) => {
         FROM parts_sales
         WHERE period=$1${branchCond}
         GROUP BY work_order, branch
+      ),
+      settled AS (
+        SELECT DISTINCT work_order, branch
+        FROM repair_income
+        WHERE period=$1${branchCond}
       ),
       all_orders AS (
         SELECT work_order, branch FROM tp_agg
@@ -569,7 +573,6 @@ router.get('/stats/wip', async (req, res) => {
         COALESCE(bq.status, '')          AS status,
         COALESCE(bq.service_advisor, '') AS service_advisor,
         COALESCE(bq.car_series, '')      AS car_series,
-        COALESCE(tp.hours, 0)            AS hours,
         COALESCE(tp.wage, 0)             AS wage,
         COALESCE(tp.account_type, '')    AS account_type,
         COALESCE(ps.sales_amt, 0)        AS sales_amt,
@@ -590,7 +593,9 @@ router.get('/stats/wip', async (req, res) => {
         ON tp.work_order = ao.work_order AND tp.branch = ao.branch
       LEFT JOIN ps_agg ps
         ON ps.work_order = ao.work_order AND ps.branch = ao.branch
-      WHERE bq.settle_date IS NULL OR bq.work_order IS NULL
+      LEFT JOIN settled s
+        ON s.work_order = ao.work_order AND s.branch = ao.branch
+      WHERE s.work_order IS NULL
       ORDER BY ao.branch, bq.open_time NULLS LAST, ao.work_order
     `, params);
 
@@ -598,13 +603,12 @@ router.get('/stats/wip', async (req, res) => {
 
     const byAccountType = {};
     const byRepairType  = {};
-    let total   = { count: 0, hours: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
-    let exclPdi = { count: 0, hours: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
+    let total   = { count: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
+    let exclPdi = { count: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
 
     for (const row of rows) {
       const at  = row.account_type || '（未知）';
       const rt  = row.repair_type  || '（未知）';
-      const h   = parseFloat(row.hours    || 0);
       const w   = parseFloat(row.wage     || 0);
       const s   = parseFloat(row.sales_amt|| 0);
       const c   = parseFloat(row.cost_amt || 0);
@@ -613,17 +617,17 @@ router.get('/stats/wip', async (req, res) => {
 
       const inc = (obj) => {
         obj.count++;
-        obj.hours += h; obj.wage += w;
+        obj.wage += w;
         obj.sales += s; obj.cost += c;
         if (days !== null) {
           if (isOver30) obj.cOver30++; else obj.c30++;
         }
       };
 
-      if (!byAccountType[at]) byAccountType[at] = { label: at, count: 0, hours: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
+      if (!byAccountType[at]) byAccountType[at] = { label: at, count: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
       inc(byAccountType[at]);
 
-      if (!byRepairType[rt]) byRepairType[rt] = { label: rt, count: 0, hours: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
+      if (!byRepairType[rt]) byRepairType[rt] = { label: rt, count: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
       inc(byRepairType[rt]);
 
       inc(total);
