@@ -525,4 +525,115 @@ router.get('/stats/performance', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── WIP 未結工單 ──
+router.get('/stats/wip', async (req, res) => {
+  const { period, branch } = req.query;
+  if (!period) return res.status(400).json({ error: 'period 為必填' });
+  try {
+    // tp / ps 以 period 篩選，bq JOIN 不加 period（跨月未結也能抓到）
+    const params = [period]; let idx = 2;
+    const branchCond = branch ? ` AND branch=$${idx++}` : '';
+    if (branch) params.push(branch);
+    // ps 也用同一批 params（period 再 push 一次）
+    const psParams = [...params]; psParams[0] = period; // 確保 period 在 $1
+
+    // 用一個統一的 params array：$1=period, [$2=branch 若有]
+    // tp 和 ps 都共用同一段 where，CTE 直接帶入
+    const r = await pool.query(`
+      WITH tp_agg AS (
+        SELECT work_order, branch,
+          SUM(standard_hours) AS hours,
+          SUM(wage)           AS wage,
+          MAX(account_type)   AS account_type
+        FROM tech_performance
+        WHERE period=$1${branchCond}
+        GROUP BY work_order, branch
+      ),
+      ps_agg AS (
+        SELECT work_order, branch,
+          SUM(sale_price_untaxed) AS sales_amt,
+          SUM(cost_untaxed)       AS cost_amt
+        FROM parts_sales
+        WHERE period=$1${branchCond}
+        GROUP BY work_order, branch
+      ),
+      all_orders AS (
+        SELECT work_order, branch FROM tp_agg
+        UNION
+        SELECT work_order, branch FROM ps_agg
+      )
+      SELECT
+        ao.work_order,
+        ao.branch,
+        COALESCE(bq.plate_no, '')        AS plate_no,
+        COALESCE(bq.repair_type, '')     AS repair_type,
+        COALESCE(bq.repair_item, '')     AS repair_item,
+        bq.open_time,
+        bq.settle_date,
+        COALESCE(bq.status, '')          AS status,
+        COALESCE(bq.service_advisor, '') AS service_advisor,
+        COALESCE(bq.car_series, '')      AS car_series,
+        COALESCE(tp.hours, 0)            AS hours,
+        COALESCE(tp.wage, 0)             AS wage,
+        COALESCE(tp.account_type, '')    AS account_type,
+        COALESCE(ps.sales_amt, 0)        AS sales_amt,
+        COALESCE(ps.cost_amt, 0)         AS cost_amt,
+        COALESCE(
+          bq.repair_type ILIKE '%PDI%' OR bq.repair_item ILIKE '%PDI%',
+          false
+        )                                AS is_pdi
+      FROM all_orders ao
+      LEFT JOIN business_query bq
+        ON bq.work_order = ao.work_order AND bq.branch = ao.branch
+      LEFT JOIN tp_agg tp
+        ON tp.work_order = ao.work_order AND tp.branch = ao.branch
+      LEFT JOIN ps_agg ps
+        ON ps.work_order = ao.work_order AND ps.branch = ao.branch
+      WHERE bq.settle_date IS NULL OR bq.work_order IS NULL
+      ORDER BY ao.branch, bq.open_time NULLS LAST, ao.work_order
+    `, params);
+
+    const rows = r.rows;
+
+    const byAccountType = {};
+    const byRepairType  = {};
+    let total   = { count: 0, hours: 0, wage: 0, sales: 0, cost: 0 };
+    let exclPdi = { count: 0, hours: 0, wage: 0, sales: 0, cost: 0 };
+
+    for (const row of rows) {
+      const at = row.account_type || '（未知）';
+      const rt = row.repair_type  || '（未知）';
+      const h  = parseFloat(row.hours    || 0);
+      const w  = parseFloat(row.wage     || 0);
+      const s  = parseFloat(row.sales_amt|| 0);
+      const c  = parseFloat(row.cost_amt || 0);
+
+      if (!byAccountType[at]) byAccountType[at] = { label: at, count: 0, hours: 0, wage: 0, sales: 0, cost: 0 };
+      byAccountType[at].count++;
+      byAccountType[at].hours += h; byAccountType[at].wage  += w;
+      byAccountType[at].sales += s; byAccountType[at].cost  += c;
+
+      if (!byRepairType[rt]) byRepairType[rt] = { label: rt, count: 0, hours: 0, wage: 0, sales: 0, cost: 0 };
+      byRepairType[rt].count++;
+      byRepairType[rt].hours += h; byRepairType[rt].wage  += w;
+      byRepairType[rt].sales += s; byRepairType[rt].cost  += c;
+
+      total.count++; total.hours += h; total.wage += w; total.sales += s; total.cost += c;
+      if (!row.is_pdi) {
+        exclPdi.count++; exclPdi.hours += h; exclPdi.wage += w;
+        exclPdi.sales += s; exclPdi.cost += c;
+      }
+    }
+
+    res.json({
+      rows,
+      summary: {
+        total, exclPdi,
+        byAccountType: Object.values(byAccountType),
+        byRepairType:  Object.values(byRepairType),
+      }
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
