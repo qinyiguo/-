@@ -1,0 +1,378 @@
+const router = require('express').Router();
+const multer = require('multer');
+const XLSX   = require('xlsx');
+const pool   = require('../db/pool');
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+// ══════════════════════════════════════════════
+// 人員名冊 — 上傳解析
+// ══════════════════════════════════════════════
+function parseRosterExcel(buffer) {
+  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: false, raw: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+
+  // 找 header row（含「員工編號」的那行）
+  let headerIdx = 3; // 預設第4行
+  for (let i = 0; i < Math.min(raw.length, 10); i++) {
+    if (raw[i].some(c => String(c || '').includes('員工編號'))) { headerIdx = i; break; }
+  }
+  const headers = raw[headerIdx].map(c => String(c || '').trim());
+  const col = name => headers.indexOf(name);
+
+  const rows = [];
+  for (let i = headerIdx + 1; i < raw.length; i++) {
+    const r = raw[i];
+    const empId = String(r[col('員工編號')] || '').trim();
+    if (!empId) continue;
+    const status = String(r[col('在職狀態')] || '').trim();
+    if (!status) continue;
+
+    const fmtDate = v => {
+      if (!v) return null;
+      const s = String(v).trim();
+      const m = s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+      return m ? `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}` : null;
+    };
+
+    rows.push({
+      emp_id:             empId,
+      emp_name:           String(r[col('中文姓名')]  || '').trim(),
+      dept_code:          String(r[col('部門代碼')]  || '').trim(),
+      dept_name:          String(r[col('部門中文名稱')] || '').trim(),
+      job_title:          String(r[col('職務中文名稱')] || '').trim(),
+      status,
+      hire_date:          fmtDate(r[col('到職日期')]),
+      resign_date:        fmtDate(r[col('離職日期')]),
+      unpaid_leave_date:  fmtDate(r[col('留職停薪日')]),
+      mgr1:               String(r[col('一階主管')]  || '').trim(),
+      mgr2:               String(r[col('二階主管')]  || '').trim(),
+      job_category:       String(r[col('職種名稱')]  || '').trim(),
+      job_class:          String(r[col('職類名稱')]  || '').trim(),
+    });
+  }
+  return rows;
+}
+
+// 從部門代碼推算所屬廠別
+function inferFactory(deptCode) {
+  if (!deptCode) return null;
+  const code = String(deptCode);
+  if (code.startsWith('051')) return 'AMA';  // 內湖廠
+  if (code.startsWith('053')) return 'AMD';  // 士林廠
+  if (code.startsWith('054')) return 'AMC';  // 仁愛廠
+  if (code.startsWith('055')) return '聯合';  // 聯合服務中心
+  if (code.startsWith('056') || code.startsWith('061')) return '鈑烤';
+  if (code.startsWith('057') || code.startsWith('07'))  return '零件';
+  return null;
+}
+
+// ── 上傳人員資料 ──
+router.post('/bonus/upload-roster', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: '請選擇檔案' });
+  const period = String(req.body.period || '').trim();
+  if (!period.match(/^\d{6}$/)) return res.status(400).json({ error: '請指定期間（YYYYMM）' });
+
+  try {
+    const rows = parseRosterExcel(req.file.buffer);
+    if (!rows.length) return res.status(400).json({ error: '找不到有效資料列' });
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // 先刪除同期間的舊資料
+      await client.query('DELETE FROM staff_roster WHERE period=$1', [period]);
+
+      let count = 0;
+      const BATCH = 200;
+      for (let i = 0; i < rows.length; i += BATCH) {
+        const batch = rows.slice(i, i + BATCH);
+        for (const r of batch) {
+          await client.query(`
+            INSERT INTO staff_roster
+              (period, emp_id, emp_name, dept_code, dept_name, job_title, status,
+               hire_date, resign_date, unpaid_leave_date, mgr1, mgr2,
+               factory, job_category, job_class)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+            ON CONFLICT (period, emp_id) DO UPDATE SET
+              emp_name=EXCLUDED.emp_name, dept_code=EXCLUDED.dept_code,
+              dept_name=EXCLUDED.dept_name, job_title=EXCLUDED.job_title,
+              status=EXCLUDED.status, hire_date=EXCLUDED.hire_date,
+              resign_date=EXCLUDED.resign_date, unpaid_leave_date=EXCLUDED.unpaid_leave_date,
+              mgr1=EXCLUDED.mgr1, mgr2=EXCLUDED.mgr2, factory=EXCLUDED.factory,
+              job_category=EXCLUDED.job_category, job_class=EXCLUDED.job_class,
+              updated_at=NOW()
+          `, [
+            period, r.emp_id, r.emp_name, r.dept_code, r.dept_name, r.job_title, r.status,
+            r.hire_date, r.resign_date, r.unpaid_leave_date, r.mgr1, r.mgr2,
+            inferFactory(r.dept_code), r.job_category, r.job_class,
+          ]);
+          count++;
+        }
+      }
+      await client.query('COMMIT');
+      res.json({ ok: true, count, period });
+    } catch(err) { await client.query('ROLLBACK'); throw err; }
+    finally { client.release(); }
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── 取得人員名冊 ──
+router.get('/bonus/roster', async (req, res) => {
+  const { period, factory, status, dept_code } = req.query;
+  try {
+    const conds = []; const params = []; let idx = 1;
+    if (period)    { conds.push(`period=$${idx++}`);    params.push(period); }
+    if (factory)   { conds.push(`factory=$${idx++}`);   params.push(factory); }
+    if (status)    { conds.push(`status=$${idx++}`);    params.push(status); }
+    if (dept_code) { conds.push(`dept_code=$${idx++}`); params.push(dept_code); }
+    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+    const r = await pool.query(
+      `SELECT * FROM staff_roster ${where} ORDER BY dept_code, emp_id`, params
+    );
+    res.json(r.rows);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── 取得人員名冊期間清單 ──
+router.get('/bonus/roster-periods', async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT DISTINCT period FROM staff_roster ORDER BY period DESC`);
+    res.json(r.rows.map(r => r.period));
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── 取得人員名冊摘要（各廠在職/離職人數）──
+router.get('/bonus/roster-summary', async (req, res) => {
+  const { period } = req.query;
+  if (!period) return res.status(400).json({ error: 'period 為必填' });
+  try {
+    const r = await pool.query(`
+      SELECT dept_code, dept_name, factory, status, COUNT(*) AS cnt
+      FROM staff_roster WHERE period=$1
+      GROUP BY dept_code, dept_name, factory, status
+      ORDER BY dept_code, status
+    `, [period]);
+
+    // 找本月離職（本月內有 resign_date 的）
+    const resignThisMonth = await pool.query(`
+      SELECT emp_id, emp_name, dept_name, factory, resign_date, mgr1
+      FROM staff_roster
+      WHERE period=$1
+        AND status='離職'
+        AND resign_date IS NOT NULL
+        AND TO_CHAR(resign_date, 'YYYYMM') = $1
+      ORDER BY dept_code, resign_date
+    `, [period]);
+
+    // 留職停薪
+    const unpaid = await pool.query(`
+      SELECT emp_id, emp_name, dept_name, factory, unpaid_leave_date, mgr1
+      FROM staff_roster WHERE period=$1 AND status='留職停薪'
+      ORDER BY dept_code
+    `, [period]);
+
+    res.json({ summary: r.rows, resignThisMonth: resignThisMonth.rows, unpaidLeave: unpaid.rows });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ══════════════════════════════════════════════
+// 獎金指標設定 CRUD
+// ══════════════════════════════════════════════
+router.get('/bonus/metrics', async (req, res) => {
+  try {
+    res.json((await pool.query(
+      `SELECT * FROM bonus_metrics ORDER BY sort_order, id`
+    )).rows);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/bonus/metrics', async (req, res) => {
+  const { metric_name, description, scope_type, scope_value,
+          metric_source, filters, stat_field, unit, sort_order } = req.body;
+  if (!metric_name) return res.status(400).json({ error: '名稱為必填' });
+  try {
+    const r = await pool.query(`
+      INSERT INTO bonus_metrics
+        (metric_name, description, scope_type, scope_value, metric_source, filters, stat_field, unit, sort_order)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *
+    `, [metric_name.trim(), description||'', scope_type||'person', scope_value||'',
+        metric_source||'manual', JSON.stringify(filters||[]), stat_field||'amount', unit||'', sort_order||0]);
+    res.json(r.rows[0]);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/bonus/metrics/:id', async (req, res) => {
+  const { metric_name, description, scope_type, scope_value,
+          metric_source, filters, stat_field, unit, sort_order } = req.body;
+  if (!metric_name) return res.status(400).json({ error: '名稱為必填' });
+  try {
+    const r = await pool.query(`
+      UPDATE bonus_metrics SET
+        metric_name=$1, description=$2, scope_type=$3, scope_value=$4,
+        metric_source=$5, filters=$6, stat_field=$7, unit=$8, sort_order=$9,
+        updated_at=NOW()
+      WHERE id=$10 RETURNING *
+    `, [metric_name.trim(), description||'', scope_type||'person', scope_value||'',
+        metric_source||'manual', JSON.stringify(filters||[]), stat_field||'amount', unit||'', sort_order||0,
+        req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: '找不到指標' });
+    res.json(r.rows[0]);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/bonus/metrics/:id', async (req, res) => {
+  try {
+    await pool.query(`DELETE FROM bonus_targets WHERE metric_id=$1`, [req.params.id]);
+    await pool.query(`DELETE FROM bonus_metrics WHERE id=$1`,        [req.params.id]);
+    res.json({ ok: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ══════════════════════════════════════════════
+// 獎金目標設定
+// ══════════════════════════════════════════════
+router.get('/bonus/targets', async (req, res) => {
+  const { metric_id, period, emp_id, dept_code } = req.query;
+  try {
+    const conds = []; const params = []; let idx = 1;
+    if (metric_id) { conds.push(`metric_id=$${idx++}`); params.push(metric_id); }
+    if (period)    { conds.push(`period=$${idx++}`);    params.push(period); }
+    if (emp_id)    { conds.push(`emp_id=$${idx++}`);    params.push(emp_id); }
+    if (dept_code) { conds.push(`dept_code=$${idx++}`); params.push(dept_code); }
+    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+    res.json((await pool.query(
+      `SELECT bt.*, bm.metric_name, bm.scope_type, bm.unit
+       FROM bonus_targets bt
+       JOIN bonus_metrics bm ON bm.id=bt.metric_id
+       ${where} ORDER BY bt.metric_id, bt.emp_id, bt.dept_code`, params
+    )).rows);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/bonus/targets/batch', async (req, res) => {
+  const { entries } = req.body;
+  if (!Array.isArray(entries) || !entries.length) return res.status(400).json({ error: '無資料' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const e of entries) {
+      if (!e.metric_id || !e.period) continue;
+      await client.query(`
+        INSERT INTO bonus_targets
+          (metric_id, emp_id, dept_code, period, target_value, last_year_value, bonus_rule, note, updated_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+        ON CONFLICT (metric_id, COALESCE(emp_id,''), COALESCE(dept_code,''), period) DO UPDATE SET
+          target_value=$5, last_year_value=$6, bonus_rule=$7, note=$8, updated_at=NOW()
+      `, [e.metric_id, e.emp_id||null, e.dept_code||null, e.period,
+          e.target_value||null, e.last_year_value||null,
+          JSON.stringify(e.bonus_rule||{}), e.note||'']);
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch(err) { await client.query('ROLLBACK'); res.status(500).json({ error: err.message }); }
+  finally { client.release(); }
+});
+
+router.delete('/bonus/targets/:id', async (req, res) => {
+  try {
+    await pool.query(`DELETE FROM bonus_targets WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ══════════════════════════════════════════════
+// 獎金進度計算（DMS 連結指標）
+// ══════════════════════════════════════════════
+router.get('/bonus/progress', async (req, res) => {
+  const { period, factory } = req.query;
+  if (!period) return res.status(400).json({ error: 'period 為必填' });
+  try {
+    const metrics = (await pool.query(`SELECT * FROM bonus_metrics ORDER BY sort_order, id`)).rows;
+    const targets = (await pool.query(
+      `SELECT * FROM bonus_targets WHERE period=$1`, [period]
+    )).rows;
+
+    const results = [];
+    for (const m of metrics) {
+      let actual = null;
+
+      // 若指標連結 DMS 資料，自動計算實際值
+      if (m.metric_source !== 'manual') {
+        const filters = m.filters || [];
+        try {
+          if (m.metric_source === 'repair_income') {
+            const acTypes = filters.filter(f => f.type==='account_type').map(f => f.value);
+            const branchF = factory && ['AMA','AMC','AMD'].includes(factory) ? factory : null;
+            const conds = [`period=$1`]; const p = [period]; let idx=2;
+            if (branchF) { conds.push(`branch=$${idx++}`); p.push(branchF); }
+            if (acTypes.length) { conds.push(`account_type=ANY($${idx++})`); p.push(acTypes); }
+            const fld = m.stat_field==='count' ? 'COUNT(DISTINCT work_order)' : 'SUM(total_untaxed)';
+            const r = await pool.query(`SELECT COALESCE(${fld},0) AS v FROM repair_income WHERE ${conds.join(' AND ')}`, p);
+            actual = parseFloat(r.rows[0]?.v || 0);
+          } else if (m.metric_source === 'tech_wage') {
+            const branchF = factory && ['AMA','AMC','AMD'].includes(factory) ? factory : null;
+            const conds = [`period=$1`]; const p = [period]; let idx=2;
+            if (branchF) { conds.push(`branch=$${idx++}`); p.push(branchF); }
+            const workCodes = filters.filter(f => f.type==='work_code').map(f => f.value);
+            if (workCodes.length) {
+              const wcConds = workCodes.map(wc => {
+                if (wc.includes('-')) { const [fr,to]=wc.split('-'); conds.push(`work_code BETWEEN $${idx++} AND $${idx++}`); p.push(fr.trim(),to.trim()); return ''; }
+                else { conds.push(`work_code=$${idx++}`); p.push(wc); return ''; }
+              });
+            }
+            const fld = m.stat_field==='amount' ? 'SUM(wage)' : m.stat_field==='hours' ? 'SUM(standard_hours)' : 'COUNT(DISTINCT work_order)';
+            const r = await pool.query(`SELECT COALESCE(${fld},0) AS v FROM tech_performance WHERE ${conds.join(' AND ')}`, p);
+            actual = parseFloat(r.rows[0]?.v || 0);
+          } else if (m.metric_source === 'parts_sales') {
+            const branchF = factory && ['AMA','AMC','AMD'].includes(factory) ? factory : null;
+            const conds = [`period=$1`]; const p = [period]; let idx=2;
+            if (branchF) { conds.push(`branch=$${idx++}`); p.push(branchF); }
+            const cc=filters.filter(f=>f.type==='category_code').map(f=>f.value);
+            const pt=filters.filter(f=>f.type==='part_type').map(f=>f.value);
+            if (cc.length) { conds.push(`category_code=ANY($${idx++})`); p.push(cc); }
+            if (pt.length) { conds.push(`part_type=ANY($${idx++})`); p.push(pt); }
+            const fld = m.stat_field==='qty' ? 'SUM(sale_qty)' : m.stat_field==='count' ? 'COUNT(*)' : 'SUM(sale_price_untaxed)';
+            const r = await pool.query(`SELECT COALESCE(${fld},0) AS v FROM parts_sales WHERE ${conds.join(' AND ')}`, p);
+            actual = parseFloat(r.rows[0]?.v || 0);
+          }
+        } catch(e) { actual = null; }
+      }
+
+      // 找此指標的所有目標設定
+      const myTargets = targets.filter(t => t.metric_id === m.id);
+      results.push({ metric: m, targets: myTargets, actual });
+    }
+    res.json({ results, period });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── 取得可設定目標的人員清單（依指標 scope）──
+router.get('/bonus/scope-members', async (req, res) => {
+  const { period, scope_type, factory } = req.query;
+  try {
+    if (scope_type === 'dept') {
+      const r = await pool.query(`
+        SELECT DISTINCT dept_code, dept_name, factory
+        FROM staff_roster
+        WHERE period=$1 AND status='在職'
+        ${factory ? "AND factory=$2" : ""}
+        ORDER BY dept_code
+      `, factory ? [period, factory] : [period]);
+      res.json(r.rows);
+    } else {
+      // person scope
+      const conds = [`period=$1`, `status='在職'`]; const p = [period]; let idx = 2;
+      if (factory) { conds.push(`factory=$${idx++}`); p.push(factory); }
+      const r = await pool.query(`
+        SELECT emp_id, emp_name, dept_code, dept_name, factory, job_title, mgr1
+        FROM staff_roster WHERE ${conds.join(' AND ')}
+        ORDER BY dept_code, emp_id
+      `, p);
+      res.json(r.rows);
+    }
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+module.exports = router;
