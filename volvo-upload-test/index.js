@@ -20,6 +20,7 @@ app.use('/api', require('./routes/revenue'));
 app.use('/api', require('./routes/performance'));
 app.use('/api', require('./routes/stats'));
 app.use('/api', require('./routes/auth'));
+app.use('/api', require('./routes/bonus'));
 
 // ── 啟動 ──
 initDatabase()
