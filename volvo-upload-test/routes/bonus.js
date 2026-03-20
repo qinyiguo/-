@@ -88,9 +88,9 @@ function parseRosterExcel(buffer) {
 function inferFactory(deptCode) {
   if (!deptCode) return null;
   const code = String(deptCode);
-  if (code.startsWith('051')) return 'AMA';
-  if (code.startsWith('053')) return 'AMD';
-  if (code.startsWith('054')) return 'AMC';
+  if (code.startsWith('051')) return 'AMA';  // 內湖廠
+  if (code.startsWith('053')) return 'AMC';  // 仁愛廠
+  if (code.startsWith('054')) return 'AMD';  // 士林廠
   if (code.startsWith('055')) return '聯合';
   if (code.startsWith('056') || code.startsWith('061')) return '鈑烤';
   if (code.startsWith('057') || code.startsWith('07'))  return '零件';
