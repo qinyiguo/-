@@ -469,8 +469,8 @@ router.get('/bonus/progress', async (req, res) => {
   if (!period) return res.status(400).json({ error: 'period 為必填' });
   try {
     const metrics = (await pool.query(`SELECT * FROM bonus_metrics ORDER BY sort_order, id`)).rows;
-    // ★ 目標永遠從 period（獎金月）取；只有實績從 actualPeriod 取
-    const targets = (await pool.query(`SELECT * FROM bonus_targets WHERE period=$1`, [period])).rows;
+    // period = actualPeriod（前端現在傳同一個值），targets 和 actuals 都在這個期間
+    const targets = (await pool.query(`SELECT * FROM bonus_targets WHERE period=$1`, [actualPeriod])).rows;
     const results = [];
 
     for (const m of metrics) {
