@@ -224,6 +224,7 @@ body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background:
             <option value="tech_wage">👨‍🔧 技師工資</option>
             <option value="parts_sales">🔩 零件銷售</option>
             <option value="performance">🎯 連結業績指標</option>
+            <option value="revenue">💰 連結營收目標（有費/鈑烤/一般/延保）</option>
           </select>
         </div>
       </div>
@@ -259,6 +260,34 @@ body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background:
           適用於：廠長看全廠有費營收、承保理賠科看鈑烤達成率等。
         </div>
       </div>
+      <!-- 連結營收目標 -->
+      <div id="mRevenueArea" style="display:none">
+        <div class="section-label">連結營收目標</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-group">
+            <label>據點</label>
+            <select id="mRevBranch" class="form-select">
+              <option value="">集團（AMA+AMC+AMD 合計）</option>
+              <option value="AMA">AMA 內湖</option>
+              <option value="AMC">AMC 仁愛</option>
+              <option value="AMD">AMD 士林</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>營收類型</label>
+            <select id="mRevType" class="form-select">
+              <option value="paid">🔶 有費營收</option>
+              <option value="bodywork">🔨 鈑烤營收</option>
+              <option value="general">💙 一般營收</option>
+              <option value="extended">🛡️ 延保營收</option>
+            </select>
+          </div>
+        </div>
+        <div style="background:rgba(249,115,22,.07);border:1px solid rgba(249,115,22,.2);border-radius:7px;padding:10px 12px;font-size:12px;color:#94a3b8;line-height:1.7;margin-bottom:4px">
+          📊 系統從維修收入+零件銷售實際計算，並與 revenue_targets 目標對比達成率。<br>
+          留空據點 = 集團三站（AMA+AMC+AMD）合計。
+        </div>
+      </div>
 
       <!-- 套用對象 -->
       <div class="section-label">📌 套用對象（部門篩選）</div>
@@ -273,7 +302,7 @@ body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background:
         <button class="btn btn-secondary btn-sm" onclick="clearAllDepts()">全部清除</button>
         <span id="mDeptCountLabel" style="font-size:12px;color:#64748b;align-self:center"></span>
       </div>
-      <!-- 職稱快速選取（由勾選部門動態生成） -->
+      <!-- 職稱快速選取 -->
       <div id="mJobTitleSuggestions" style="display:none;margin-top:10px">
         <div style="font-size:11px;color:#475569;margin-bottom:6px">此部門常見職稱（點擊快速加入）</div>
         <div id="mJobTitleChips" style="display:flex;flex-wrap:wrap;gap:5px"></div>
@@ -436,7 +465,8 @@ const FACTORY_META = {
 };
 const STATUS_BADGE={'在職':'<span class="badge badge-green">在職</span>','留職停薪':'<span class="badge badge-yellow">留職停薪</span>','離職':'<span class="badge badge-red">離職</span>'};
 const FC_COLORS={AMA:'#3b82f6',AMC:'#10b981',AMD:'#f59e0b','聯合':'#8b5cf6','鈑烤':'#f97316','零件':'#14b8a6','售後服務處':'#e2e8f0','其他':'#64748b'};
-const SOURCE_LABEL={manual:'✏️ 手動',repair_income:'🔧 維修收入',tech_wage:'👨‍🔧 技師工資',parts_sales:'🔩 零件銷售',performance:'🎯 業績指標'};
+// ── 【修改7】SOURCE_LABEL 加入 revenue ──
+const SOURCE_LABEL={manual:'✏️ 手動',repair_income:'🔧 維修收入',tech_wage:'👨‍🔧 技師工資',parts_sales:'🔩 零件銷售',performance:'🎯 業績指標',revenue:'💰 連結營收'};
 const fmtK=v=>Math.round(parseFloat(v||0)/1000).toLocaleString()+'K';
 
 function openModal(id) { document.getElementById(id).classList.add('open'); document.body.style.overflow='hidden'; }
@@ -457,13 +487,15 @@ function switchTab(tab) {
   if (tab==='progress') loadProgress();
 }
 
-// ══ 期間 ══
+// ══ 期間（【修改1】預設上個月）══
 async function loadPeriods() {
   try {
     const periods=await fetch('/api/bonus/roster-periods').then(r=>r.json());
     _rosterPeriods=periods;
     const now=new Date(), cur=now.getFullYear()+String(now.getMonth()+1).padStart(2,'0');
-    _period=periods.includes(cur)?cur:(periods[0]||'');
+    // 【修改1】計算上個月
+    const prev=now.getMonth()===0?`${now.getFullYear()-1}12`:`${now.getFullYear()}${String(now.getMonth()).padStart(2,'0')}`;
+    _period=periods.includes(prev)?prev:(periods.includes(cur)?cur:(periods[0]||''));
     const sel=document.getElementById('selPeriod');
     sel.innerHTML='<option value="">選擇期間...</option>'+periods.map(p=>'<option value="'+p+'" '+(p===_period?'selected':'')+'>'+p.slice(0,4)+'年'+parseInt(p.slice(4))+'月</option>').join('');
     const upSel=document.getElementById('uploadPeriodSel');
@@ -665,14 +697,23 @@ function renderMetricList() {
   const el=document.getElementById('metricList');
   if (!_metrics.length){ el.innerHTML='<div class="empty">尚未建立任何指標</div>'; return; }
   const SCOPE_LABEL={person:'👤 個人',dept:'🏢 部門',factory:'🏭 廠別'};
+  const REV_TYPE_LABEL={paid:'有費',bodywork:'鈑烤',general:'一般',extended:'延保'};
+  const BRANCH_LABEL={'':'集團',AMA:'AMA',AMC:'AMC',AMD:'AMD'};
   el.innerHTML=_metrics.map(m=>{
     const deptCodes=m.target_dept_codes||[];
     const deptTag=deptCodes.length?'<span class="badge badge-gray">📌 '+deptCodes.length+' 部門</span>':'<span class="badge badge-gray">📌 全廠</span>';
     const rule=m.bonus_rule||{};
     const tiers=rule.tiers||[];
     const ruleTag=tiers.length?'<span class="badge badge-purple">🏆 '+tiers.length+' 階梯</span>':'';
+    // 顯示 revenue 額外標籤
+    let revTag='';
+    if (m.metric_source==='revenue') {
+      const revBranch=(m.filters||[]).find(f=>f.type==='branch')?.value||'';
+      const revType=(m.filters||[]).find(f=>f.type==='revenue_type')?.value||'paid';
+      revTag='<span class="badge" style="background:rgba(249,115,22,.15);color:#f97316">'+(BRANCH_LABEL[revBranch]||revBranch||'集團')+' '+(REV_TYPE_LABEL[revType]||revType)+'</span>';
+    }
     return '<div class="metric-card"><div class="metric-info"><div class="metric-name">'+m.metric_name+'</div>'+(m.description?'<div style="font-size:12px;color:#64748b;margin-top:2px">'+m.description+'</div>':'')+
-      '<div class="metric-tags"><span class="badge badge-blue">'+(SCOPE_LABEL[m.scope_type]||m.scope_type)+'</span><span class="badge badge-purple">'+(SOURCE_LABEL[m.metric_source]||m.metric_source)+'</span>'+deptTag+ruleTag+(m.unit?'<span class="badge badge-gray">單位：'+m.unit+'</span>':'')+'</div></div>'+
+      '<div class="metric-tags"><span class="badge badge-blue">'+(SCOPE_LABEL[m.scope_type]||m.scope_type)+'</span><span class="badge badge-purple">'+(SOURCE_LABEL[m.metric_source]||m.metric_source)+'</span>'+revTag+deptTag+ruleTag+(m.unit?'<span class="badge badge-gray">單位：'+m.unit+'</span>':'')+'</div></div>'+
       '<div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-secondary btn-sm" onclick="openTargetModal('+m.id+')">🎯 目標</button><button class="btn btn-secondary btn-sm" onclick="openMetricModal('+m.id+')">編輯</button><button class="btn btn-danger btn-sm" onclick="deleteMetric('+m.id+',\''+m.metric_name.replace(/'/g,"\\'")+'\')">刪除</button></div></div>';
   }).join('');
 }
@@ -719,7 +760,6 @@ function updateDeptCount() {
   document.getElementById('mDeptCountLabel').textContent=cnt>0?'已選 '+cnt+' 個部門':'（留空 = 全廠所有正職人員）';
 }
 
-// ══ 依勾選部門載入職稱建議 ══
 async function loadDeptJobTitles() {
   const periodForLoad = _period || _rosterPeriods[0];
   const selectedCodes = getSelectedDeptCodes();
@@ -761,7 +801,6 @@ function renderRoleTags() {
   if (!_tierRoles.length){ wrap.innerHTML='<span style="color:#475569;font-size:11px">（未設定職稱 → 所有人同一金額）</span>'; return; }
   wrap.innerHTML=_tierRoles.map((r,i)=>'<span class="role-tag">'+r+'<button onclick="removeRole('+i+')" title="移除">×</button></span>').join('');
   renderTierTable();
-  // 同步更新職稱建議的已選狀態
   loadDeptJobTitles();
 }
 function addRole() {
@@ -787,7 +826,6 @@ function renderTierTable() {
   const body=document.getElementById('mTierBody');
   const roles=_tierRoles;
 
-  // 表頭
   let thHtml='<tr><th style="background:#0f172a;color:#64748b;padding:7px 10px;border-bottom:1px solid #2d3f56;text-align:center;white-space:nowrap;min-width:90px">達成率 ≥ (%)</th>';
   thHtml+='<th style="background:#0f172a;color:#64748b;padding:7px 10px;border-bottom:1px solid #2d3f56;text-align:center;white-space:nowrap;min-width:90px">未達 (%, 空=無上限)</th>';
   if (roles.length) {
@@ -798,7 +836,6 @@ function renderTierTable() {
   thHtml+='<th style="background:#0f172a;padding:7px 6px;border-bottom:1px solid #2d3f56;width:30px"></th></tr>';
   head.innerHTML=thHtml;
 
-  // 內容
   let bodyHtml='';
   _tiers.forEach((t,i)=>{
     bodyHtml+='<tr>';
@@ -821,30 +858,12 @@ function renderTierTable() {
   body.innerHTML=bodyHtml;
 }
 
-// ══ syncTierAmount：同步個別職稱欄位輸入至 _tiers ══
 function syncTierAmount(el) {
   var i = parseInt(el.getAttribute('data-ti'));
   var role = el.getAttribute('data-role');
   if (!_tiers[i]) return;
   if (!_tiers[i].amounts) _tiers[i].amounts = {};
   _tiers[i].amounts[role] = parseFloat(el.value) || 0;
-}
-
-// ══ syncTierRow：將同一列第一個有值的欄位同步填入所有職稱欄 ══
-function syncTierRow(i) {
-  if (!_tiers[i] || !_tierRoles.length) return;
-  const rows = document.querySelectorAll('#mTierBody tr');
-  if (!rows[i]) return;
-  const inputs = [...rows[i].querySelectorAll('input[data-ti]')];
-  if (!inputs.length) return;
-  // 找第一個有值的欄位
-  const firstVal = inputs.reduce((v, inp) => v !== 0 ? v : (parseFloat(inp.value)||0), 0);
-  inputs.forEach(inp => {
-    inp.value = firstVal;
-    const role = inp.getAttribute('data-role');
-    if (!_tiers[i].amounts) _tiers[i].amounts = {};
-    _tiers[i].amounts[role] = firstVal;
-  });
 }
 
 function addTier() {
@@ -860,7 +879,6 @@ function removeTier(i) {
 }
 
 function getTiersData() {
-  // Sync from DOM inputs for final values
   const trs=document.querySelectorAll('#mTierBody tr');
   trs.forEach((tr,i)=>{
     if (!_tiers[i]) return;
@@ -892,13 +910,15 @@ function buildTierPreview(rule) {
   }).join('；');
 }
 
-// ══ 開啟/儲存指標 Modal ══
+// ══ 【修改4】onMSourceChange() ══
 function onMSourceChange() {
   const src=document.getElementById('mSource').value;
-  document.getElementById('mFiltersArea').style.display=(src!=='manual'&&src!=='performance')?'':'none';
-  document.getElementById('mStatFieldArea').style.display=(src!=='manual'&&src!=='performance')?'':'none';
+  // filters/statField: 顯示於 DMS 來源（非 manual/performance/revenue）
+  document.getElementById('mFiltersArea').style.display=(src!=='manual'&&src!=='performance'&&src!=='revenue')?'':'none';
+  document.getElementById('mStatFieldArea').style.display=(src!=='manual'&&src!=='performance'&&src!=='revenue')?'':'none';
   document.getElementById('mPerfArea').style.display=src==='performance'?'':'none';
-  if (src!=='manual'&&src!=='performance') {
+  document.getElementById('mRevenueArea').style.display=src==='revenue'?'':'none';
+  if (src!=='manual'&&src!=='performance'&&src!=='revenue') {
     const m=_editingMetricId?(_metrics.find(x=>x.id===_editingMetricId)||{}):{};
     document.getElementById('mStatField').value=m.stat_field||'amount';
     let fHtml='<div class="form-group" style="margin-top:8px"><label>帳類篩選（留空=全部）</label><input type="text" id="mFilterAccountType" class="form-input" placeholder="例：一般,保險,延保" value=""></div>';
@@ -911,6 +931,7 @@ function onMSourceChange() {
   }
 }
 
+// ══ 【修改5】openMetricModal() ══
 async function openMetricModal(id) {
   _editingMetricId=id||null;
   document.getElementById('metricModalTitle').textContent=id?'編輯指標':'新增指標';
@@ -925,12 +946,18 @@ async function openMetricModal(id) {
   document.getElementById('mRuleNote').value=rule.note||'';
   _tierRoles=[...(rule.roles||[])];
   _tiers=(rule.tiers||[]).map(t=>({...t}));
-  // Set perf metric link
+  // performance
   if (m.metric_source==='performance') {
     const perfId=(m.filters||[]).find(f=>f.type==='perf_metric_id')?.value;
     if (perfId) document.getElementById('mPerfMetricId').value=perfId;
   }
-  // 隱藏職稱建議（等部門勾選後再顯示）
+  // 【修改5】revenue
+  if (m.metric_source==='revenue') {
+    const revBranch=(m.filters||[]).find(f=>f.type==='branch')?.value||'';
+    const revType=(m.filters||[]).find(f=>f.type==='revenue_type')?.value||'paid';
+    document.getElementById('mRevBranch').value=revBranch;
+    document.getElementById('mRevType').value=revType;
+  }
   const sugDiv=document.getElementById('mJobTitleSuggestions');
   if (sugDiv) sugDiv.style.display='none';
   onMSourceChange();
@@ -938,22 +965,29 @@ async function openMetricModal(id) {
   renderTierTable();
   openModal('metricModal');
   await loadDeptCheckboxes(m.target_dept_codes||[]);
-  // 如果有預先勾選的部門，載入職稱建議
   if ((m.target_dept_codes||[]).length) loadDeptJobTitles();
   setTimeout(()=>document.getElementById('mName').focus(),80);
 }
 
+// ══ 【修改6】saveMetric() ══
 async function saveMetric() {
   const metric_name=document.getElementById('mName').value.trim();
   if (!metric_name){ alert('請輸入指標名稱'); return; }
   const src=document.getElementById('mSource').value, filters=[];
-  if (src!=='manual'&&src!=='performance') {
+  if (src!=='manual'&&src!=='performance'&&src!=='revenue') {
     (document.getElementById('mFilterAccountType')?.value||'').split(',').map(s=>s.trim()).filter(Boolean).forEach(v=>filters.push({type:'account_type',value:v}));
     if (src==='tech_wage') (document.getElementById('mFilterWorkCode')?.value||'').split(',').map(s=>s.trim()).filter(Boolean).forEach(v=>filters.push({type:'work_code',value:v}));
   }
   if (src==='performance') {
     const perfId=document.getElementById('mPerfMetricId').value;
     if (perfId) filters.push({type:'perf_metric_id',value:perfId});
+  }
+  // 【修改6】revenue
+  if (src==='revenue') {
+    const revBranch=document.getElementById('mRevBranch').value;
+    const revType=document.getElementById('mRevType').value||'paid';
+    if (revBranch) filters.push({type:'branch',value:revBranch});
+    filters.push({type:'revenue_type',value:revType});
   }
   const target_dept_codes=getSelectedDeptCodes();
   const tiersData=getTiersData();
@@ -1080,7 +1114,7 @@ async function saveTargets() {
   finally { btn.disabled=false; }
 }
 
-// ══ 獎金進度 ══
+// ══ 【修改8】獎金進度 ══
 async function loadProgress() {
   const el=document.getElementById('progressContent');
   if (!_period){ el.innerHTML='<div class="empty">請先選擇期間後按查詢</div>'; return; }
@@ -1092,17 +1126,36 @@ async function loadProgress() {
     const data=await fetch('/api/bonus/progress?'+params).then(r=>r.json());
     if (data.error) throw new Error(data.error);
     if (!data.results.length){ el.innerHTML='<div class="empty">尚未設定任何指標</div>'; return; }
+
+    // 【修改8】期間說明文字
+    const prevLabel=_period?`${_period.slice(0,4)}年${parseInt(_period.slice(4))}月`:'';
+    const periodNote=prevLabel?`<div style="background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:9px 14px;font-size:12px;color:#94a3b8;margin-bottom:14px">📅 以下為 <strong style="color:#60a5fa">${prevLabel}</strong> 成效，依達成率計算對應獎金</div>`:'';
+
     const SCOPE_LABEL={person:'👤 個人',dept:'🏢 部門',factory:'🏭 廠別'};
+    const REV_TYPE_LABEL={paid:'有費',bodywork:'鈑烤',general:'一般',extended:'延保'};
+    const fmtK=v=>Math.round(parseFloat(v||0)/1000).toLocaleString()+'K';
+    const isAmt_=(m)=>m.stat_field==='amount'||(m.metric_source==='revenue'||m.metric_source==='performance');
     let html='';
     data.results.forEach(function(item) {
       const m=item.metric, targets=item.targets, actual=item.actual;
-      const unit=m.unit||(m.stat_field==='amount'?'元':m.stat_field==='qty'?'件':'台');
-      const isAmt=m.stat_field==='amount';
+      // 對 revenue/performance 來源，perfTarget 是從後端傳來的目標
+      const autoTarget = (m.metric_source==='revenue'||m.metric_source==='performance') ? item.perfTarget : null;
+      const isAmt=isAmt_(m);
+      const unit=m.unit||(isAmt?'元':'台');
       const fmtV=function(v){ return v===null||v===undefined?'—':isAmt?fmtK(v):Math.round(parseFloat(v)).toLocaleString(); };
       const rule=m.bonus_rule||{};
       const tiers=rule.tiers||[];
       const roles=rule.roles||[];
-      // Build rule display string
+      // 來源標籤
+      let srcBadge='';
+      if (m.metric_source==='revenue') {
+        const revBranch=(m.filters||[]).find(f=>f.type==='branch')?.value||'';
+        const revType=(m.filters||[]).find(f=>f.type==='revenue_type')?.value||'paid';
+        const branchLabel=revBranch||'集團';
+        const typeLabel=REV_TYPE_LABEL[revType]||revType;
+        srcBadge=`<span style="font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(249,115,22,.15);color:#f97316;margin-left:6px">${branchLabel} ${typeLabel}</span>`;
+      }
+      // 規則預覽
       let ruleHtml='';
       if (tiers.length) {
         const tierRows=tiers.sort(function(a,b){return b.gte-a.gte;}).map(function(t){
@@ -1118,31 +1171,76 @@ async function loadProgress() {
       } else if (rule.description) {
         ruleHtml='<div style="font-size:12px;color:#8b5cf6;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.2);border-radius:7px;padding:8px 12px;margin-bottom:12px">\ud83d\udccb '+rule.description+'</div>';
       }
+
+      // revenue/performance 使用 perfTarget 作為達成率計算基礎
+      const useAutoTarget = (m.metric_source==='revenue'||m.metric_source==='performance') && autoTarget!==null;
+      const displayActual = actual;
+      const displayTarget = useAutoTarget ? autoTarget : null;
+      const displayRate   = (displayTarget&&displayTarget>0&&displayActual!==null) ? displayActual/displayTarget*100 : null;
+
       html+='<div class="card">';
-      html+='<div class="card-title">'+m.metric_name+' <span class="badge badge-purple">'+(SCOPE_LABEL[m.scope_type]||m.scope_type)+'</span>';
-      if(actual!==null) html+='<span style="font-size:11px;color:#64748b;margin-left:auto">DMS\u5be6\u969b\uff1a<strong style="color:#10b981">'+fmtV(actual)+'</strong></span>';
+      html+='<div class="card-title">'+m.metric_name+srcBadge+' <span class="badge badge-purple">'+(SCOPE_LABEL[m.scope_type]||m.scope_type)+'</span>';
+      if (displayActual!==null) html+='<span style="font-size:11px;color:#64748b;margin-left:auto">DMS\u5be6\u969b\uff1a<strong style="color:#10b981">'+fmtV(displayActual)+'</strong></span>';
       html+='</div>'+ruleHtml;
+
+      // revenue/performance 顯示整體達成率卡片
+      if (useAutoTarget && displayActual!==null) {
+        const rateC=displayRate===null?'#64748b':displayRate>=100?'#10b981':displayRate>=80?'#f59e0b':'#ef4444';
+        const barW=displayRate!==null?Math.min(100,displayRate).toFixed(1):0;
+        html+=`<div style="background:#0f172a;border:1px solid #2d3f56;border-radius:10px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:3px">整體目標</div>
+            <div style="font-size:18px;font-weight:800;color:#e2e8f0">${fmtV(displayTarget)}</div>
+          </div>
+          <div style="flex:1;min-width:120px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <span style="font-size:11px;color:#64748b">達成率</span>
+              <span style="font-size:16px;font-weight:800;color:${rateC}">${displayRate!==null?displayRate.toFixed(1)+'%':'—'}</span>
+            </div>
+            <div style="background:#1e293b;border-radius:4px;height:8px">
+              <div style="width:${barW}%;height:8px;border-radius:4px;background:${rateC};transition:width .4s"></div>
+            </div>
+          </div>
+        </div>`;
+      }
+
       if (!targets.length) {
         html+='<div style="color:#64748b;font-size:13px;padding:8px 0">\u5c1a\u672a\u8a2d\u5b9a\u76ee\u6a19\uff0c\u8acb\u9ede\u64ca\u300e\ud83c\udfaf \u76ee\u6a19\u300f\u6309\u9215</div>';
       } else {
         const thSt='text-align:left;padding:8px 12px;background:#0f172a;color:#64748b;font-size:11px;border-bottom:1px solid #2d3f56';
         html+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>';
         html+='<th style="'+thSt+'">'+(m.scope_type==='dept'?'\u90e8\u9580':'\u59d3\u540d')+'</th>';
-        html+='<th style="'+thSt+';text-align:right">\u76ee\u6a19\uff08'+unit+'\uff09</th>';
-        html+='<th style="'+thSt+';text-align:right">\u53bb\u5e74\u540c\u671f</th>';
-        html+='<th style="'+thSt+';text-align:right">\u5be6\u969b\uff08'+(actual!==null?'DMS':'\u624b\u586b')+'\uff09</th>';
-        html+='<th style="'+thSt+'">\u9054\u6210\u7387</th>';
+        // revenue/performance 來源：目標欄顯示個人目標，達成率用整體
+        if (useAutoTarget) {
+          html+='<th style="'+thSt+';text-align:right">\u6708\u76ee\u6a19\uff08'+unit+'\uff09</th>';
+          html+='<th style="'+thSt+'">\u9054\u6210\u7387（整體）</th>';
+        } else {
+          html+='<th style="'+thSt+';text-align:right">\u76ee\u6a19\uff08'+unit+'\uff09</th>';
+          html+='<th style="'+thSt+';text-align:right">\u53bb\u5e74\u540c\u671f</th>';
+          html+='<th style="'+thSt+';text-align:right">\u5be6\u969b\uff08'+(actual!==null?'DMS':'\u624b\u586b')+'\uff09</th>';
+          html+='<th style="'+thSt+'">\u9054\u6210\u7387</th>';
+        }
         if (roles.length) html+='<th style="'+thSt+'">\u5c0d\u61c9\u734e\u91d1</th>';
         html+='<th style="'+thSt+'">\u5099\u8a3b</th></tr></thead><tbody>';
+
         targets.forEach(function(t){
-          const tgt=parseFloat(t.target_value||0), act=actual!==null?parseFloat(actual):null;
-          const rate=tgt>0&&act!==null?(act/tgt*100):null;
+          // 達成率：revenue/performance 用整體 rate；其他用個人目標
+          let rate, act;
+          if (useAutoTarget) {
+            rate = displayRate;
+            act  = displayActual;
+          } else {
+            const tgt=parseFloat(t.target_value||0);
+            act=actual!==null?parseFloat(actual):null;
+            rate=tgt>0&&act!==null?(act/tgt*100):null;
+          }
           const rCol=rate===null?'#64748b':rate>=100?'#10b981':rate>=80?'#f59e0b':'#ef4444';
           const barW=rate!==null?Math.min(100,rate).toFixed(0):0;
           const member=_rosterData.find(function(r){return r.emp_id===t.emp_id;})||{};
           const label=t.emp_id?(member.emp_name||t.emp_id):(t.dept_code||'\u2014');
           const sub=t.emp_id&&member.dept_name?'<div style="font-size:11px;color:#475569">'+member.dept_name+'</div>':'';
-          // Calc bonus from tiers by job title
+
+          // 獎金計算（用整體達成率）
           let bonusCell='';
           if (tiers.length && rate !== null) {
             const matchTier=tiers.sort(function(a,b){return b.gte-a.gte;}).find(function(tier){
@@ -1162,14 +1260,27 @@ async function loadProgress() {
               bonusCell='<span style="color:#64748b">0 \u5143</span>';
             }
           }
+
           html+='<tr><td style="padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.3)">'+label+sub+'</td>';
-          html+='<td style="text-align:right;padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.3);font-weight:700;color:#e2e8f0">'+(tgt>0?fmtV(tgt):'\u672a\u8a2d\u5b9a')+'</td>';
-          html+='<td style="text-align:right;padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.3);color:#64748b">'+(t.last_year_value>0?fmtV(t.last_year_value):'\u2014')+'</td>';
-          html+='<td style="text-align:right;padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.3);color:#10b981;font-weight:700">'+(act!==null?fmtV(act):'\u2014')+'</td>';
-          html+='<td style="padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.3);min-width:120px">';
-          if (rate!==null) html+='<div class="achieve-row"><div class="progress-bar"><div class="progress-fill" style="width:'+barW+'%;background:'+rCol+'"></div></div><span style="font-size:12px;font-weight:800;color:'+rCol+';white-space:nowrap">'+rate.toFixed(1)+'%</span></div>';
-          else html+='<span style="color:#475569;font-size:12px">\u624b\u52d5\u586b\u5165</span>';
-          html+='</td>';
+          if (useAutoTarget) {
+            // 個人目標欄
+            const tgtV=parseFloat(t.target_value||0);
+            html+='<td style="text-align:right;padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.3);font-weight:700;color:#e2e8f0">'+(tgtV>0?fmtV(tgtV):'\u672a\u8a2d\u5b9a')+'</td>';
+            html+='<td style="padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.3);min-width:140px">';
+            if (rate!==null) html+='<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;background:#0f172a;border-radius:3px;height:5px"><div style="width:'+barW+'%;height:5px;background:'+rCol+';border-radius:3px"></div></div><span style="font-size:12px;font-weight:800;color:'+rCol+';white-space:nowrap">'+rate.toFixed(1)+'%</span></div>';
+            else html+='<span style="color:#475569;font-size:12px">\u624b\u52d5\u586b\u5165</span>';
+            html+='</td>';
+          } else {
+            const tgtV=parseFloat(t.target_value||0);
+            const lyV=t.last_year_value;
+            html+='<td style="text-align:right;padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.3);font-weight:700;color:#e2e8f0">'+(tgtV>0?fmtV(tgtV):'\u672a\u8a2d\u5b9a')+'</td>';
+            html+='<td style="text-align:right;padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.3);color:#64748b">'+(lyV>0?fmtV(lyV):'\u2014')+'</td>';
+            html+='<td style="text-align:right;padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.3);color:#10b981;font-weight:700">'+(act!==null?fmtV(act):'\u2014')+'</td>';
+            html+='<td style="padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.3);min-width:120px">';
+            if (rate!==null) html+='<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;background:#0f172a;border-radius:3px;height:5px"><div style="width:'+barW+'%;height:5px;background:'+rCol+';border-radius:3px"></div></div><span style="font-size:12px;font-weight:800;color:'+rCol+';white-space:nowrap">'+rate.toFixed(1)+'%</span></div>';
+            else html+='<span style="color:#475569;font-size:12px">\u624b\u52d5\u586b\u5165</span>';
+            html+='</td>';
+          }
           if (roles.length) html+='<td style="padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.3)">'+bonusCell+'</td>';
           html+='<td style="padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.3);font-size:12px;color:#64748b">'+(t.note||'\u2014')+'</td></tr>';
         });
@@ -1177,7 +1288,8 @@ async function loadProgress() {
       }
       html+='</div>';
     });
-    el.innerHTML=html;
+    // 【修改8】加上期間說明
+    el.innerHTML=periodNote+html;
   } catch(e){ el.innerHTML='<div style="color:#ef4444;padding:16px">'+e.message+'</div>'; }
 }
 
