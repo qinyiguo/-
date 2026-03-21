@@ -144,7 +144,6 @@ body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background:
     </div>
     <div class="tab-bar">
       <button class="tab-btn active" id="tab-btn-roster"   onclick="switchTab('roster')">👥 人員名單</button>
-      <button class="tab-btn"        id="tab-btn-metrics"  onclick="switchTab('metrics')">⚙️ 獎金設定</button>
       <button class="tab-btn"        id="tab-btn-progress" onclick="switchTab('progress')">💰 獎金名單</button>
     </div>
   </div>
@@ -937,6 +936,35 @@ function onMSourceChange() {
   }
 }
 
+// ══ 從獎金名單 新增指標（預選部門）══
+async function openNewMetricForDept(deptCode, deptName) {
+  // 開啟空白新增 modal，儲存後重新載入進度頁
+  await openMetricModal(null);
+  // 預填名稱提示
+  const nameEl = document.getElementById('mName');
+  if (nameEl && !nameEl.value) nameEl.value = deptName ? deptName.replace(/廠|部門/g,'') + ' 獎金' : '';
+  // 預先勾選此部門
+  await new Promise(r => setTimeout(r, 200));
+  const cb = document.querySelector('input[data-dept="' + deptCode + '"]');
+  if (cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
+  _afterSaveCallback = async () => { await loadMetrics(); await renderProgressContent(); };
+}
+
+// ══ 從廠別 header 新增指標 ══
+async function openNewMetricForFactory(factory) {
+  await openMetricModal(null);
+  // 預選該廠別所有部門
+  await new Promise(r => setTimeout(r, 200));
+  document.querySelectorAll('input[data-dept]').forEach(cb => {
+    if (cb.dataset.factory === factory && !cb.checked) {
+      cb.checked = true; cb.dispatchEvent(new Event('change'));
+    }
+  });
+  _afterSaveCallback = async () => { await loadMetrics(); await renderProgressContent(); };
+}
+
+let _afterSaveCallback = null;
+
 // ══ openMetricModal() ══
 async function openMetricModal(id) {
   _editingMetricId=id||null;
@@ -1013,7 +1041,10 @@ async function saveMetric() {
     const url=_editingMetricId?'/api/bonus/metrics/'+_editingMetricId:'/api/bonus/metrics';
     const data=await fetch(url,{method:_editingMetricId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).then(r=>r.json());
     if (data.error) throw new Error(data.error);
-    closeModal('metricModal'); await loadMetrics();
+    closeModal('metricModal');
+    if (_afterSaveCallback) { await _afterSaveCallback(); _afterSaveCallback = null; }
+    else { await loadMetrics(); }
+    if(document.getElementById('tab-progress')&&document.getElementById('tab-progress').style.display!=='none') await renderProgressContent();
   } catch(e){ alert('儲存失敗：'+e.message); }
   finally { btn.disabled=false; }
 }
@@ -1213,7 +1244,8 @@ async function renderProgressContent() {
     var byFactory = {};
     for (var pi=0; pi<_rosterData.length; pi++) {
       var person = _rosterData[pi];
-      var fc = person.factory||'其他';
+      var dn = person.dept_name||'';
+      var fc = person.factory || (/售後/.test(dn)?'售後服務處':/內湖|AMA/.test(dn)?'AMA':/仁愛|AMC/.test(dn)?'AMC':/士林|AMD/.test(dn)?'AMD':/聯合/.test(dn)?'聯合':/鈑烤/.test(dn)?'鈑烤':/零件/.test(dn)?'零件':'售後服務處');
       if (factory && fc !== factory) continue;
       var dk = person.dept_code||'—';
       if (!byFactory[fc]) byFactory[fc] = {};
@@ -1296,7 +1328,7 @@ async function renderProgressContent() {
           +'<span style="font-size:12px;color:#64748b;background:#0f172a;padding:2px 8px;border-radius:10px">'+fcTotalPpl+' 人</span>'
           +(fcBonusPpl>0?'<span style="font-size:12px;color:#10b981;background:rgba(16,185,129,.1);padding:2px 8px;border-radius:10px">'+fcBonusPpl+' 人有獎金</span>':'')
           +'<div style="margin-left:auto;display:flex;align-items:center;gap:8px">'
-            +(hasMetrics?'<button onclick="event.stopPropagation();switchTab(\'metrics\')" style="background:rgba(59,130,246,.15);color:#60a5fa;border:1px solid rgba(59,130,246,.3);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">⚙️ 獎金設定</button>':'')
++'<button onclick="event.stopPropagation();openNewMetricForFactory(\''+fc+'\')" style="background:rgba(59,130,246,.15);color:#60a5fa;border:1px solid rgba(59,130,246,.3);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">＋ 新增指標</button>'
             +(hasMetrics?'<span style="font-size:18px;font-weight:900;color:'+(fcTotalBonus>0?'#f59e0b':'#475569')+'">'+(fcTotalBonus>0?fcTotalBonus.toLocaleString()+' 元':'—')+'</span>':'')
           +'</div>'
         +'</div>'
@@ -1360,8 +1392,9 @@ async function renderProgressContent() {
                 }).join('')
               +'</div>'
               :'')
+            +'<button onclick="event.stopPropagation();openNewMetricForDept(\''+dkey+'\',\''+dept.dept_name+'\')" style="margin-left:auto;background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3);padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">＋ 新增指標</button>'
             +(hasMetrics&&deptTotalBonus>0
-              ?'<span style="margin-left:auto;font-size:13px;font-weight:800;color:#f59e0b">'+deptTotalBonus.toLocaleString()+' 元</span>'
+              ?'<span style="font-size:13px;font-weight:800;color:#f59e0b">'+deptTotalBonus.toLocaleString()+' 元</span>'
               :'')
           +'</div>'
           // 人員表格
