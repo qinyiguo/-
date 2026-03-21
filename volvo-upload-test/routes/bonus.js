@@ -469,8 +469,14 @@ router.get('/bonus/progress', async (req, res) => {
   if (!period) return res.status(400).json({ error: 'period 為必填' });
   try {
     const metrics = (await pool.query(`SELECT * FROM bonus_metrics ORDER BY sort_order, id`)).rows;
-    // period = actualPeriod（前端現在傳同一個值），targets 和 actuals 都在這個期間
-    const targets = (await pool.query(`SELECT * FROM bonus_targets WHERE period=$1`, [actualPeriod])).rows;
+    // 目標不分月（取最新設定），避免因期間不符而找不到目標
+    // 使用 DISTINCT ON 取每個 metric+emp+dept 的最新一筆
+    const targets = (await pool.query(`
+      SELECT DISTINCT ON (metric_id, COALESCE(emp_id,''), COALESCE(dept_code,''))
+        *
+      FROM bonus_targets
+      ORDER BY metric_id, COALESCE(emp_id,''), COALESCE(dept_code,''), updated_at DESC
+    `)).rows;
     const results = [];
 
     for (const m of metrics) {
