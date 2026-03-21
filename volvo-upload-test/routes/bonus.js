@@ -14,14 +14,9 @@ function lastMonth(period) {
   if (m === 1) return `${y - 1}12`;
   return `${y}${String(m - 1).padStart(2, '0')}`;
 }
-
-// 'YYYYMM' → '2026-03-01'
 function periodStart(period) {
   return `${period.slice(0,4)}-${period.slice(4,6)}-01`;
 }
-
-// 標準過濾：排除「本月前離職」與「計時人員」
-// 回傳 { cond, param, nextIdx }，cond 以 AND 開頭
 function activeFilter(period, startIdx) {
   return {
     cond: `
@@ -36,6 +31,79 @@ function activeFilter(period, startIdx) {
     nextIdx: startIdx + 1,
   };
 }
+function inferFactory(deptCode) {
+  if (!deptCode) return null;
+  const code = String(deptCode);
+  if (code.startsWith('051')) return 'AMA';
+  if (code.startsWith('053')) return 'AMC';
+  if (code.startsWith('054')) return 'AMD';
+  if (code.startsWith('055')) return '聯合';
+  if (code.startsWith('056') || code.startsWith('061')) return '鈑烤';
+  if (code.startsWith('057') || code.startsWith('07'))  return '零件';
+  return null;
+}
+
+// ── 計算 performance_metrics 實際值（與 stats.js 共用邏輯）──
+async function computePerfActual(metric, period, branch) {
+  const filters = metric.filters || [];
+  const BRANCHES = branch && ['AMA','AMC','AMD'].includes(branch) ? [branch] : ['AMA','AMC','AMD'];
+  let total = 0;
+  for (const br of BRANCHES) {
+    let actual = 0;
+    try {
+      if (metric.metric_type === 'repair_income') {
+        const acTypes = filters.filter(f=>f.type==='account_type').map(f=>f.value);
+        const c = [`period=$1`,`branch=$2`]; const p = [period, br]; let i = 3;
+        if (acTypes.length) { c.push(`account_type=ANY($${i++})`); p.push(acTypes); }
+        const r = await pool.query(`SELECT COALESCE(SUM(total_untaxed),0) as v FROM repair_income WHERE ${c.join(' AND ')}`, p);
+        actual = parseFloat(r.rows[0]?.v || 0);
+      } else if (metric.metric_type === 'parts') {
+        const cc=filters.filter(f=>f.type==='category_code').map(f=>f.value);
+        const fc=filters.filter(f=>f.type==='function_code').map(f=>f.value);
+        const pn=filters.filter(f=>f.type==='part_number').map(f=>f.value);
+        const pt=filters.filter(f=>f.type==='part_type').map(f=>f.value);
+        const c=[`period=$1`,`branch=$2`]; const p=[period,br]; let i=3;
+        if (cc.length){c.push(`category_code=ANY($${i++})`);p.push(cc);}
+        if (fc.length){c.push(`function_code=ANY($${i++})`);p.push(fc);}
+        if (pn.length){c.push(`part_number=ANY($${i++})`);p.push(pn);}
+        if (pt.length){c.push(`part_type=ANY($${i++})`);p.push(pt);}
+        const fld = metric.stat_field==='qty'?'SUM(sale_qty)':metric.stat_field==='count'?'COUNT(*)':'SUM(sale_price_untaxed)';
+        const r = await pool.query(`SELECT COALESCE(${fld},0) as v FROM parts_sales WHERE ${c.join(' AND ')}`, p);
+        actual = parseFloat(r.rows[0]?.v || 0);
+      } else if (metric.metric_type === 'tech_wage') {
+        const workCodes=filters.filter(f=>f.type==='work_code');
+        const acTypes=filters.filter(f=>f.type==='account_type').map(f=>f.value);
+        const c=[`period=$1`,`branch=$2`]; const p=[period,br]; let i=3;
+        if (acTypes.length){c.push(`account_type=ANY($${i++})`);p.push(acTypes);}
+        if (workCodes.length) {
+          const wcs=workCodes.map(f=>{
+            if(f.value.includes('-')){const[from,to]=f.value.split('-');return{type:'range',from:from.trim(),to:to.trim()};}
+            return{type:'exact',value:f.value};
+          });
+          const wc_conds=wcs.map(wc=>{
+            if(wc.type==='range'){c.push(`work_code BETWEEN $${i++} AND $${i++}`);p.push(wc.from,wc.to);}
+            else{c.push(`work_code=$${i++}`);p.push(wc.value);}
+            return '';
+          });
+        }
+        const statExpr=metric.stat_field==='amount'?'SUM(wage)':metric.stat_field==='hours'?'SUM(standard_hours)':'COUNT(DISTINCT work_order)';
+        const r = await pool.query(`SELECT COALESCE(${statExpr},0) as v FROM tech_performance WHERE ${c.join(' AND ')}`, p);
+        actual = parseFloat(r.rows[0]?.v || 0);
+      } else if (metric.metric_type === 'boutique') {
+        const bt=filters.filter(f=>f.type==='boutique_type').map(f=>f.value);
+        const ac=filters.filter(f=>f.type==='account_type').map(f=>f.value);
+        const c=[`ps.period=$1`,`ps.branch=$2`]; const p=[period,br]; let i=3;
+        if (bt.length){c.push(`pc.part_type=ANY($${i++})`);p.push(bt);}
+        else{c.push(`pc.part_type IN ('精品','配件')`);}
+        if (ac.length){c.push(`ps.part_type=ANY($${i++})`);p.push(ac);}
+        const r = await pool.query(`SELECT COALESCE(SUM(ps.sale_price_untaxed),0) as v FROM parts_sales ps JOIN parts_catalog pc ON ps.part_number=pc.part_number WHERE ${c.join(' AND ')}`, p);
+        actual = parseFloat(r.rows[0]?.v || 0);
+      }
+    } catch(e) {}
+    total += actual;
+  }
+  return total;
+}
 
 // ══════════════════════════════════════════════
 // 人員名冊 — 上傳解析
@@ -44,21 +112,18 @@ function parseRosterExcel(buffer) {
   const wb = XLSX.read(buffer, { type: 'buffer', cellDates: false, raw: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
-
   let headerIdx = 3;
   for (let i = 0; i < Math.min(raw.length, 10); i++) {
     if (raw[i].some(c => String(c || '').includes('員工編號'))) { headerIdx = i; break; }
   }
   const headers = raw[headerIdx].map(c => String(c || '').trim());
   const col = name => headers.indexOf(name);
-
   const fmtDate = v => {
     if (!v) return null;
     const s = String(v).trim();
     const m = s.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
     return m ? `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}` : null;
   };
-
   const rows = [];
   for (let i = headerIdx + 1; i < raw.length; i++) {
     const r = raw[i];
@@ -67,34 +132,22 @@ function parseRosterExcel(buffer) {
     const status = String(r[col('在職狀態')] || '').trim();
     if (!status) continue;
     rows.push({
-      emp_id:             empId,
-      emp_name:           String(r[col('中文姓名')]     || '').trim(),
-      dept_code:          String(r[col('部門代碼')]     || '').trim(),
-      dept_name:          String(r[col('部門中文名稱')] || '').trim(),
-      job_title:          String(r[col('職務中文名稱')] || '').trim(),
+      emp_id: empId,
+      emp_name: String(r[col('中文姓名')] || '').trim(),
+      dept_code: String(r[col('部門代碼')] || '').trim(),
+      dept_name: String(r[col('部門中文名稱')] || '').trim(),
+      job_title: String(r[col('職務中文名稱')] || '').trim(),
       status,
-      hire_date:          fmtDate(r[col('到職日期')]),
-      resign_date:        fmtDate(r[col('離職日期')]),
-      unpaid_leave_date:  fmtDate(r[col('留職停薪日')]),
-      mgr1:               String(r[col('一階主管')]     || '').trim(),
-      mgr2:               String(r[col('二階主管')]     || '').trim(),
-      job_category:       String(r[col('職種名稱')]     || '').trim(),
-      job_class:          String(r[col('職類名稱')]     || '').trim(),
+      hire_date: fmtDate(r[col('到職日期')]),
+      resign_date: fmtDate(r[col('離職日期')]),
+      unpaid_leave_date: fmtDate(r[col('留職停薪日')]),
+      mgr1: String(r[col('一階主管')] || '').trim(),
+      mgr2: String(r[col('二階主管')] || '').trim(),
+      job_category: String(r[col('職種名稱')] || '').trim(),
+      job_class: String(r[col('職類名稱')] || '').trim(),
     });
   }
   return rows;
-}
-
-function inferFactory(deptCode) {
-  if (!deptCode) return null;
-  const code = String(deptCode);
-  if (code.startsWith('051')) return 'AMA';  // 內湖廠
-  if (code.startsWith('053')) return 'AMC';  // 仁愛廠
-  if (code.startsWith('054')) return 'AMD';  // 士林廠
-  if (code.startsWith('055')) return '聯合';
-  if (code.startsWith('056') || code.startsWith('061')) return '鈑烤';
-  if (code.startsWith('057') || code.startsWith('07'))  return '零件';
-  return null;
 }
 
 // ── 上傳人員資料 ──
@@ -125,11 +178,9 @@ router.post('/bonus/upload-roster', upload.single('file'), async (req, res) => {
             mgr1=EXCLUDED.mgr1, mgr2=EXCLUDED.mgr2, factory=EXCLUDED.factory,
             job_category=EXCLUDED.job_category, job_class=EXCLUDED.job_class,
             updated_at=NOW()
-        `, [
-          period, r.emp_id, r.emp_name, r.dept_code, r.dept_name, r.job_title, r.status,
-          r.hire_date, r.resign_date, r.unpaid_leave_date, r.mgr1, r.mgr2,
-          inferFactory(r.dept_code), r.job_category, r.job_class,
-        ]);
+        `, [period, r.emp_id, r.emp_name, r.dept_code, r.dept_name, r.job_title, r.status,
+            r.hire_date, r.resign_date, r.unpaid_leave_date, r.mgr1, r.mgr2,
+            inferFactory(r.dept_code), r.job_category, r.job_class]);
         count++;
       }
       await client.query('COMMIT');
@@ -139,7 +190,7 @@ router.post('/bonus/upload-roster', upload.single('file'), async (req, res) => {
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── 取得人員名冊（已過濾：排除本月前離職、排除計時）──
+// ── 取得人員名冊（已過濾）──
 router.get('/bonus/roster', async (req, res) => {
   const { period, factory, status, dept_code } = req.query;
   if (!period) return res.status(400).json({ error: 'period 為必填' });
@@ -157,27 +208,18 @@ router.get('/bonus/roster', async (req, res) => {
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── 手動調整員工廠別 ＋ 部門 ──
+// ── 手動調整員工廠別＋部門 ──
 router.patch('/bonus/roster/:period/:emp_id', async (req, res) => {
   const { period, emp_id } = req.params;
   const { factory, dept_code, dept_name } = req.body;
   try {
-    const sets = ['factory=$1', 'updated_at=NOW()'];
-    const params = [factory || null, period, emp_id];
-    let idx = 4;
-    if (dept_code !== undefined) { sets.push(`dept_code=$${idx++}`); params.splice(idx - 2, 0, dept_code || null); }
-    if (dept_name !== undefined) { sets.push(`dept_name=$${idx++}`); params.splice(idx - 2, 0, dept_name || null); }
-    // rebuild properly
     const p = [factory || null];
-    const setClauses = ['factory=$1', 'updated_at=NOW()'];
+    const sets = ['factory=$1', 'updated_at=NOW()'];
     let n = 2;
-    if (dept_code !== undefined) { setClauses.push(`dept_code=$${n++}`); p.push(dept_code || null); }
-    if (dept_name !== undefined) { setClauses.push(`dept_name=$${n++}`); p.push(dept_name || null); }
+    if (dept_code !== undefined) { sets.push(`dept_code=$${n++}`); p.push(dept_code || null); }
+    if (dept_name !== undefined) { sets.push(`dept_name=$${n++}`); p.push(dept_name || null); }
     p.push(period, emp_id);
-    await pool.query(
-      `UPDATE staff_roster SET ${setClauses.join(',')} WHERE period=$${n++} AND emp_id=$${n}`,
-      p
-    );
+    await pool.query(`UPDATE staff_roster SET ${sets.join(',')} WHERE period=$${n++} AND emp_id=$${n}`, p);
     res.json({ ok: true });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
@@ -202,25 +244,19 @@ router.get('/bonus/roster-summary', async (req, res) => {
       FROM staff_roster WHERE period=$1 ${f.cond}
       GROUP BY dept_code, dept_name, factory, status ORDER BY dept_code, status
     `, [period, f.param]);
-
     const resignLastMonth = await pool.query(`
       SELECT emp_id, emp_name, dept_name, factory, resign_date, mgr1
-      FROM staff_roster
-      WHERE period=$1 AND status='離職' AND resign_date IS NOT NULL
-        AND TO_CHAR(resign_date,'YYYYMM')=$2
-      ORDER BY dept_code, resign_date
+      FROM staff_roster WHERE period=$1 AND status='離職' AND resign_date IS NOT NULL
+        AND TO_CHAR(resign_date,'YYYYMM')=$2 ORDER BY dept_code, resign_date
     `, [period, prevPeriod]);
-
     const newHiresLastMonth = await pool.query(`
       SELECT emp_id, emp_name, dept_name, factory, hire_date, job_title, mgr1
-      FROM staff_roster
-      WHERE period=$1 AND hire_date IS NOT NULL
+      FROM staff_roster WHERE period=$1 AND hire_date IS NOT NULL
         AND TO_CHAR(hire_date,'YYYYMM')=$2
         AND COALESCE(job_category,'') NOT ILIKE '%計時%'
         AND COALESCE(job_title,'') NOT ILIKE '%計時%'
       ORDER BY dept_code, hire_date
     `, [period, prevPeriod]);
-
     const unpaid = await pool.query(`
       SELECT emp_id, emp_name, dept_name, factory, unpaid_leave_date, mgr1
       FROM staff_roster WHERE period=$1 AND status='留職停薪'
@@ -228,19 +264,12 @@ router.get('/bonus/roster-summary', async (req, res) => {
         AND COALESCE(job_title,'') NOT ILIKE '%計時%'
       ORDER BY dept_code
     `, [period]);
-
-    res.json({
-      summary: summary.rows,
-      resignLastMonth: resignLastMonth.rows,
-      newHiresLastMonth: newHiresLastMonth.rows,
-      unpaidLeave: unpaid.rows,
-      prevPeriod,
-    });
+    res.json({ summary: summary.rows, resignLastMonth: resignLastMonth.rows, newHiresLastMonth: newHiresLastMonth.rows, unpaidLeave: unpaid.rows, prevPeriod });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 // ══════════════════════════════════════════════
-// 獎金指標設定 CRUD（含 target_dept_codes）
+// 獎金指標設定 CRUD
 // ══════════════════════════════════════════════
 router.get('/bonus/metrics', async (req, res) => {
   try {
@@ -249,9 +278,8 @@ router.get('/bonus/metrics', async (req, res) => {
 });
 
 router.post('/bonus/metrics', async (req, res) => {
-  const { metric_name, description, scope_type, scope_value,
-          metric_source, filters, stat_field, unit, sort_order,
-          bonus_rule, target_dept_codes } = req.body;
+  const { metric_name, description, scope_type, scope_value, metric_source,
+          filters, stat_field, unit, sort_order, bonus_rule, target_dept_codes } = req.body;
   if (!metric_name) return res.status(400).json({ error: '名稱為必填' });
   try {
     const r = await pool.query(`
@@ -261,37 +289,44 @@ router.post('/bonus/metrics', async (req, res) => {
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *
     `, [metric_name.trim(), description||'', scope_type||'person', scope_value||'',
         metric_source||'manual', JSON.stringify(filters||[]),
-        stat_field||'amount', unit||'', sort_order||0,
-        JSON.stringify(target_dept_codes||[])]);
-    res.json(r.rows[0]);
+        stat_field||'amount', unit||'', sort_order||0, JSON.stringify(target_dept_codes||[])]);
+    // Update bonus_rule separately to avoid schema issues
+    if (bonus_rule) {
+      await pool.query(`UPDATE bonus_metrics SET bonus_rule=$1 WHERE id=$2`, [JSON.stringify(bonus_rule), r.rows[0].id]);
+    }
+    const updated = await pool.query(`SELECT * FROM bonus_metrics WHERE id=$1`, [r.rows[0].id]);
+    res.json(updated.rows[0]);
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 router.put('/bonus/metrics/:id', async (req, res) => {
-  const { metric_name, description, scope_type, scope_value,
-          metric_source, filters, stat_field, unit, sort_order,
-          bonus_rule, target_dept_codes } = req.body;
+  const { metric_name, description, scope_type, scope_value, metric_source,
+          filters, stat_field, unit, sort_order, bonus_rule, target_dept_codes } = req.body;
   if (!metric_name) return res.status(400).json({ error: '名稱為必填' });
   try {
-    const r = await pool.query(`
+    await pool.query(`
       UPDATE bonus_metrics SET
         metric_name=$1, description=$2, scope_type=$3, scope_value=$4,
         metric_source=$5, filters=$6, stat_field=$7, unit=$8, sort_order=$9,
         target_dept_codes=$10, updated_at=NOW()
-      WHERE id=$11 RETURNING *
+      WHERE id=$11
     `, [metric_name.trim(), description||'', scope_type||'person', scope_value||'',
         metric_source||'manual', JSON.stringify(filters||[]),
         stat_field||'amount', unit||'', sort_order||0,
         JSON.stringify(target_dept_codes||[]), req.params.id]);
-    if (!r.rows.length) return res.status(404).json({ error: '找不到指標' });
-    res.json(r.rows[0]);
+    if (bonus_rule !== undefined) {
+      await pool.query(`UPDATE bonus_metrics SET bonus_rule=$1 WHERE id=$2`, [JSON.stringify(bonus_rule), req.params.id]);
+    }
+    const updated = await pool.query(`SELECT * FROM bonus_metrics WHERE id=$1`, [req.params.id]);
+    if (!updated.rows.length) return res.status(404).json({ error: '找不到指標' });
+    res.json(updated.rows[0]);
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 router.delete('/bonus/metrics/:id', async (req, res) => {
   try {
     await pool.query(`DELETE FROM bonus_targets WHERE metric_id=$1`, [req.params.id]);
-    await pool.query(`DELETE FROM bonus_metrics WHERE id=$1`,        [req.params.id]);
+    await pool.query(`DELETE FROM bonus_metrics WHERE id=$1`, [req.params.id]);
     res.json({ ok: true });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
@@ -310,8 +345,7 @@ router.get('/bonus/targets', async (req, res) => {
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
     res.json((await pool.query(
       `SELECT bt.*, bm.metric_name, bm.scope_type, bm.unit
-       FROM bonus_targets bt
-       JOIN bonus_metrics bm ON bm.id=bt.metric_id
+       FROM bonus_targets bt JOIN bonus_metrics bm ON bm.id=bt.metric_id
        ${where} ORDER BY bt.metric_id, bt.emp_id, bt.dept_code`, params
     )).rows);
   } catch(err) { res.status(500).json({ error: err.message }); }
@@ -360,7 +394,23 @@ router.get('/bonus/progress', async (req, res) => {
     const results = [];
     for (const m of metrics) {
       let actual = null;
-      if (m.metric_source !== 'manual') {
+      let perfTarget = null;
+      if (m.metric_source === 'performance') {
+        // 連結 performance_metrics
+        const perfMetricId = (m.filters || []).find(f => f.type === 'perf_metric_id')?.value;
+        if (perfMetricId) {
+          try {
+            const perfMetric = (await pool.query(`SELECT * FROM performance_metrics WHERE id=$1`, [perfMetricId])).rows[0];
+            if (perfMetric) {
+              actual = await computePerfActual(perfMetric, period, factory && ['AMA','AMC','AMD'].includes(factory) ? factory : null);
+              // Get performance target for reference
+              const perfBranch = factory && ['AMA','AMC','AMD'].includes(factory) ? factory : 'AMA';
+              const tRes = await pool.query(`SELECT target_value FROM performance_targets WHERE metric_id=$1 AND period=$2 AND branch=$3`, [perfMetricId, period, perfBranch]);
+              perfTarget = tRes.rows[0]?.target_value || null;
+            }
+          } catch(e) { actual = null; }
+        }
+      } else if (m.metric_source !== 'manual') {
         const filters = m.filters || [];
         try {
           if (m.metric_source === 'repair_income') {
@@ -380,7 +430,7 @@ router.get('/bonus/progress', async (req, res) => {
               if (wc.includes('-')) { const [fr,to]=wc.split('-'); conds.push(`work_code BETWEEN $${idx++} AND $${idx++}`); p.push(fr.trim(),to.trim()); }
               else { conds.push(`work_code=$${idx++}`); p.push(wc); }
             }
-            const fld = m.stat_field==='amount' ? 'SUM(wage)' : m.stat_field==='hours' ? 'SUM(standard_hours)' : 'COUNT(DISTINCT work_order)';
+            const fld = m.stat_field==='amount'?'SUM(wage)':m.stat_field==='hours'?'SUM(standard_hours)':'COUNT(DISTINCT work_order)';
             actual = parseFloat((await pool.query(`SELECT COALESCE(${fld},0) AS v FROM tech_performance WHERE ${conds.join(' AND ')}`, p)).rows[0]?.v || 0);
           } else if (m.metric_source === 'parts_sales') {
             const branchF = factory && ['AMA','AMC','AMD'].includes(factory) ? factory : null;
@@ -390,61 +440,46 @@ router.get('/bonus/progress', async (req, res) => {
             const pt=filters.filter(f=>f.type==='part_type').map(f=>f.value);
             if (cc.length) { conds.push(`category_code=ANY($${idx++})`); p.push(cc); }
             if (pt.length) { conds.push(`part_type=ANY($${idx++})`); p.push(pt); }
-            const fld = m.stat_field==='qty' ? 'SUM(sale_qty)' : m.stat_field==='count' ? 'COUNT(*)' : 'SUM(sale_price_untaxed)';
+            const fld = m.stat_field==='qty'?'SUM(sale_qty)':m.stat_field==='count'?'COUNT(*)':'SUM(sale_price_untaxed)';
             actual = parseFloat((await pool.query(`SELECT COALESCE(${fld},0) AS v FROM parts_sales WHERE ${conds.join(' AND ')}`, p)).rows[0]?.v || 0);
           }
         } catch(e) { actual = null; }
       }
       const myTargets = targets.filter(t => t.metric_id === m.id);
-      results.push({ metric: m, targets: myTargets, actual });
+      results.push({ metric: m, targets: myTargets, actual, perfTarget });
     }
     res.json({ results, period });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── 可設定目標的人員/部門清單（已過濾計時+舊離職，支援 dept_codes 篩選）──
+// ── 可設定目標的人員/部門清單 ──
 router.get('/bonus/scope-members', async (req, res) => {
   const { period, scope_type, factory, dept_codes } = req.query;
   if (!period) return res.status(400).json({ error: 'period 為必填' });
-  const deptCodesArr = dept_codes
-    ? dept_codes.split(',').map(s=>s.trim()).filter(Boolean)
-    : [];
+  const deptCodesArr = dept_codes ? dept_codes.split(',').map(s=>s.trim()).filter(Boolean) : [];
   const f = activeFilter(period, 2);
   try {
     const p = [period, f.param]; let idx = f.nextIdx;
     let extra = '';
     if (factory)             { extra += ` AND factory=$${idx++}`;           p.push(factory); }
     if (deptCodesArr.length) { extra += ` AND dept_code=ANY($${idx++})`;    p.push(deptCodesArr); }
-
     if (scope_type === 'dept') {
-      const r = await pool.query(`
-        SELECT DISTINCT dept_code, dept_name, factory
-        FROM staff_roster WHERE period=$1 ${f.cond} ${extra}
-        ORDER BY dept_code
-      `, p);
+      const r = await pool.query(`SELECT DISTINCT dept_code, dept_name, factory FROM staff_roster WHERE period=$1 ${f.cond} ${extra} ORDER BY dept_code`, p);
       res.json(r.rows);
     } else {
-      const r = await pool.query(`
-        SELECT emp_id, emp_name, dept_code, dept_name, factory, job_title, mgr1
-        FROM staff_roster WHERE period=$1 ${f.cond} ${extra}
-        ORDER BY dept_code, emp_id
-      `, p);
+      const r = await pool.query(`SELECT emp_id, emp_name, dept_code, dept_name, factory, job_title, mgr1 FROM staff_roster WHERE period=$1 ${f.cond} ${extra} ORDER BY dept_code, emp_id`, p);
       res.json(r.rows);
     }
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── 取得部門清單（供指標設定 Modal 選擇套用對象）──
+// ── 取得部門清單 ──
 router.get('/bonus/departments', async (req, res) => {
   const { period } = req.query;
   if (!period) return res.status(400).json({ error: 'period 為必填' });
   const f = activeFilter(period, 2);
   try {
-    const r = await pool.query(`
-      SELECT DISTINCT dept_code, dept_name, factory
-      FROM staff_roster WHERE period=$1 ${f.cond}
-      ORDER BY factory NULLS LAST, dept_code
-    `, [period, f.param]);
+    const r = await pool.query(`SELECT DISTINCT dept_code, dept_name, factory FROM staff_roster WHERE period=$1 ${f.cond} ORDER BY factory NULLS LAST, dept_code`, [period, f.param]);
     res.json(r.rows);
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
