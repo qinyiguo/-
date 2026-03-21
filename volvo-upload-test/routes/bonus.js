@@ -454,7 +454,8 @@ router.get('/bonus/progress', async (req, res) => {
   if (!period) return res.status(400).json({ error: 'period 為必填' });
   try {
     const metrics = (await pool.query(`SELECT * FROM bonus_metrics ORDER BY sort_order, id`)).rows;
-    const targets = (await pool.query(`SELECT * FROM bonus_targets WHERE period=$1`, [period])).rows;
+    // 目標也從 actualPeriod（上月）取，因為獎金是根據上月的目標設定計算
+    const targets = (await pool.query(`SELECT * FROM bonus_targets WHERE period=$1`, [actualPeriod])).rows;
     const results = [];
 
     for (const m of metrics) {
@@ -462,7 +463,7 @@ router.get('/bonus/progress', async (req, res) => {
       let actual = null;
       let perfTarget = null;
 
-      // ── 連結營收目標（實績從 actualPeriod 取）──
+      // ── 連結營收目標（目標和實績都從 actualPeriod 取）──
       if (m.metric_source === 'revenue') {
         const branchF = filters.find(f=>f.type==='branch')?.value || null;
         const revType = filters.find(f=>f.type==='revenue_type')?.value || 'paid';
@@ -471,10 +472,10 @@ router.get('/bonus/progress', async (req, res) => {
           : branchF;
         try {
           actual     = await computeRevenueActual(actualPeriod, effectiveBranch, revType);
-          perfTarget = await getRevenueTarget(period, effectiveBranch, revType); // 目標仍用 period
+          perfTarget = await getRevenueTarget(actualPeriod, effectiveBranch, revType); // 目標也用 actualPeriod
         } catch(e) { actual = null; }
 
-      // ── 連結業績指標（實績從 actualPeriod 取）──
+      // ── 連結業績指標（目標和實績都從 actualPeriod 取）──
       } else if (m.metric_source === 'performance') {
         const perfMetricId = filters.find(f => f.type === 'perf_metric_id')?.value;
         if (perfMetricId) {
@@ -483,7 +484,8 @@ router.get('/bonus/progress', async (req, res) => {
             if (perfMetric) {
               actual = await computePerfActual(perfMetric, actualPeriod, factory && ['AMA','AMC','AMD'].includes(factory) ? factory : null);
               const perfBranch = factory && ['AMA','AMC','AMD'].includes(factory) ? factory : 'AMA';
-              const tRes = await pool.query(`SELECT target_value FROM performance_targets WHERE metric_id=$1 AND period=$2 AND branch=$3`, [perfMetricId, period, perfBranch]);
+              // 目標也用 actualPeriod
+              const tRes = await pool.query(`SELECT target_value FROM performance_targets WHERE metric_id=$1 AND period=$2 AND branch=$3`, [perfMetricId, actualPeriod, perfBranch]);
               perfTarget = tRes.rows[0]?.target_value || null;
             }
           } catch(e) { actual = null; }
