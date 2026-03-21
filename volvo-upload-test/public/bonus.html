@@ -464,8 +464,10 @@ document.addEventListener('keydown', e => {
 
 function switchTab(tab) {
   ['roster','metrics','progress'].forEach(t=>{
-    document.getElementById('tab-'+t).style.display=t===tab?'':'none';
-    document.getElementById('tab-btn-'+t).classList.toggle('active',t===tab);
+    const el=document.getElementById('tab-'+t);
+    if(el) el.style.display=t===tab?'':'none';
+    const btn=document.getElementById('tab-btn-'+t);
+    if(btn) btn.classList.toggle('active',t===tab);
   });
   if (tab==='metrics')  loadMetrics();
   if (tab==='progress') loadProgress();
