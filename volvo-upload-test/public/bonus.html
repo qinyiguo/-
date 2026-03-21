@@ -145,7 +145,7 @@ body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background:
     <div class="tab-bar">
       <button class="tab-btn active" id="tab-btn-roster"   onclick="switchTab('roster')">👥 人員名單</button>
       <button class="tab-btn"        id="tab-btn-metrics"  onclick="switchTab('metrics')">⚙️ 獎金設定</button>
-      <button class="tab-btn"        id="tab-btn-progress" onclick="switchTab('progress')">📊 獎金進度</button>
+      <button class="tab-btn"        id="tab-btn-progress" onclick="switchTab('progress')">💰 獎金名單</button>
     </div>
   </div>
 </div>
@@ -628,6 +628,15 @@ function toggleSection(id) {
   if (!body) return;
   const isOpen=body.classList.toggle('open');
   if (arrow) arrow.style.transform=isOpen?'rotate(90deg)':'rotate(0deg)';
+}
+
+function toggleBonusSection(id) {
+  const body  = document.getElementById(id + '-body');
+  const arrow = document.getElementById(id + '-arrow');
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (arrow) arrow.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
 }
 
 // ══ 員工廠別調整 ══
@@ -1256,112 +1265,140 @@ async function renderProgressContent() {
         </div>`;
       }
 
-      // 人員獎金明細
+      // ── 人員獎金明細（永遠從名冊展開，不管有沒有設目標）──
       let tableHtml = '';
-      const isDepth = m.scope_type==='dept';
+      const isDepth = m.scope_type === 'dept';
 
-      if (!targets.length) {
-        const periodLabel = `${_period.slice(0,4)}年${parseInt(_period.slice(4))}月`;
-        tableHtml=`<div style="background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:14px 18px">
-          <div style="font-size:13px;font-weight:700;color:#f59e0b;margin-bottom:6px">⚠️ 尚未在 ${periodLabel} 設定人員目標</div>
-          <div style="font-size:12px;color:#64748b;line-height:1.9">
-            請至「⚙️ 獎金設定」頁籤 → 找到此指標 → 點擊「🎯 目標」→ 填入目標後儲存。<br>
-            <span style="color:#475569">目標設定在<strong style="color:#e2e8f0"> ${periodLabel}（${_period}）</strong>（名冊期間），實績則取自目前選擇的「實績期間」。</span>
-          </div>
-        </div>`;
+      // 決定要展開哪些人：有 target_dept_codes 則過濾，否則全部
+      const deptCodeFilter = (m.target_dept_codes || []);
+      const relevantRoster = deptCodeFilter.length
+        ? _rosterData.filter(r => deptCodeFilter.includes(r.dept_code))
+        : _rosterData;
+
+      if (!relevantRoster.length) {
+        tableHtml = `<div style="background:rgba(100,116,139,.06);border:1px solid rgba(100,116,139,.2);border-radius:8px;padding:12px 16px;font-size:13px;color:#64748b">尚無人員名冊資料，請先上傳人員資料。</div>`;
       } else {
-        const byDept = {};
+        // targets map：部門或個人 → target row
+        const tgtMapDept = {}, tgtMapEmp = {};
         for (const t of targets) {
-          let members=[], deptRate=null, deptTgt=null;
-          if (isDepth) {
-            members  = _rosterData.filter(r=>r.dept_code===t.dept_code);
-            deptTgt  = useAuto ? autoPT : parseFloat(t.target_value||0);
-            deptRate = useAuto ? autoRate : (deptTgt>0&&actual!==null?actual/deptTgt*100:null);
-          } else {
-            const emp=_rosterData.find(r=>r.emp_id===t.emp_id);
-            members  = emp?[emp]:[{emp_id:t.emp_id,emp_name:t.emp_id||'—',job_title:'',dept_name:'',factory:'其他'}];
-            deptTgt  = useAuto ? autoPT : parseFloat(t.target_value||0);
-            deptRate = useAuto ? autoRate : (deptTgt>0&&actual!==null?actual/deptTgt*100:null);
-          }
-          const fc  = members[0]?.factory||'其他';
-          const dn  = members[0]?.dept_name||t.dept_code||'—';
-          const key = `${fc}|||${t.dept_code||t.emp_id}`;
-          if (!byDept[key]) byDept[key]={factory:fc,dept_name:dn,rate:deptRate,tgt:deptTgt,note:t.note||'',members:[]};
-          for (const emp of members) {
-            byDept[key].members.push({emp, bonus:calcBonus(deptRate,emp.job_title||'',tiers,roles), rate:deptRate});
-          }
+          if (t.dept_code) tgtMapDept[t.dept_code] = t;
+          if (t.emp_id)    tgtMapEmp[t.emp_id]     = t;
         }
 
-        const sortedDepts=Object.values(byDept).sort((a,b)=>{
-          const ai=FC_ORDER.indexOf(a.factory),bi=FC_ORDER.indexOf(b.factory);
-          return (ai<0?99:ai)-(bi<0?99:bi);
+        // ── 按廠別 → 部門 兩層分組 ──
+        const FC_BRANCH_ORDER = ['售後服務處','AMA','AMC','AMD','聯合','鈑烤','零件','其他'];
+        const byFactory = {};
+        for (const emp of relevantRoster) {
+          const fc = emp.factory || '其他';
+          if (!byFactory[fc]) byFactory[fc] = {};
+          const dk = emp.dept_code || '—';
+          if (!byFactory[fc][dk]) byFactory[fc][dk] = { dept_name: emp.dept_name || dk, members: [] };
+          // 取得此人的達成率和獎金
+          let rate = null, tgt = null, empBonus = 0;
+          if (isDepth) {
+            // 部門目標：整個部門共用同一個 target
+            const t = tgtMapDept[emp.dept_code];
+            tgt  = t ? parseFloat(t.target_value || 0) : null;
+            rate = useAuto ? autoRate : (tgt && tgt > 0 && actual !== null ? actual / tgt * 100 : null);
+          } else {
+            const t = tgtMapEmp[emp.emp_id];
+            tgt  = t ? parseFloat(t.target_value || 0) : null;
+            rate = useAuto ? autoRate : (tgt && tgt > 0 && actual !== null ? actual / tgt * 100 : null);
+          }
+          empBonus = calcBonus(rate, emp.job_title || '', tiers, roles);
+          byFactory[fc][dk].members.push({ emp, rate, tgt, bonus: empBonus });
+        }
+
+        const thSt = 'text-align:left;padding:8px 10px;background:#0f172a;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;white-space:nowrap;';
+        const thR  = thSt + 'text-align:right;';
+        let grandBonus = 0, grandPpl = 0, totalPpl = 0;
+        tableHtml = '<div>';
+
+        const sortedFactories = Object.keys(byFactory).sort((a,b) => {
+          const ai = FC_BRANCH_ORDER.indexOf(a), bi = FC_BRANCH_ORDER.indexOf(b);
+          return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
         });
 
-        const thSt='text-align:left;padding:8px 10px;background:#0f172a;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;white-space:nowrap;';
-        const thR=thSt+'text-align:right;';
-        let grandBonus=0,grandPpl=0,totalPpl=0;
-        tableHtml='<div>';
+        for (const fc of sortedFactories) {
+          const col       = FC_COLORS[fc] || '#94a3b8';
+          const depts     = byFactory[fc];
+          const fcMembers = Object.values(depts).flatMap(d => d.members);
+          const fcBonus   = fcMembers.reduce((s, r) => s + r.bonus, 0);
+          const fcPpl     = fcMembers.filter(r => r.bonus > 0).length;
+          grandBonus += fcBonus; grandPpl += fcPpl; totalPpl += fcMembers.length;
 
-        for (const dept of sortedDepts) {
-          const col    = FC_COLORS[dept.factory]||'#94a3b8';
-          const deptB  = dept.members.reduce((s,r)=>s+r.bonus,0);
-          const deptPpl= dept.members.filter(r=>r.bonus>0).length;
-          const rate   = dept.rate;
-          const rc     = rate===null?'#64748b':rate>=100?'#10b981':rate>=80?'#f59e0b':'#ef4444';
-          grandBonus+=deptB; grandPpl+=deptPpl; totalPpl+=dept.members.length;
+          // 廠別標題列（可折疊）
+          const fcId = `fc-bonus-${fc.replace(/\s/g,'_')}`;
+          tableHtml += `
+            <div style="margin-bottom:12px;border:1px solid ${col}44;border-radius:10px;overflow:hidden">
+              <div style="background:${col}18;padding:10px 16px;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none" onclick="toggleBonusSection('${fcId}')">
+                <span id="${fcId}-arrow" style="font-size:10px;color:${col};transform:rotate(90deg);display:inline-block;transition:transform .2s">▶</span>
+                <span style="font-size:14px;font-weight:800;color:${col}">${fc}</span>
+                <span style="font-size:11px;color:#64748b">${fcMembers.length} 人</span>
+                ${fcPpl > 0 ? `<span style="font-size:11px;color:#10b981;background:rgba(16,185,129,.1);padding:1px 7px;border-radius:10px">${fcPpl} 人有獎金</span>` : ''}
+                <span style="margin-left:auto;font-size:15px;font-weight:800;color:${fcBonus > 0 ? '#f59e0b' : '#475569'}">${fcBonus > 0 ? fcBonus.toLocaleString() + ' 元' : '—'}</span>
+              </div>
+              <div id="${fcId}-body" style="display:block">`;
 
-          tableHtml+=`<div style="margin-bottom:10px;border:1px solid ${col}33;border-radius:8px;overflow:hidden">
-            <div style="background:${col}14;padding:9px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <span style="font-size:13px;font-weight:800;color:${col}">${dept.factory}</span>
-              <span style="font-size:12px;color:#94a3b8">${dept.dept_name}</span>
-              <span style="font-size:11px;color:#64748b">${dept.members.length}人</span>
-              ${rate!==null?`<div style="display:flex;align-items:center;gap:5px">
-                <div style="width:50px;background:#0f172a;border-radius:3px;height:4px"><div style="width:${Math.min(100,rate).toFixed(0)}%;height:4px;background:${rc};border-radius:3px"></div></div>
-                <span style="font-size:12px;font-weight:800;color:${rc}">${rate.toFixed(1)}%</span>
-                ${isDepth&&dept.tgt>0?`<span style="font-size:11px;color:#475569">目標 ${fmtV(dept.tgt)}</span>`:''}
-              </div>`:''}
-              ${deptPpl>0?`<span style="font-size:11px;color:#10b981;background:rgba(16,185,129,.1);padding:1px 7px;border-radius:10px">${deptPpl}人有獎金</span>`:''}
-              <span style="margin-left:auto;font-size:14px;font-weight:800;color:${deptB>0?'#f59e0b':'#475569'}">${deptB>0?deptB.toLocaleString()+' 元':'—'}</span>
-            </div>
-            <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
-              <thead><tr>
-                <th style="${thSt}min-width:75px">姓名</th>
-                <th style="${thSt}">職務</th>
-                ${!isDepth&&!useAuto?`<th style="${thR}min-width:85px">目標(${unit})</th>`:''}
-                <th style="${thSt}min-width:120px">達成率</th>
-                <th style="${thR}min-width:100px;background:rgba(245,158,11,.05)">🏆 應得獎金</th>
-              </tr></thead>
-              <tbody>`;
+          // 各部門
+          const sortedDepts = Object.keys(depts).sort();
+          for (const dk of sortedDepts) {
+            const dept    = depts[dk];
+            const deptB   = dept.members.reduce((s, r) => s + r.bonus, 0);
+            const deptPpl = dept.members.filter(r => r.bonus > 0).length;
+            // 部門達成率：取第一個有 rate 的成員的 rate（同部門共用）
+            const deptRate = dept.members.find(r => r.rate !== null)?.rate ?? null;
+            const rc = deptRate === null ? '#64748b' : deptRate >= 100 ? '#10b981' : deptRate >= 80 ? '#f59e0b' : '#ef4444';
+            const hasTgt   = isDepth ? !!tgtMapDept[dk] : dept.members.some(r => r.tgt !== null);
 
-          const sorted=[...dept.members].sort((a,b)=>b.bonus-a.bonus);
-          for (const {emp,bonus,rate:r} of sorted) {
-            const rc2=r===null?'#64748b':r>=100?'#10b981':r>=80?'#f59e0b':'#ef4444';
-            const bw2=r!==null?Math.min(100,r).toFixed(0):0;
-            tableHtml+=`<tr>
-              <td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.25);font-weight:700;color:#e2e8f0">${emp.emp_name||'—'}</td>
-              <td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.25);color:#64748b">${emp.job_title||'—'}</td>
-              ${!isDepth&&!useAuto?`<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.25);text-align:right;color:#94a3b8">${fmtV(dept.tgt)}</td>`:''}
-              <td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.25)">
-                ${r!==null?`<div style="display:flex;align-items:center;gap:6px"><div style="width:55px;background:#0f172a;border-radius:3px;height:5px;flex-shrink:0"><div style="width:${bw2}%;height:5px;background:${rc2};border-radius:3px"></div></div><span style="color:${rc2};font-weight:800">${r.toFixed(1)}%</span></div>`:'<span style="color:#475569">—</span>'}
-              </td>
-              <td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.25);text-align:right;background:rgba(245,158,11,.03)">
-                ${bonus>0?`<span style="color:#f59e0b;font-weight:900;font-size:15px">${bonus.toLocaleString()}<span style="font-size:10px;margin-left:1px">元</span></span>`:'<span style="color:#334155">0 元</span>'}
-              </td>
-            </tr>`;
+            tableHtml += `
+              <div style="border-top:1px solid ${col}22">
+                <div style="background:#0c1524;padding:8px 16px 8px 32px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span style="font-size:12px;font-weight:700;color:#94a3b8">${dept.dept_name}</span>
+                  <span style="font-size:11px;color:#475569">${dk}</span>
+                  <span style="font-size:11px;color:#64748b">${dept.members.length}人</span>
+                  ${deptRate !== null ? `<div style="display:flex;align-items:center;gap:5px">
+                    <div style="width:45px;background:#0f172a;border-radius:2px;height:4px"><div style="width:${Math.min(100,deptRate).toFixed(0)}%;height:4px;background:${rc};border-radius:2px"></div></div>
+                    <span style="font-size:12px;font-weight:800;color:${rc}">${deptRate.toFixed(1)}%</span>
+                  </div>` : (!hasTgt ? `<span style="font-size:10px;color:#475569;background:rgba(100,116,139,.1);padding:1px 6px;border-radius:4px">尚未設目標</span>` : '')}
+                  ${deptPpl > 0 ? `<span style="font-size:11px;color:#10b981">${deptPpl}人有獎金</span>` : ''}
+                  <span style="margin-left:auto;font-size:13px;font-weight:800;color:${deptB > 0 ? '#f59e0b' : '#475569'}">${deptB > 0 ? deptB.toLocaleString() + ' 元' : '—'}</span>
+                </div>
+                <div style="overflow-x:auto">
+                  <table style="width:100%;border-collapse:collapse;font-size:12px">
+                    <thead><tr>
+                      <th style="${thSt}min-width:70px;padding-left:32px">姓名</th>
+                      <th style="${thSt}">職務</th>
+                      ${!useAuto ? `<th style="${thR}min-width:80px">目標(${unit})</th>` : ''}
+                      <th style="${thSt}min-width:110px">達成率</th>
+                      <th style="${thR}min-width:95px;background:rgba(245,158,11,.04)">🏆 應得獎金</th>
+                    </tr></thead>
+                    <tbody>`;
+
+            const sorted = [...dept.members].sort((a, b) => b.bonus - a.bonus);
+            for (const { emp, rate: r, tgt: tv, bonus } of sorted) {
+              const rc2 = r === null ? '#64748b' : r >= 100 ? '#10b981' : r >= 80 ? '#f59e0b' : '#ef4444';
+              const bw2 = r !== null ? Math.min(100, r).toFixed(0) : 0;
+              tableHtml += `<tr>
+                <td style="padding:7px 10px 7px 32px;border-bottom:1px solid rgba(45,63,86,.2);font-weight:700;color:#e2e8f0">${emp.emp_name || '—'}</td>
+                <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.2);color:#64748b">${emp.job_title || '—'}</td>
+                ${!useAuto ? `<td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.2);text-align:right;color:${tv ? '#94a3b8' : '#334155'}">${tv ? fmtV(tv) : '—'}</td>` : ''}
+                <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.2)">
+                  ${r !== null ? `<div style="display:flex;align-items:center;gap:5px"><div style="width:50px;background:#0f172a;border-radius:3px;height:5px;flex-shrink:0"><div style="width:${bw2}%;height:5px;background:${rc2};border-radius:3px"></div></div><span style="color:${rc2};font-weight:800">${r.toFixed(1)}%</span></div>` : '<span style="color:#334155;font-size:11px">—</span>'}
+                </td>
+                <td style="padding:7px 10px;border-bottom:1px solid rgba(45,63,86,.2);text-align:right;background:rgba(245,158,11,.03)">
+                  ${bonus > 0 ? `<span style="color:#f59e0b;font-weight:900;font-size:14px">${bonus.toLocaleString()}<span style="font-size:10px;margin-left:1px">元</span></span>` : '<span style="color:#334155">0 元</span>'}
+                </td>
+              </tr>`;
+            }
+            tableHtml += `</tbody></table></div></div>`;
           }
-
-          tableHtml+=`<tr style="background:${col}0d">
-            <td colspan="${!isDepth&&!useAuto?4:3}" style="padding:7px 10px;font-size:12px;font-weight:700;color:${col}">
-              ${dept.dept_name} 小計（${dept.members.length}人 / ${deptPpl}人有獎金）
-            </td>
-            <td style="padding:7px 10px;text-align:right;background:rgba(245,158,11,.07)">
-              <span style="color:#f59e0b;font-weight:900;font-size:14px">${deptB>0?deptB.toLocaleString()+' 元':'—'}</span>
-            </td>
-          </tr></tbody></table></div></div>`;
+          tableHtml += `</div></div>`; // close fc body + fc block
         }
 
-        if (grandBonus>0) {
-          tableHtml+=`<div style="background:linear-gradient(135deg,rgba(245,158,11,.12),rgba(245,158,11,.05));border:1px solid rgba(245,158,11,.35);border-radius:10px;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:6px">
+        // 全員合計
+        if (grandBonus > 0) {
+          tableHtml += `<div style="background:linear-gradient(135deg,rgba(245,158,11,.12),rgba(245,158,11,.05));border:1px solid rgba(245,158,11,.35);border-radius:10px;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:6px">
             <div>
               <div style="font-size:11px;color:#94a3b8;margin-bottom:2px">🏆 ${m.metric_name}　${actLabel} 獎金合計</div>
               <div style="font-size:12px;color:#64748b">${grandPpl} / ${totalPpl} 人有獎金</div>
@@ -1369,7 +1406,7 @@ async function renderProgressContent() {
             <div style="font-size:30px;font-weight:900;color:#f59e0b;margin-left:auto">${grandBonus.toLocaleString()}<span style="font-size:15px;font-weight:600;margin-left:3px">元</span></div>
           </div>`;
         }
-        tableHtml+='</div>';
+        tableHtml += '</div>';
       }
 
       html+=`<div class="card" style="margin-bottom:14px">
@@ -1431,3 +1468,129 @@ checkAuth();
 </script>
 </body>
 </html>
+      // ── 人員獎金明細（廠別→部門 兩層巢狀）──
+      let tableHtml = '';
+      const isDepth = m.scope_type==='dept';
+
+      if (!targets.length) {
+        tableHtml=`<div style="background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:14px 18px">
+          <div style="font-size:13px;font-weight:700;color:#f59e0b;margin-bottom:6px">⚠️ 尚未設定人員目標</div>
+          <div style="font-size:12px;color:#64748b;line-height:1.9">
+            請至「⚙️ 獎金設定」頁籤 → 找到此指標 → 點擊「🎯 目標」→ 填入目標後儲存。
+          </div>
+        </div>`;
+      } else {
+        // ── byFactory[廠別] → depts[部門key] → members[] ──
+        const byFactory = {};
+        for (const t of targets) {
+          let members=[], deptRate=null, deptTgt=null;
+          if (isDepth) {
+            members  = _rosterData.filter(r=>r.dept_code===t.dept_code);
+            deptTgt  = useAuto ? autoPT : parseFloat(t.target_value||0);
+            deptRate = useAuto ? autoRate : (deptTgt>0&&actual!==null?actual/deptTgt*100:null);
+          } else {
+            const emp=_rosterData.find(r=>r.emp_id===t.emp_id);
+            members  = emp?[emp]:[{emp_id:t.emp_id,emp_name:t.emp_id||'—',job_title:'',dept_name:'',dept_code:t.dept_code||'',factory:'其他'}];
+            deptTgt  = useAuto ? autoPT : parseFloat(t.target_value||0);
+            deptRate = useAuto ? autoRate : (deptTgt>0&&actual!==null?actual/deptTgt*100:null);
+          }
+          const fc   = members[0]?.factory || '其他';
+          const dn   = members[0]?.dept_name || t.dept_code || '—';
+          const dkey = t.dept_code||t.emp_id||dn;
+          if (!byFactory[fc]) byFactory[fc] = { color: FC_COLORS[fc]||'#94a3b8', depts: {} };
+          if (!byFactory[fc].depts[dkey]) byFactory[fc].depts[dkey] = { dept_name:dn, rate:deptRate, tgt:deptTgt, members:[] };
+          for (const emp of members) {
+            byFactory[fc].depts[dkey].members.push({emp, bonus:calcBonus(deptRate,emp.job_title||'',tiers,roles), rate:deptRate});
+          }
+        }
+
+        const sortedFactories = Object.entries(byFactory).sort(([a],[b])=>{
+          return (FC_ORDER.indexOf(a)<0?99:FC_ORDER.indexOf(a)) - (FC_ORDER.indexOf(b)<0?99:FC_ORDER.indexOf(b));
+        });
+
+        const thSt='text-align:left;padding:7px 10px;background:#0c1524;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;white-space:nowrap;';
+        const thR=thSt+'text-align:right;';
+        let grandBonus=0, grandPpl=0, totalPpl=0;
+        tableHtml='<div>';
+
+        for (const [fcName, fcData] of sortedFactories) {
+          const col    = fcData.color;
+          const allD   = Object.values(fcData.depts);
+          const fcB    = allD.reduce((s,d)=>s+d.members.reduce((ss,r)=>ss+r.bonus,0),0);
+          const fcPpl  = allD.reduce((s,d)=>s+d.members.filter(r=>r.bonus>0).length,0);
+          const fcTot  = allD.reduce((s,d)=>s+d.members.length,0);
+          grandBonus+=fcB; grandPpl+=fcPpl; totalPpl+=fcTot;
+
+          tableHtml+=`<div style="margin-bottom:12px;border:2px solid ${col}55;border-radius:10px;overflow:hidden">
+            <div style="background:linear-gradient(135deg,${col}22,${col}0a);padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <span style="font-size:15px;font-weight:900;color:${col}">▍${fcName}</span>
+              <span style="font-size:11px;color:#64748b">${fcTot}人</span>
+              ${fcPpl>0?`<span style="font-size:11px;color:#10b981;background:rgba(16,185,129,.1);padding:1px 8px;border-radius:10px;font-weight:700">${fcPpl}人有獎金</span>`:''}
+              <span style="margin-left:auto;font-size:15px;font-weight:900;color:${fcB>0?'#f59e0b':'#475569'}">${fcB>0?fcB.toLocaleString()+' 元':'—'}</span>
+            </div>`;
+
+          const sortedDepts = Object.entries(fcData.depts).sort(([,a],[,b])=>a.dept_name.localeCompare(b.dept_name,'zh-TW'));
+          for (const [dkey, dept] of sortedDepts) {
+            const dB   = dept.members.reduce((s,r)=>s+r.bonus,0);
+            const dPpl = dept.members.filter(r=>r.bonus>0).length;
+            const rate = dept.rate;
+            const rc   = rate===null?'#64748b':rate>=100?'#10b981':rate>=80?'#f59e0b':'#ef4444';
+            const bw   = rate!==null?Math.min(100,rate).toFixed(0):0;
+
+            tableHtml+=`<div style="border-top:1px solid ${col}22">
+              <div style="background:${col}0a;padding:7px 16px 7px 26px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span style="color:#475569;font-size:11px">└</span>
+                <span style="font-size:12px;font-weight:800;color:${col}cc">${dept.dept_name}</span>
+                <span style="font-size:11px;color:#64748b">${dept.members.length}人</span>
+                ${rate!==null?`<div style="display:flex;align-items:center;gap:4px">
+                  <div style="width:40px;background:#0f172a;border-radius:3px;height:4px"><div style="width:${bw}%;height:4px;background:${rc};border-radius:3px"></div></div>
+                  <span style="font-size:11px;font-weight:800;color:${rc}">${rate.toFixed(1)}%</span>
+                  ${isDepth&&dept.tgt>0?`<span style="font-size:10px;color:#475569">目標 ${fmtV(dept.tgt)}</span>`:''}
+                </div>`:''}
+                ${dPpl>0?`<span style="font-size:11px;color:#10b981;background:rgba(16,185,129,.08);padding:1px 6px;border-radius:8px">${dPpl}人有獎金</span>`:''}
+                <span style="margin-left:auto;font-size:13px;font-weight:800;color:${dB>0?'#f59e0b':'#475569'}">${dB>0?dB.toLocaleString()+' 元':'—'}</span>
+              </div>
+              <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+                <thead><tr>
+                  <th style="${thSt}padding-left:30px;min-width:75px">姓名</th>
+                  <th style="${thSt}">職務</th>
+                  ${!isDepth&&!useAuto?`<th style="${thR}min-width:75px">目標(${unit})</th>`:''}
+                  <th style="${thSt}min-width:100px">達成率</th>
+                  <th style="${thR}min-width:90px;background:rgba(245,158,11,.04)">🏆 獎金</th>
+                </tr></thead><tbody>`;
+
+            for (const {emp,bonus,rate:r} of [...dept.members].sort((a,b)=>b.bonus-a.bonus)) {
+              const rc2=r===null?'#64748b':r>=100?'#10b981':r>=80?'#f59e0b':'#ef4444';
+              const bw2=r!==null?Math.min(100,r).toFixed(0):0;
+              tableHtml+=`<tr>
+                <td style="padding:6px 10px 6px 30px;border-bottom:1px solid rgba(45,63,86,.2);font-weight:700;color:#e2e8f0">${emp.emp_name||'—'}</td>
+                <td style="padding:6px 10px;border-bottom:1px solid rgba(45,63,86,.2);color:#64748b">${emp.job_title||'—'}</td>
+                ${!isDepth&&!useAuto?`<td style="padding:6px 10px;border-bottom:1px solid rgba(45,63,86,.2);text-align:right;color:#94a3b8">${fmtV(dept.tgt)}</td>`:''}
+                <td style="padding:6px 10px;border-bottom:1px solid rgba(45,63,86,.2)">
+                  ${r!==null?`<div style="display:flex;align-items:center;gap:5px"><div style="width:44px;background:#0f172a;border-radius:3px;height:4px;flex-shrink:0"><div style="width:${bw2}%;height:4px;background:${rc2};border-radius:3px"></div></div><span style="color:${rc2};font-weight:800;font-size:12px">${r.toFixed(1)}%</span></div>`:'<span style="color:#334155">—</span>'}
+                </td>
+                <td style="padding:6px 10px;border-bottom:1px solid rgba(45,63,86,.2);text-align:right;background:rgba(245,158,11,.02)">
+                  ${bonus>0?`<span style="color:#f59e0b;font-weight:900;font-size:14px">${bonus.toLocaleString()}<span style="font-size:10px;margin-left:1px">元</span></span>`:`<span style="color:#334155;font-size:11px">0 元</span>`}
+                </td>
+              </tr>`;
+            }
+            tableHtml+=`</tbody></table></div></div>`;
+          }
+          tableHtml+=`<div style="background:${col}12;border-top:1px solid ${col}33;padding:7px 16px;display:flex;align-items:center;gap:8px">
+            <span style="font-size:12px;font-weight:700;color:${col}">${fcName} 合計</span>
+            <span style="font-size:11px;color:#64748b">${fcTot}人　${fcPpl}人有獎金</span>
+            <span style="margin-left:auto;font-size:14px;font-weight:900;color:${fcB>0?'#f59e0b':'#475569'}">${fcB>0?fcB.toLocaleString()+' 元':'—'}</span>
+          </div></div>`;
+        }
+
+        if (grandBonus>0) {
+          tableHtml+=`<div style="background:linear-gradient(135deg,rgba(245,158,11,.14),rgba(245,158,11,.06));border:1px solid rgba(245,158,11,.4);border-radius:10px;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:8px">
+            <div>
+              <div style="font-size:11px;color:#94a3b8;margin-bottom:2px">🏆 ${m.metric_name}　${actLabel} 獎金總計</div>
+              <div style="font-size:12px;color:#64748b">${grandPpl} / ${totalPpl} 人有獎金</div>
+            </div>
+            <div style="font-size:32px;font-weight:900;color:#f59e0b;margin-left:auto">${grandBonus.toLocaleString()}<span style="font-size:15px;font-weight:600;margin-left:3px">元</span></div>
+          </div>`;
+        }
+        tableHtml+='</div>';
+      }
