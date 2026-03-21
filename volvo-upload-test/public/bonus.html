@@ -1138,26 +1138,26 @@ async function loadProgress() {
       const isAmt=m.stat_field==='amount';
       const fmtV=v=>v===null||v===undefined?'—':isAmt?fmtK(v):Math.round(parseFloat(v)).toLocaleString();
       const SCOPE_LABEL={person:'👤 個人',dept:'🏢 部門',factory:'🏭 廠別'};
-      html+=`<div class="card">
-        <div class="card-title">
-          ${m.metric_name}
-          <span class="badge badge-purple">${SCOPE_LABEL[m.scope_type]||m.scope_type}</span>
-          ${actual!==null?`<span style="font-size:11px;color:#64748b;margin-left:auto">DMS 實際：<strong style="color:#10b981">${fmtV(actual)}</strong></span>`:''}
-        </div>
-        ${(() => {
-          const rule = m.bonus_rule || {};
-          const tiers = rule.tiers || [];
-          if (!tiers.length && !rule.description) return '';
-          if (tiers.length) {
-            const rows = [...tiers].sort((a,b)=>b.gte-a.gte).map(t=>{
-              const range = t.lt !== null ? `≥${t.gte}% 且 <${t.lt}%` : `≥${t.gte}%`;
-              return `<span style="white-space:nowrap"><strong style="color:#3b82f6">${range}</strong> → <strong style="color:#10b981">${Math.round(t.amount).toLocaleString()} 元</strong></span>`;
-            }).join('<span style="color:#475569;margin:0 6px">｜</span>');
-            const note = rule.note ? `<div style="color:#64748b;font-size:11px;margin-top:4px">📌 ${rule.note}</div>` : '';
-            return `<div style="font-size:12px;background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.2);border-radius:7px;padding:8px 12px;margin-bottom:12px;line-height:2">🏆 ${rows}${note}</div>`;
-          }
-          return `<div style="font-size:12px;color:#8b5cf6;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.2);border-radius:7px;padding:8px 12px;margin-bottom:12px">📋 ${rule.description}</div>`;
-        })()}
+      // 先計算獎金規則 HTML，避免 template literal 巢狀衝突
+      const rule = m.bonus_rule || {};
+      const tiers = rule.tiers || [];
+      let ruleHtml = '';
+      if (tiers.length) {
+        const tierRows = [...tiers].sort((a,b)=>b.gte-a.gte).map(t=>{
+          const range = t.lt !== null ? '\u2265'+t.gte+'% \u4e14 <'+t.lt+'%' : '\u2265'+t.gte+'%';
+          return '<span style="white-space:nowrap"><strong style="color:#3b82f6">'+range+'</strong> \u2192 <strong style="color:#10b981">'+Math.round(t.amount).toLocaleString()+' \u5143</strong></span>';
+        }).join('<span style="color:#475569;margin:0 6px">\uff5c</span>');
+        const noteHtml = rule.note ? '<div style="color:#64748b;font-size:11px;margin-top:4px">\ud83d\udccc '+rule.note+'</div>' : '';
+        ruleHtml = '<div style="font-size:12px;background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.2);border-radius:7px;padding:8px 12px;margin-bottom:12px;line-height:2">\ud83c\udfc6 '+tierRows+noteHtml+'</div>';
+      } else if (rule.description) {
+        ruleHtml = '<div style="font-size:12px;color:#8b5cf6;background:rgba(139,92,246,.08);border:1px solid rgba(139,92,246,.2);border-radius:7px;padding:8px 12px;margin-bottom:12px">\ud83d\udccb '+rule.description+'</div>';
+      }
+      html+='<div class="card">';
+      html+='<div class="card-title">'+m.metric_name;
+      html+='<span class="badge badge-purple">'+(SCOPE_LABEL[m.scope_type]||m.scope_type)+'</span>';
+      if (actual!==null) html+='<span style="font-size:11px;color:#64748b;margin-left:auto">DMS \u5be6\u969b\uff1a<strong style="color:#10b981">'+fmtV(actual)+'</strong></span>';
+      html+='</div>';
+      html+=ruleHtml;
       if (!targets.length) {
         html+=`<div style="color:#64748b;font-size:13px;padding:8px 0">尚未設定目標，請點擊「🎯 目標」按鈕</div>`;
       } else {
