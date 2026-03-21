@@ -80,7 +80,6 @@ async function computePerfActual(metric, period, branch) {
             if(f.value.includes('-')){const[from,to]=f.value.split('-');return{type:'range',from:from.trim(),to:to.trim()};}
             return{type:'exact',value:f.value};
           });
-          const wc_conds=[];
           for (const wc of wcs) {
             if(wc.type==='range'){c.push(`work_code BETWEEN $${i++} AND $${i++}`);p.push(wc.from,wc.to);}
             else{c.push(`work_code=$${i++}`);p.push(wc.value);}
@@ -106,7 +105,6 @@ async function computePerfActual(metric, period, branch) {
 }
 
 // ── 計算營收目標實際值（有費/鈑烤/一般/延保）──
-// branch=null 表示集團三站合計
 async function computeRevenueActual(period, branch, revType) {
   const cfgRow = await pool.query(`SELECT config_value FROM income_config WHERE config_key='external_sales_category'`);
   const extCat = cfgRow.rows[0]?.config_value || '外賣';
@@ -447,9 +445,12 @@ router.delete('/bonus/targets/:id', async (req, res) => {
 
 // ══════════════════════════════════════════════
 // 獎金進度計算
+// ── 注意：period = 獎金發放月份（目標/名冊來源）
+//          actualPeriod = 實績計算月份（上個月的DMS數據）
 // ══════════════════════════════════════════════
 router.get('/bonus/progress', async (req, res) => {
-  const { period, factory } = req.query;
+  const { period, factory, data_period } = req.query;
+  const actualPeriod = data_period || period; // 實績期間（通常為上月），目標期間用 period
   if (!period) return res.status(400).json({ error: 'period 為必填' });
   try {
     const metrics = (await pool.query(`SELECT * FROM bonus_metrics ORDER BY sort_order, id`)).rows;
@@ -461,27 +462,26 @@ router.get('/bonus/progress', async (req, res) => {
       let actual = null;
       let perfTarget = null;
 
-      // ── 連結營收目標 ──
+      // ── 連結營收目標（實績從 actualPeriod 取）──
       if (m.metric_source === 'revenue') {
         const branchF = filters.find(f=>f.type==='branch')?.value || null;
         const revType = filters.find(f=>f.type==='revenue_type')?.value || 'paid';
-        // factory query param overrides metric branch if it's more specific
         const effectiveBranch = (factory && ['AMA','AMC','AMD'].includes(factory))
           ? factory
           : branchF;
         try {
-          actual     = await computeRevenueActual(period, effectiveBranch, revType);
-          perfTarget = await getRevenueTarget(period, effectiveBranch, revType);
+          actual     = await computeRevenueActual(actualPeriod, effectiveBranch, revType);
+          perfTarget = await getRevenueTarget(period, effectiveBranch, revType); // 目標仍用 period
         } catch(e) { actual = null; }
 
-      // ── 連結業績指標 ──
+      // ── 連結業績指標（實績從 actualPeriod 取）──
       } else if (m.metric_source === 'performance') {
         const perfMetricId = filters.find(f => f.type === 'perf_metric_id')?.value;
         if (perfMetricId) {
           try {
             const perfMetric = (await pool.query(`SELECT * FROM performance_metrics WHERE id=$1`, [perfMetricId])).rows[0];
             if (perfMetric) {
-              actual = await computePerfActual(perfMetric, period, factory && ['AMA','AMC','AMD'].includes(factory) ? factory : null);
+              actual = await computePerfActual(perfMetric, actualPeriod, factory && ['AMA','AMC','AMD'].includes(factory) ? factory : null);
               const perfBranch = factory && ['AMA','AMC','AMD'].includes(factory) ? factory : 'AMA';
               const tRes = await pool.query(`SELECT target_value FROM performance_targets WHERE metric_id=$1 AND period=$2 AND branch=$3`, [perfMetricId, period, perfBranch]);
               perfTarget = tRes.rows[0]?.target_value || null;
@@ -489,19 +489,19 @@ router.get('/bonus/progress', async (req, res) => {
           } catch(e) { actual = null; }
         }
 
-      // ── DMS 直接來源 ──
+      // ── DMS 直接來源（實績從 actualPeriod 取）──
       } else if (m.metric_source !== 'manual') {
         const branchF = factory && ['AMA','AMC','AMD'].includes(factory) ? factory : null;
         try {
           if (m.metric_source === 'repair_income') {
             const acTypes = filters.filter(f=>f.type==='account_type').map(f=>f.value);
-            const conds = [`period=$1`]; const p = [period]; let idx=2;
+            const conds = [`period=$1`]; const p = [actualPeriod]; let idx=2;
             if (branchF) { conds.push(`branch=$${idx++}`); p.push(branchF); }
             if (acTypes.length) { conds.push(`account_type=ANY($${idx++})`); p.push(acTypes); }
             const fld = m.stat_field==='count' ? 'COUNT(DISTINCT work_order)' : 'SUM(total_untaxed)';
             actual = parseFloat((await pool.query(`SELECT COALESCE(${fld},0) AS v FROM repair_income WHERE ${conds.join(' AND ')}`, p)).rows[0]?.v || 0);
           } else if (m.metric_source === 'tech_wage') {
-            const conds = [`period=$1`]; const p = [period]; let idx=2;
+            const conds = [`period=$1`]; const p = [actualPeriod]; let idx=2;
             if (branchF) { conds.push(`branch=$${idx++}`); p.push(branchF); }
             const workCodes = filters.filter(f=>f.type==='work_code').map(f=>f.value);
             for (const wc of workCodes) {
@@ -511,7 +511,7 @@ router.get('/bonus/progress', async (req, res) => {
             const fld = m.stat_field==='amount'?'SUM(wage)':m.stat_field==='hours'?'SUM(standard_hours)':'COUNT(DISTINCT work_order)';
             actual = parseFloat((await pool.query(`SELECT COALESCE(${fld},0) AS v FROM tech_performance WHERE ${conds.join(' AND ')}`, p)).rows[0]?.v || 0);
           } else if (m.metric_source === 'parts_sales') {
-            const conds = [`period=$1`]; const p = [period]; let idx=2;
+            const conds = [`period=$1`]; const p = [actualPeriod]; let idx=2;
             if (branchF) { conds.push(`branch=$${idx++}`); p.push(branchF); }
             const cc=filters.filter(f=>f.type==='category_code').map(f=>f.value);
             const pt=filters.filter(f=>f.type==='part_type').map(f=>f.value);
@@ -526,7 +526,7 @@ router.get('/bonus/progress', async (req, res) => {
       const myTargets = targets.filter(t => t.metric_id === m.id);
       results.push({ metric: m, targets: myTargets, actual, perfTarget });
     }
-    res.json({ results, period });
+    res.json({ results, period, actualPeriod });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
