@@ -273,6 +273,10 @@ body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background:
         <button class="btn btn-secondary btn-sm" onclick="clearAllDepts()">全部清除</button>
         <span id="mDeptCountLabel" style="font-size:12px;color:#64748b;align-self:center"></span>
       </div>
+      <div id="mJobTitleSuggestions" style="display:none;margin-top:10px;background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:10px 12px">
+        <div style="font-size:11px;color:#475569;font-weight:700;margin-bottom:6px">📋 已選部門現有職稱（點擊快速加入）</div>
+        <div id="mJobTitleChips" style="display:flex;flex-wrap:wrap;gap:5px"></div>
+      </div>
 
       <!-- 獎金規則 -->
       <div class="section-label">🏆 獎金規則（階梯設定）</div>
@@ -705,6 +709,7 @@ function toggleDeptChip(label, color) {
   if (cb.checked){ label.style.background=color+'22'; label.style.borderColor=color; label.style.color=color; label.classList.add('checked'); }
   else { label.style.background=''; label.style.borderColor=''; label.style.color=''; label.classList.remove('checked'); }
   updateDeptCount();
+  loadDeptJobTitles();
 }
 function updateDeptCount() {
   const cnt=document.querySelectorAll('#mDeptCheckboxWrap input[type=checkbox]:checked').length;
@@ -738,6 +743,7 @@ function addRoleVal(val) {
   if (_tierRoles.includes(val)) return;
   _tierRoles.push(val);
   renderRoleTags(); renderTierTable();
+  loadDeptJobTitles(); // 刷新標記哪些已加入
 }
 function removeRole(i) {
   _tierRoles.splice(i,1);
@@ -777,7 +783,8 @@ function renderTierTable() {
       const amt=t.amount!==undefined?t.amount:(t.amounts?.default||0);
       bodyHtml+='<td style="padding:5px 6px;border-bottom:1px solid rgba(45,63,86,.3)"><input class="tier-input" type="number" value="'+amt+'" min="0" step="1" onchange="_tiers['+i+'].amount=parseFloat(this.value)||0" style="color:#10b981;font-weight:700"></td>';
     }
-    bodyHtml+='<td style="padding:5px 6px;border-bottom:1px solid rgba(45,63,86,.3);text-align:center"><button class="btn btn-danger btn-sm" onclick="removeTier('+i+')" style="padding:3px 8px">×</button></td>';
+    const syncBtn = _tierRoles.length > 1 ? `<button class="btn btn-secondary btn-sm" onclick="syncTierRow(${i})" style="padding:3px 7px;font-size:10px;margin-right:3px" title="同步此行金額到所有職稱">≡同步</button>` : '';
+    bodyHtml+='<td style="padding:5px 6px;border-bottom:1px solid rgba(45,63,86,.3);text-align:center;white-space:nowrap">'+syncBtn+'<button class="btn btn-danger btn-sm" onclick="removeTier('+i+')" style="padding:3px 8px">×</button></td>';
     bodyHtml+='</tr>';
   });
   if (!_tiers.length) bodyHtml='<tr><td colspan="'+(2+(roles.length||1)+1)+'" style="padding:14px;text-align:center;color:#475569;font-size:12px">尚未設定階梯，點擊「＋ 新增階梯」</td></tr>';
