@@ -1115,337 +1115,324 @@ async function renderProgressContent() {
 
   try {
     var factory = document.getElementById('selFactory').value;
-    var params  = new URLSearchParams({ period: _actualPeriod, data_period: _actualPeriod });
-    if (factory) params.set('factory', factory);
 
+    // ── 1. 先確保名冊已載入（名冊是主軸）──
     if (!_rosterData.length) await loadRoster();
     var rLbl = document.getElementById('rosterPeriodLabel');
-    if (rLbl && _rosterLoadedPeriod) rLbl.textContent = _rosterLoadedPeriod.slice(0,4)+'年'+parseInt(_rosterLoadedPeriod.slice(4))+'月（最新）';
+    if (rLbl && _rosterLoadedPeriod) {
+      rLbl.textContent = _rosterLoadedPeriod.slice(0,4)+'年'+parseInt(_rosterLoadedPeriod.slice(4))+'月（最新）';
+    }
 
-    var data = await fetch('/api/bonus/progress?'+params).then(function(r){return r.json();});
-    if (data.error) throw new Error(data.error);
-
-    if (!data.results.length) {
+    if (!_rosterData.length) {
       el.innerHTML = '<div style="text-align:center;padding:48px;color:#64748b">'
-        +'<div style="font-size:36px;margin-bottom:12px">⚙️</div>'
-        +'<div style="font-size:14px;font-weight:700;margin-bottom:8px">尚未設定任何獎金指標</div>'
-        +'<div style="font-size:12px">請至「⚙️ 獎金設定」頁籤新增指標，再回到此頁查看</div>'
+        +'<div style="font-size:36px;margin-bottom:12px">👥</div>'
+        +'<div style="font-size:14px;font-weight:700;margin-bottom:8px">尚無人員名冊</div>'
+        +'<div style="font-size:12px">請先點擊右上角「上傳人員資料」</div>'
         +'</div>';
       return;
     }
 
-    // ── Step 1: 建立指標資訊 & 目標對應表 ──
-    var FC_ORDER  = ['售後服務處','AMA','AMD','AMC','聯合','鈑烤','零件','其他'];
-    var FC_LABELS = {AMA:'AMA 內湖',AMC:'AMC 仁愛',AMD:'AMD 士林','聯合':'聯合服務中心','鈑烤':'鈑烤廠','零件':'零件部','售後服務處':'售後服務處'};
+    // ── 2. 查詢指標進度（有就顯示，沒有也繼續顯示人員列表）──
+    var metaById = {};   // metric_id → {metric, actual, autoPT, useAuto, autoRate, tiers, roles}
+    var deptTargets = {}; // dept_code → { metric_id → {rate, target_value} }
+    var empTargets  = {}; // emp_id    → { metric_id → {rate, target_value} }
 
-    // metaById[metric_id] = {metric, actual, autoPT, useAuto, autoRate, tiers, roles}
-    var metaById = {};
-    // deptTargets[dept_code][metric_id] = {target_value, rate}
-    var deptTargets = {};
-    // empTargets[emp_id][metric_id] = {target_value, rate}
-    var empTargets = {};
+    try {
+      var params = new URLSearchParams({ period: _actualPeriod, data_period: _actualPeriod });
+      if (factory) params.set('factory', factory);
+      var data = await fetch('/api/bonus/progress?'+params).then(function(r){return r.json();});
+      if (!data.error && data.results && data.results.length) {
+        for (var ii=0; ii<data.results.length; ii++) {
+          var item   = data.results[ii];
+          var m      = item.metric;
+          var actual = item.actual;
+          var autoPT = item.perfTarget;
+          var tiers  = (m.bonus_rule||{}).tiers||[];
+          var roles  = (m.bonus_rule||{}).roles||[];
+          var useAuto = (m.metric_source==='revenue'||m.metric_source==='performance') && autoPT!==null;
+          var autoRate = useAuto && autoPT>0 && actual!==null ? actual/autoPT*100 : null;
+          metaById[m.id] = {metric:m, actual:actual, autoPT:autoPT, useAuto:useAuto, autoRate:autoRate, tiers:tiers, roles:roles};
+
+          for (var ti=0; ti<item.targets.length; ti++) {
+            var t2 = item.targets[ti];
+            var tgtVal = parseFloat(t2.target_value||0);
+            var rate2 = useAuto ? autoRate : (tgtVal>0&&actual!==null ? actual/tgtVal*100 : null);
+            if (t2.dept_code) {
+              if (!deptTargets[t2.dept_code]) deptTargets[t2.dept_code] = {};
+              deptTargets[t2.dept_code][m.id] = {rate:rate2, target_value:t2.target_value};
+            }
+            if (t2.emp_id) {
+              if (!empTargets[t2.emp_id]) empTargets[t2.emp_id] = {};
+              empTargets[t2.emp_id][m.id] = {rate:rate2, target_value:t2.target_value};
+            }
+          }
+        }
+      }
+    } catch(apiErr) { /* 指標查詢失敗不影響顯示名冊 */ }
+
+    var allMetricIds = Object.keys(metaById);
+    var hasMetrics   = allMetricIds.length > 0;
 
     function calcBonus(rate, jobTitle, tiers, roles) {
       if (rate===null || !tiers || !tiers.length) return 0;
-      var sorted = tiers.slice().sort(function(a,b){return b.gte-a.gte;});
-      var match = null;
-      for (var i=0;i<sorted.length;i++) {
-        var t = sorted[i];
-        if (rate >= t.gte && (t.lt===null || rate < t.lt)) { match = t; break; }
-      }
+      var match = tiers.slice().sort(function(a,b){return b.gte-a.gte;}).find(function(t){
+        return rate>=t.gte && (t.lt===null||rate<t.lt);
+      });
       if (!match) return 0;
       if (roles && roles.length && match.amounts) {
-        var hit = null;
-        for (var ri=0;ri<roles.length;ri++) {
-          var r = roles[ri];
-          if (jobTitle && (jobTitle===r||jobTitle.indexOf(r)>=0||r.indexOf(jobTitle)>=0)) { hit=r; break; }
-        }
+        var hit = roles.find(function(r){return jobTitle&&(jobTitle===r||jobTitle.indexOf(r)>=0||r.indexOf(jobTitle)>=0);});
         return hit ? (match.amounts[hit]||0) : (match.amount||0);
       }
       return match.amount||0;
     }
 
-    for (var ii=0;ii<data.results.length;ii++) {
-      var item    = data.results[ii];
-      var m       = item.metric;
-      var actual  = item.actual;
-      var autoPT  = item.perfTarget;
-      var tiers   = (m.bonus_rule||{}).tiers||[];
-      var roles   = (m.bonus_rule||{}).roles||[];
-      var useAuto = (m.metric_source==='revenue'||m.metric_source==='performance') && autoPT!==null;
-      var autoRate = useAuto && autoPT>0 && actual!==null ? actual/autoPT*100 : null;
+    // ── 3. 按廠別→部門組織名冊 ──
+    var FC_ORDER  = ['售後服務處','AMA','AMD','AMC','聯合','鈑烤','零件','其他'];
+    var FC_LABELS = {AMA:'AMA 內湖', AMC:'AMC 仁愛', AMD:'AMD 士林',
+                     '聯合':'聯合服務中心', '鈑烤':'鈑烤廠', '零件':'零件部', '售後服務處':'售後服務處'};
 
-      metaById[m.id] = {metric:m, actual:actual, autoPT:autoPT, useAuto:useAuto, autoRate:autoRate, tiers:tiers, roles:roles};
-
-      for (var ti=0;ti<item.targets.length;ti++) {
-        var t2 = item.targets[ti];
-        var tgtVal = parseFloat(t2.target_value||0);
-        var rate2  = useAuto ? autoRate : (tgtVal>0&&actual!==null ? actual/tgtVal*100 : null);
-
-        if (t2.dept_code) {
-          if (!deptTargets[t2.dept_code]) deptTargets[t2.dept_code] = {};
-          deptTargets[t2.dept_code][m.id] = {target_value:t2.target_value, rate:rate2};
-        }
-        if (t2.emp_id) {
-          if (!empTargets[t2.emp_id]) empTargets[t2.emp_id] = {};
-          empTargets[t2.emp_id][m.id] = {target_value:t2.target_value, rate:rate2};
-        }
-      }
-    }
-
-    var allMetricIds = Object.keys(metaById);
-    var allMetrics   = allMetricIds.map(function(id){return metaById[id].metric;});
-
-    // ── Step 2: 將名冊按廠別→部門分組 ──
     var byFactory = {};
-    for (var pi=0;pi<_rosterData.length;pi++) {
+    for (var pi=0; pi<_rosterData.length; pi++) {
       var person = _rosterData[pi];
       var fc = person.factory||'其他';
       if (factory && fc !== factory) continue;
       var dk = person.dept_code||'—';
       if (!byFactory[fc]) byFactory[fc] = {};
-      if (!byFactory[fc][dk]) byFactory[fc][dk] = {dept_name:person.dept_name||dk, members:[]};
+      if (!byFactory[fc][dk]) byFactory[fc][dk] = {dept_name: person.dept_name||dk, members:[]};
       byFactory[fc][dk].members.push(person);
     }
 
-    if (!Object.keys(byFactory).length) {
+    var sortedFc = Object.keys(byFactory).sort(function(a,b){
+      return (FC_ORDER.indexOf(a)<0?99:FC_ORDER.indexOf(a)) - (FC_ORDER.indexOf(b)<0?99:FC_ORDER.indexOf(b));
+    });
+
+    if (!sortedFc.length) {
       el.innerHTML = '<div class="empty">此廠別無人員資料</div>';
       return;
     }
 
-    var sortedFc = Object.keys(byFactory).sort(function(a,b){
-      var ai=FC_ORDER.indexOf(a),bi=FC_ORDER.indexOf(b);
-      return (ai<0?99:ai)-(bi<0?99:bi);
-    });
-
-    // ── Step 3: 產生 HTML ──
+    // ── 4. 整體達成摘要（有指標時才顯示）──
     var html = '';
-
-    // 指標彙總列（顯示整體達成率，有 revenue/performance 來源才顯示）
-    var summaryHtml = '';
-    for (var si=0;si<allMetricIds.length;si++) {
-      var mId = allMetricIds[si];
-      var meta = metaById[mId];
-      if (!meta.useAuto) continue;
-      var rc = meta.autoRate===null?'#64748b':meta.autoRate>=100?'#10b981':meta.autoRate>=80?'#f59e0b':'#ef4444';
-      var bw = meta.autoRate!==null?Math.min(100,meta.autoRate).toFixed(1):0;
-      var isAmt = meta.metric.stat_field==='amount'||meta.useAuto;
-      var fv = function(v){return v===null||v===undefined?'—':isAmt?Math.round(parseFloat(v)/1000).toLocaleString()+'K':Math.round(parseFloat(v)).toLocaleString();};
-      summaryHtml += '<div style="display:inline-flex;align-items:center;gap:10px;background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:8px 14px;margin:0 6px 6px 0">'
-        +'<span style="font-size:12px;font-weight:700;color:#e2e8f0">'+meta.metric.metric_name+'</span>'
-        +'<span style="font-size:11px;color:#64748b">目標 <strong style="color:#94a3b8">'+fv(meta.autoPT)+'</strong></span>'
-        +'<span style="font-size:11px;color:#64748b">實際 <strong style="color:#10b981">'+fv(meta.actual)+'</strong></span>'
-        +'<div style="display:flex;align-items:center;gap:4px">'
-          +'<div style="width:40px;background:#1e293b;border-radius:3px;height:5px"><div style="width:'+bw+'%;height:5px;background:'+rc+';border-radius:3px"></div></div>'
-          +'<span style="font-size:13px;font-weight:900;color:'+rc+'">'+(meta.autoRate!==null?meta.autoRate.toFixed(1)+'%':'—')+'</span>'
-        +'</div>'
-      +'</div>';
-    }
-    if (summaryHtml) {
-      html += '<div style="margin-bottom:16px;padding:12px 16px;background:#1a2332;border:1px solid #2d3f56;border-radius:10px">'
-        +'<div style="font-size:11px;color:#64748b;font-weight:700;margin-bottom:8px;letter-spacing:.04em">'+actLabel+' 整體達成率</div>'
-        +'<div style="display:flex;flex-wrap:wrap">'+summaryHtml+'</div>'
+    if (hasMetrics) {
+      var summaryItems = '';
+      for (var si=0; si<allMetricIds.length; si++) {
+        var mId0 = allMetricIds[si];
+        var meta0 = metaById[mId0];
+        if (!meta0.useAuto && meta0.actual===null) continue;
+        var isAmtS = meta0.metric.stat_field==='amount'||meta0.useAuto;
+        var fvS = function(v){return v===null||v===undefined?'—':isAmtS?Math.round(parseFloat(v)/1000).toLocaleString()+'K':Math.round(parseFloat(v)).toLocaleString();};
+        var rc0 = meta0.autoRate===null?'#64748b':meta0.autoRate>=100?'#10b981':meta0.autoRate>=80?'#f59e0b':'#ef4444';
+        var bw0 = meta0.autoRate!==null?Math.min(100,meta0.autoRate).toFixed(1):0;
+        summaryItems += '<div style="display:inline-flex;align-items:center;gap:8px;background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:8px 12px;margin:0 6px 6px 0">'
+          +'<span style="font-size:12px;font-weight:700;color:#e2e8f0">'+meta0.metric.metric_name+'</span>'
+          +(meta0.autoPT!==null?'<span style="font-size:11px;color:#64748b">目標 <strong style="color:#94a3b8">'+fvS(meta0.autoPT)+'</strong></span>':'')
+          +(meta0.actual!==null?'<span style="font-size:11px;color:#64748b">實際 <strong style="color:#10b981">'+fvS(meta0.actual)+'</strong></span>':'')
+          +(meta0.autoRate!==null?'<div style="display:flex;align-items:center;gap:4px"><div style="width:36px;background:#1e293b;border-radius:3px;height:5px"><div style="width:'+bw0+'%;height:5px;background:'+rc0+';border-radius:3px"></div></div><span style="font-size:13px;font-weight:900;color:'+rc0+'">'+meta0.autoRate.toFixed(1)+'%</span></div>':'')
         +'</div>';
+      }
+      if (summaryItems) {
+        html += '<div style="margin-bottom:14px;padding:12px 16px;background:#1a2332;border:1px solid #2d3f56;border-radius:10px">'
+          +'<div style="font-size:11px;color:#64748b;font-weight:700;margin-bottom:8px;letter-spacing:.04em">'+actLabel+' 整體達成率</div>'
+          +'<div>'+summaryItems+'</div>'
+          +'</div>';
+      }
     }
 
-    // 各廠別展開
-    for (var fi=0;fi<sortedFc.length;fi++) {
+    // ── 5. 廠別→部門→人員列表 ──
+    for (var fi=0; fi<sortedFc.length; fi++) {
       var fc = sortedFc[fi];
-      var fcDepts = byFactory[fc];
-      var fcColor = FC_COLORS[fc]||'#94a3b8';
-      var fcLabel = FC_LABELS[fc]||fc;
-      var fcId    = 'fc-bl-'+fi;
-
-      // 計算廠別總獎金
-      var fcTotalBonus = 0;
-      var fcTotalPpl = 0;
-      var fcBonusPpl = 0;
+      var fcDepts  = byFactory[fc];
+      var fcColor  = FC_COLORS[fc]||'#94a3b8';
+      var fcLabel  = FC_LABELS[fc]||fc;
+      var fcId     = 'fc-bl-'+fi;
       var deptKeys = Object.keys(fcDepts).sort();
-      for (var di=0;di<deptKeys.length;di++) {
-        var dept = fcDepts[deptKeys[di]];
-        fcTotalPpl += dept.members.length;
-        for (var mi2=0;mi2<dept.members.length;mi2++) {
-          var person2 = dept.members[mi2];
-          var personBonus = 0;
-          for (var mii=0;mii<allMetricIds.length;mii++) {
-            var mId2 = allMetricIds[mii];
-            var meta2 = metaById[mId2];
-            var tEntry = (empTargets[person2.emp_id]&&empTargets[person2.emp_id][mId2])
-              ? empTargets[person2.emp_id][mId2]
-              : (deptTargets[person2.dept_code]&&deptTargets[person2.dept_code][mId2])
-                ? deptTargets[person2.dept_code][mId2]
-                : null;
-            if (tEntry) personBonus += calcBonus(tEntry.rate, person2.job_title||'', meta2.tiers, meta2.roles);
+
+      // 計算廠別獎金合計
+      var fcTotalBonus=0, fcTotalPpl=0, fcBonusPpl=0;
+      for (var di0=0; di0<deptKeys.length; di0++) {
+        var dept0 = fcDepts[deptKeys[di0]];
+        fcTotalPpl += dept0.members.length;
+        for (var mi0=0; mi0<dept0.members.length; mi0++) {
+          var p0 = dept0.members[mi0];
+          var pTotal0 = 0;
+          for (var mii0=0; mii0<allMetricIds.length; mii0++) {
+            var mId00 = allMetricIds[mii0];
+            var meta00 = metaById[mId00];
+            var te0 = (empTargets[p0.emp_id]&&empTargets[p0.emp_id][mId00])
+              ? empTargets[p0.emp_id][mId00]
+              : (deptTargets[p0.dept_code]&&deptTargets[p0.dept_code][mId00])
+                ? deptTargets[p0.dept_code][mId00] : null;
+            if (te0) pTotal0 += calcBonus(te0.rate, p0.job_title||'', meta00.tiers, meta00.roles);
           }
-          if (personBonus > 0) fcBonusPpl++;
-          fcTotalBonus += personBonus;
+          if (pTotal0>0) fcBonusPpl++;
+          fcTotalBonus += pTotal0;
         }
       }
 
-      html += '<div style="margin-bottom:14px;border:2px solid '+fcColor+'44;border-radius:12px;overflow:hidden">'
-        // 廠別 header
-        +'<div id="'+fcId+'-hdr" style="background:'+fcColor+'1a;padding:12px 18px;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none" onclick="toggleProgSection(\''+fcId+'\')">'
+      // 廠別 header
+      html += '<div style="margin-bottom:14px;border:2px solid '+fcColor+'55;border-radius:12px;overflow:hidden">'
+        +'<div id="'+fcId+'-hdr" style="background:'+fcColor+'1e;padding:12px 18px;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none" onclick="toggleProgSection(\''+fcId+'\')">'
           +'<span id="'+fcId+'-arrow" style="font-size:12px;color:'+fcColor+';transition:transform .2s;display:inline-block;transform:rotate(90deg)">▶</span>'
-          +'<span style="font-size:16px;font-weight:900;color:'+fcColor+'">🏭 '+fcLabel+'</span>'
+          +'<span style="font-size:16px;font-weight:900;color:'+fcColor+'">'+fcLabel+'</span>'
           +'<span style="font-size:12px;color:#64748b;background:#0f172a;padding:2px 8px;border-radius:10px">'+fcTotalPpl+' 人</span>'
           +(fcBonusPpl>0?'<span style="font-size:12px;color:#10b981;background:rgba(16,185,129,.1);padding:2px 8px;border-radius:10px">'+fcBonusPpl+' 人有獎金</span>':'')
           +'<div style="margin-left:auto;display:flex;align-items:center;gap:8px">'
-            +'<button onclick="event.stopPropagation();openMetricForFactory(\''+fc+'\')" style="background:rgba(59,130,246,.15);color:#60a5fa;border:1px solid rgba(59,130,246,.3);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">🎯 設定目標</button>'
-            +'<span style="font-size:18px;font-weight:900;color:'+(fcTotalBonus>0?'#f59e0b':'#475569')+'">'+(fcTotalBonus>0?fcTotalBonus.toLocaleString()+' 元':'—')+'</span>'
+            +(hasMetrics?'<button onclick="event.stopPropagation();switchTab(\'metrics\')" style="background:rgba(59,130,246,.15);color:#60a5fa;border:1px solid rgba(59,130,246,.3);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">⚙️ 獎金設定</button>':'')
+            +(hasMetrics?'<span style="font-size:18px;font-weight:900;color:'+(fcTotalBonus>0?'#f59e0b':'#475569')+'">'+(fcTotalBonus>0?fcTotalBonus.toLocaleString()+' 元':'—')+'</span>':'')
           +'</div>'
         +'</div>'
-        // 廠別 body
         +'<div id="'+fcId+'-body">';
 
       // 各部門
-      for (var di2=0;di2<deptKeys.length;di2++) {
-        var dkey = deptKeys[di2];
+      for (var di=0; di<deptKeys.length; di++) {
+        var dkey = deptKeys[di];
         var dept = fcDepts[dkey];
+        var deptTotalBonus=0, deptBonusPpl=0;
+        var memberRows=[];
 
-        // 部門總獎金
-        var deptTotalBonus = 0;
-        var deptBonusPpl   = 0;
-        var memberRows = [];
-
-        for (var mi3=0;mi3<dept.members.length;mi3++) {
+        for (var mi3=0; mi3<dept.members.length; mi3++) {
           var person3 = dept.members[mi3];
           var personBonuses = {};
-          var personTotal = 0;
-
-          for (var mii2=0;mii2<allMetricIds.length;mii2++) {
+          var personTotal   = 0;
+          for (var mii2=0; mii2<allMetricIds.length; mii2++) {
             var mId3 = allMetricIds[mii2];
             var meta3 = metaById[mId3];
-            var tEntry2 = (empTargets[person3.emp_id]&&empTargets[person3.emp_id][mId3])
+            var te3 = (empTargets[person3.emp_id]&&empTargets[person3.emp_id][mId3])
               ? empTargets[person3.emp_id][mId3]
               : (deptTargets[person3.dept_code]&&deptTargets[person3.dept_code][mId3])
-                ? deptTargets[person3.dept_code][mId3]
-                : null;
-
-            var bonusAmt = tEntry2 ? calcBonus(tEntry2.rate, person3.job_title||'', meta3.tiers, meta3.roles) : 0;
-            var rateDisp = tEntry2 ? tEntry2.rate : null;
-            personBonuses[mId3] = {bonus:bonusAmt, rate:rateDisp, hasTarget:!!tEntry2};
+                ? deptTargets[person3.dept_code][mId3] : null;
+            var bonusAmt = te3 ? calcBonus(te3.rate, person3.job_title||'', meta3.tiers, meta3.roles) : 0;
+            personBonuses[mId3] = {bonus:bonusAmt, rate:te3?te3.rate:null, hasTarget:!!te3};
             personTotal += bonusAmt;
           }
-
-          if (personTotal > 0) deptBonusPpl++;
+          if (personTotal>0) deptBonusPpl++;
           deptTotalBonus += personTotal;
           memberRows.push({person:person3, bonuses:personBonuses, total:personTotal});
         }
-
-        // Sort by total bonus desc
         memberRows.sort(function(a,b){return b.total-a.total;});
 
-        var thBase = 'text-align:left;padding:8px 10px;background:#090f1a;color:#475569;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;white-space:nowrap;border-right:1px solid #1e293b;';
+        var thBase = 'text-align:left;padding:8px 10px;background:#090f1a;color:#475569;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;white-space:nowrap;border-right:1px solid #1a2535;';
 
         html += '<div style="border-top:1px solid '+fcColor+'22">'
           // 部門標題
-          +'<div style="background:#0c1524;padding:8px 18px 8px 32px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+          +'<div style="background:#0b1422;padding:8px 18px 8px 28px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
             +'<span style="font-size:12px;font-weight:800;color:#cbd5e1">📂 '+dept.dept_name+'</span>'
-            +'<span style="font-size:11px;color:#475569">'+dept.members.length+' 人</span>'
+            +'<span style="font-size:11px;color:#475569;background:#0f172a;padding:1px 7px;border-radius:6px">'+dept.members.length+' 人</span>'
             +(deptBonusPpl>0?'<span style="font-size:11px;color:#10b981">'+deptBonusPpl+' 人有獎金</span>':'')
-            +'<span style="margin-left:auto;font-size:13px;font-weight:800;color:'+(deptTotalBonus>0?'#f59e0b':'#475569')+'">'+(deptTotalBonus>0?deptTotalBonus.toLocaleString()+' 元':'—')+'</span>'
+            +(hasMetrics&&deptTotalBonus>0
+              ?'<span style="margin-left:auto;font-size:13px;font-weight:800;color:#f59e0b">'+deptTotalBonus.toLocaleString()+' 元</span>'
+              :(hasMetrics?'<span style="margin-left:auto;font-size:11px;color:#334155">（未設定目標）</span>':''))
           +'</div>'
           // 人員表格
           +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
-            +'<thead>'
-            // Row 1: 指標名稱 header (spanning per metric)
-            +'<tr>'
-              +'<th style="'+thBase+'min-width:75px" rowspan="2">姓名</th>'
-              +'<th style="'+thBase+'min-width:70px" rowspan="2">職務</th>';
+          +'<thead><tr>'
+            +'<th style="'+thBase+'min-width:80px">姓名</th>'
+            +'<th style="'+thBase+'min-width:65px">職務</th>'
+            +'<th style="'+thBase+'min-width:55px">狀態</th>';
 
-        for (var mhi=0;mhi<allMetricIds.length;mhi++) {
+        // 指標欄 header
+        for (var mhi=0; mhi<allMetricIds.length; mhi++) {
           var mId4 = allMetricIds[mhi];
           var meta4 = metaById[mId4];
           var isAmtM = meta4.metric.stat_field==='amount'||meta4.useAuto;
           var fv4 = function(v){return v===null||v===undefined?'—':isAmtM?Math.round(parseFloat(v)/1000).toLocaleString()+'K':Math.round(parseFloat(v)).toLocaleString();};
           var rc4 = meta4.autoRate===null?'#64748b':meta4.autoRate>=100?'#10b981':meta4.autoRate>=80?'#f59e0b':'#ef4444';
-          var mName = meta4.metric.metric_name;
-          var mActualDisp = meta4.actual!==null ? '實際:'+fv4(meta4.actual) : '';
-          var mRateDisp = meta4.useAuto && meta4.autoRate!==null ? meta4.autoRate.toFixed(1)+'%' : '';
-          html += '<th style="'+thBase+'min-width:100px;text-align:center;background:#0c1524;color:#e2e8f0;border-bottom:1px solid #1e293b">'
-            +'<div style="font-size:11px;font-weight:800;color:#e2e8f0;margin-bottom:2px">'+mName+'</div>'
-            +(mActualDisp||mRateDisp
-              ?'<div style="font-size:10px;color:#64748b">'+mActualDisp+(mActualDisp&&mRateDisp?' | ':'')+
-                (mRateDisp?'<span style="color:'+rc4+';font-weight:700">'+mRateDisp+'</span>':'')+'</div>'
+          html += '<th style="'+thBase+'min-width:110px;text-align:center;background:#0c1524;border-bottom:1px solid #1e2d40">'
+            +'<div style="font-size:11px;font-weight:800;color:#e2e8f0;margin-bottom:2px">'+meta4.metric.metric_name+'</div>'
+            +(meta4.useAuto && meta4.autoRate!==null
+              ?'<div style="font-size:10px;margin-bottom:3px">'
+                +'<span style="color:#64748b">'+fv4(meta4.actual)+'</span>'
+                +' <span style="color:'+rc4+';font-weight:700">'+meta4.autoRate.toFixed(1)+'%</span>'
+              +'</div>'
               :'')
-            +'<button onclick="event.stopPropagation();openTargetForDept('+mId4+',\''+dkey+'\')" style="margin-top:3px;background:rgba(59,130,246,.15);color:#60a5fa;border:1px solid rgba(59,130,246,.3);padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer">🎯 設定</button>'
+            +'<button onclick="event.stopPropagation();openTargetForDept('+mId4+',\''+dkey+'\')" '
+              +'style="background:rgba(59,130,246,.2);color:#60a5fa;border:1px solid rgba(59,130,246,.3);padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">'
+              +'🎯 設定目標</button>'
           +'</th>';
         }
 
-        html += '<th style="'+thBase+'min-width:80px;text-align:right;background:#0c1524;color:#f59e0b" rowspan="2">總獎金</th>'
-          +'</tr>'
-          // Row 2: sub-headers (達成率 per metric)
-          +'<tr>';
-
-        for (var mhi2=0;mhi2<allMetricIds.length;mhi2++) {
-          html += '<th style="'+thBase+'text-align:center;font-size:10px;color:#475569">應得獎金</th>';
+        if (!hasMetrics) {
+          html += '<th style="'+thBase+'min-width:120px;text-align:center;color:#334155">（尚無獎金指標）</th>';
         }
 
-        html += '</tr></thead><tbody>';
+        html += '<th style="'+thBase+'min-width:80px;text-align:right;background:#0c1524;color:#f59e0b'+(hasMetrics?'':';display:none')+'">總獎金</th>'
+          +'</tr></thead><tbody>';
 
-        // Person rows
-        for (var pri=0;pri<memberRows.length;pri++) {
+        // 人員列
+        for (var pri=0; pri<memberRows.length; pri++) {
           var mRow = memberRows[pri];
-          var person4 = mRow.person;
+          var p4   = mRow.person;
+          var statusColor = p4.status==='在職'?'#10b981':p4.status==='留職停薪'?'#f59e0b':'#ef4444';
           html += '<tr>'
-            +'<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);font-weight:700;color:#e2e8f0;border-right:1px solid #1e293b">'+person4.emp_name+'</td>'
-            +'<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);color:#64748b;border-right:1px solid #1e293b">'+(person4.job_title||'—')+'</td>';
+            +'<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);font-weight:700;color:#e2e8f0;border-right:1px solid #1a2535">'+p4.emp_name+'</td>'
+            +'<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);color:#64748b;border-right:1px solid #1a2535">'+(p4.job_title||'—')+'</td>'
+            +'<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);border-right:1px solid #1a2535"><span style="font-size:10px;padding:1px 6px;border-radius:6px;background:'+statusColor+'22;color:'+statusColor+';font-weight:700">'+p4.status+'</span></td>';
 
-          for (var mci=0;mci<allMetricIds.length;mci++) {
-            var mId5 = allMetricIds[mci];
+          // 各指標獎金
+          for (var mci=0; mci<allMetricIds.length; mci++) {
+            var mId5  = allMetricIds[mci];
             var bData = mRow.bonuses[mId5];
             var bonus5 = bData?bData.bonus:0;
             var rate5  = bData?bData.rate:null;
             var hasTgt = bData?bData.hasTarget:false;
             var rc5    = rate5===null?'#64748b':rate5>=100?'#10b981':rate5>=80?'#f59e0b':'#ef4444';
-            html += '<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);text-align:center;border-right:1px solid #1e293b;background:rgba(245,158,11,.02)">'
+            html += '<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);text-align:center;border-right:1px solid #1a2535;background:rgba(245,158,11,.02)">'
               +(hasTgt
-                ?(rate5!==null?'<div style="font-size:10px;color:'+rc5+';margin-bottom:2px">'+rate5.toFixed(1)+'%</div>':'')
-                  +(bonus5>0?'<span style="color:#f59e0b;font-weight:900">'+bonus5.toLocaleString()+'<span style="font-size:9px">元</span></span>':'<span style="color:#334155">0元</span>')
-                :'<span style="color:#1e3050;font-size:11px">未設定</span>')
+                ?(rate5!==null?'<div style="font-size:10px;color:'+rc5+';margin-bottom:2px;font-weight:700">'+rate5.toFixed(1)+'%</div>':'')
+                  +(bonus5>0?'<span style="color:#f59e0b;font-weight:900;font-size:13px">'+bonus5.toLocaleString()+'<span style="font-size:9px;margin-left:1px">元</span></span>':'<span style="color:#475569;font-size:11px">0 元</span>')
+                :'<span style="color:#1e3a5f;font-size:11px">未設定</span>')
             +'</td>';
           }
 
-          html += '<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);text-align:right;font-weight:900;background:rgba(245,158,11,.04)">'
-            +(mRow.total>0?'<span style="color:#f59e0b;font-size:15px">'+mRow.total.toLocaleString()+'<span style="font-size:10px;font-weight:600;margin-left:1px">元</span></span>':'<span style="color:#334155">—</span>')
+          if (!hasMetrics) {
+            html += '<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);text-align:center;color:#334155;font-size:11px">—</td>';
+          }
+
+          html += '<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);text-align:right;background:rgba(245,158,11,.04);font-weight:900;'+(hasMetrics?'':'display:none')+';">'
+            +(mRow.total>0?'<span style="color:#f59e0b;font-size:14px">'+mRow.total.toLocaleString()+'<span style="font-size:9px;margin-left:1px">元</span></span>':'<span style="color:#2d4060">—</span>')
           +'</td></tr>';
         }
 
-        // 部門小計行
-        html += '<tr style="background:'+fcColor+'0a">'
-          +'<td colspan="2" style="padding:7px 10px;font-size:12px;font-weight:700;color:'+fcColor+';border-right:1px solid #1e293b">'+dept.dept_name+' 合計（'+dept.members.length+'人）</td>';
-        for (var msi=0;msi<allMetricIds.length;msi++) {
-          var mId6 = allMetricIds[msi];
-          var deptMBonus = memberRows.reduce(function(s,r){return s+(r.bonuses[mId6]?r.bonuses[mId6].bonus:0);},0);
-          html += '<td style="padding:7px 10px;text-align:center;border-right:1px solid #1e293b;font-weight:700;color:'+(deptMBonus>0?'#f59e0b':'#475569')+'">'+(deptMBonus>0?deptMBonus.toLocaleString()+'元':'—')+'</td>';
+        // 部門小計
+        if (hasMetrics) {
+          html += '<tr style="background:'+fcColor+'0a">'
+            +'<td colspan="3" style="padding:7px 10px;font-size:12px;font-weight:700;color:'+fcColor+';border-right:1px solid #1a2535">'+dept.dept_name+'（'+dept.members.length+'人）</td>';
+          for (var msi=0; msi<allMetricIds.length; msi++) {
+            var mId6  = allMetricIds[msi];
+            var dMB   = memberRows.reduce(function(s,r){return s+(r.bonuses[mId6]?r.bonuses[mId6].bonus:0);},0);
+            html += '<td style="padding:7px 10px;text-align:center;border-right:1px solid #1a2535;font-weight:700;color:'+(dMB>0?'#f59e0b':'#334155')+'">'+(dMB>0?dMB.toLocaleString()+'元':'—')+'</td>';
+          }
+          html += '<td style="padding:7px 10px;text-align:right;font-weight:900;color:'+(deptTotalBonus>0?'#f59e0b':'#334155')+'">'+(deptTotalBonus>0?deptTotalBonus.toLocaleString()+' 元':'—')+'</td>'
+          +'</tr>';
         }
-        html += '<td style="padding:7px 10px;text-align:right;font-weight:900;color:'+(deptTotalBonus>0?'#f59e0b':'#475569')+'">'+(deptTotalBonus>0?deptTotalBonus.toLocaleString()+' 元':'—')+'</td>'
-          +'</tr>'
-          +'</tbody></table></div></div>';
-      }
+
+        html += '</tbody></table></div></div>';
+      } // end depts
 
       // 廠別 footer
-      html += '<div style="background:'+fcColor+'15;border-top:1px solid '+fcColor+'33;padding:10px 18px;display:flex;align-items:center;justify-content:space-between">'
-        +'<span style="font-size:13px;font-weight:700;color:'+fcColor+'">'+fcLabel+' 合計（'+fcTotalPpl+'人 / '+fcBonusPpl+'人有獎金）</span>'
-        +'<span style="font-size:18px;font-weight:900;color:'+(fcTotalBonus>0?'#f59e0b':'#475569')+'">'+(fcTotalBonus>0?fcTotalBonus.toLocaleString()+' 元':'—')+'</span>'
+      html += '<div style="background:'+fcColor+'18;border-top:1px solid '+fcColor+'44;padding:10px 18px;display:flex;align-items:center;justify-content:space-between">'
+        +'<span style="font-size:13px;font-weight:700;color:'+fcColor+'">'+fcLabel+' 合計 '+fcTotalPpl+' 人'+(fcBonusPpl>0?' / <span style="color:#10b981">'+fcBonusPpl+' 人有獎金</span>':'')+'</span>'
+        +(hasMetrics?'<span style="font-size:18px;font-weight:900;color:'+(fcTotalBonus>0?'#f59e0b':'#475569')+'">'+(fcTotalBonus>0?fcTotalBonus.toLocaleString()+' 元':'—')+'</span>':'')
       +'</div>'
-      +'</div></div>'; // close fc-body + fc wrapper
+      +'</div></div>'; // close fc-body + fc-wrapper
+    } // end factories
+
+    // 無指標時顯示提示
+    if (!hasMetrics) {
+      html += '<div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.2);border-radius:10px;padding:14px 18px;margin-top:8px;text-align:center">'
+        +'<div style="font-size:13px;font-weight:700;color:#3b82f6;margin-bottom:4px">⚙️ 尚未設定獎金指標</div>'
+        +'<div style="font-size:12px;color:#64748b">上方已顯示 '+_actualPeriod+' 期間的所有人員。請至「⚙️ 獎金設定」頁籤新增指標，設定目標後即可看到各人的應得獎金。</div>'
+        +'</div>';
     }
 
     el.innerHTML = html;
 
   } catch(e) {
-    el.innerHTML = '<div style="color:#ef4444;padding:16px">'+e.message+'</div>';
+    el.innerHTML = '<div style="color:#ef4444;padding:16px">'+e.message+'<br><small style="color:#475569">'+e.stack+'</small></div>';
   }
 }
 
-// 開啟某廠別所有指標的目標設定（快捷）
-function openMetricForFactory(factory) {
-  switchTab('metrics');
-  alert('請在獎金設定頁籤選擇指標，點擊「🎯 目標」設定 '+factory+' 各部門目標，期間選擇「'+_actualPeriod.slice(0,4)+'年'+parseInt(_actualPeriod.slice(4))+'月」');
-}
-
-// 直接開啟特定指標+部門的目標設定
+// 開啟特定指標的目標設定 Modal
 async function openTargetForDept(metricId, deptCode) {
   window._bonusProgressPrevPeriod = _actualPeriod;
   await openTargetModal(metricId);
