@@ -320,14 +320,7 @@ body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background:
       <div style="font-size:12px;color:#64748b;margin-bottom:6px">設定達成率對應的獎金金額（由高到低排列）</div>
       <div style="overflow-x:auto;margin-bottom:8px">
         <table id="mTierTable" style="width:100%;border-collapse:collapse;font-size:12px">
-          <thead id="mTierHead">
-            <tr>
-              <th style="background:#0f172a;color:#64748b;padding:7px 10px;border-bottom:1px solid #2d3f56;text-align:center;white-space:nowrap">達成率 ≥ (%)</th>
-              <th style="background:#0f172a;color:#64748b;padding:7px 10px;border-bottom:1px solid #2d3f56;text-align:center;white-space:nowrap">未達 (% 以下)</th>
-              <th style="background:#0f172a;color:#64748b;padding:7px 10px;border-bottom:1px solid #2d3f56;text-align:center;white-space:nowrap">獎金金額（元）</th>
-              <th style="background:#0f172a;padding:7px 6px;border-bottom:1px solid #2d3f56;width:30px"></th>
-            </tr>
-          </thead>
+          <thead id="mTierHead"></thead>
           <tbody id="mTierBody"></tbody>
         </table>
       </div>
@@ -435,7 +428,7 @@ async function doLogin() {
 
 // ══ State ══
 let _period='', _actualPeriod='', _rosterPeriods=[], _metrics=[], _editingMetricId=null, _tgtMetricId=null, _rosterData=[];
-let _rosterLoadedPeriod=''; // 記錄實際載入名冊的期間
+let _rosterLoadedPeriod='';
 let _tierRoles=[], _tiers=[], _allDepts=[], _perfMetricsList=[];
 
 const FACTORY_META = {
@@ -462,6 +455,7 @@ document.addEventListener('keydown', e => {
   });
 });
 
+// ★ 修正：加 null 判斷，避免找不到 tab-btn-metrics 時炸掉
 function switchTab(tab) {
   ['roster','metrics','progress'].forEach(t=>{
     const el=document.getElementById('tab-'+t);
@@ -473,7 +467,7 @@ function switchTab(tab) {
   if (tab==='progress') loadProgress();
 }
 
-// ══ 期間（預設上個月）══
+// ══ 期間 ══
 async function loadPeriods() {
   try {
     const periods=await fetch('/api/bonus/roster-periods').then(r=>r.json());
@@ -491,11 +485,10 @@ async function loadPeriods() {
 }
 function onPeriodChange() {
   _period=document.getElementById('selPeriod').value;
-  // 重置實績期間，讓它在下次載入時重新計算
   _actualPeriod='';
 }
 
-// ══ 業績指標清單（用於連結）══
+// ══ 業績指標清單 ══
 async function loadPerfMetricsList() {
   try {
     _perfMetricsList=await fetch('/api/performance-metrics').then(r=>r.json());
@@ -508,12 +501,11 @@ async function loadPerfMetricsList() {
 async function doLoad() {
   _period=document.getElementById('selPeriod').value;
   if (!_period){ alert('請先選擇期間'); return; }
-  _actualPeriod=''; // 重置，讓進度頁重新計算上個月
-  _rosterData=[];   // 強制重新載入名冊（廠別篩選可能改了）
+  _actualPeriod='';
+  _rosterData=[];
   _rosterLoadedPeriod='';
   document.getElementById('lastUpdate').textContent='更新中...';
   await Promise.all([loadRoster(), loadMetrics()]);
-  // 如果目前在進度頁，重新渲染
   const progressTab = document.getElementById('tab-progress');
   if (progressTab && progressTab.style.display !== 'none') {
     await loadProgress();
@@ -523,7 +515,6 @@ async function doLoad() {
 
 // ══ 人員名單 ══
 async function loadRoster() {
-  // 名冊固定用最新上傳期間，不跟著選擇的獎金月走
   const rosterPeriod = _rosterPeriods[0];
   if (!rosterPeriod){ document.getElementById('rosterTree').innerHTML='<div class="empty">尚無人員名冊，請先上傳人員資料</div>'; return; }
   document.getElementById('rosterTree').innerHTML='<div class="loading"><span class="spinner"></span>載入中</div>';
@@ -833,7 +824,6 @@ function renderTierTable() {
   const head=document.getElementById('mTierHead');
   const body=document.getElementById('mTierBody');
   const roles=_tierRoles;
-
   let thHtml='<tr><th style="background:#0f172a;color:#64748b;padding:7px 10px;border-bottom:1px solid #2d3f56;text-align:center;white-space:nowrap;min-width:90px">達成率 ≥ (%)</th>';
   thHtml+='<th style="background:#0f172a;color:#64748b;padding:7px 10px;border-bottom:1px solid #2d3f56;text-align:center;white-space:nowrap;min-width:90px">未達 (%, 空=無上限)</th>';
   if (roles.length) {
@@ -843,7 +833,6 @@ function renderTierTable() {
   }
   thHtml+='<th style="background:#0f172a;padding:7px 6px;border-bottom:1px solid #2d3f56;width:30px"></th></tr>';
   head.innerHTML=thHtml;
-
   let bodyHtml='';
   _tiers.forEach((t,i)=>{
     bodyHtml+='<tr>';
@@ -938,24 +927,18 @@ function onMSourceChange() {
   }
 }
 
-// ══ 從獎金名單 新增指標（預選部門）══
 async function openNewMetricForDept(deptCode, deptName) {
-  // 開啟空白新增 modal，儲存後重新載入進度頁
   await openMetricModal(null);
-  // 預填名稱提示
   const nameEl = document.getElementById('mName');
   if (nameEl && !nameEl.value) nameEl.value = deptName ? deptName.replace(/廠|部門/g,'') + ' 獎金' : '';
-  // 預先勾選此部門
   await new Promise(r => setTimeout(r, 200));
   const cb = document.querySelector('input[data-dept="' + deptCode + '"]');
   if (cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
   _afterSaveCallback = async () => { await loadMetrics(); await renderProgressContent(); };
 }
 
-// ══ 從廠別 header 新增指標 ══
 async function openNewMetricForFactory(factory) {
   await openMetricModal(null);
-  // 預選該廠別所有部門
   await new Promise(r => setTimeout(r, 200));
   document.querySelectorAll('input[data-dept]').forEach(cb => {
     if (cb.dataset.factory === factory && !cb.checked) {
@@ -1057,7 +1040,7 @@ async function deleteMetric(id,name) {
   await loadMetrics();
 }
 
-// ══ 目標設定 Modal 輔助函式 ══
+// ══ 目標設定 Modal 輔助 ══
 function buildTargetTable(depts, existing, unit, roles) {
   const thSt='text-align:left;padding:8px 12px;background:#0f172a;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56';
   let html='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>';
@@ -1101,7 +1084,6 @@ async function loadProgress() {
   const el = document.getElementById('progressContent');
   if (!_actualPeriod) {
     const now = new Date();
-    // 預設上個月
     const prev = now.getMonth() === 0
       ? `${now.getFullYear()-1}12`
       : `${now.getFullYear()}${String(now.getMonth()).padStart(2,'0')}`;
@@ -1148,6 +1130,7 @@ async function applyActualPeriod() {
   await renderProgressContent();
 }
 
+// ══ ★ 核心修正：renderProgressContent 依部門過濾指標 ══
 async function renderProgressContent() {
   var el = document.getElementById('progressInner');
   if (!el) return;
@@ -1156,7 +1139,6 @@ async function renderProgressContent() {
   try {
     var factory = document.getElementById('selFactory').value;
 
-    // ── 1. 先確保名冊已載入（名冊是主軸）──
     if (!_rosterData.length) await loadRoster();
     var rLbl = document.getElementById('rosterPeriodLabel');
     if (rLbl && _rosterLoadedPeriod) {
@@ -1172,12 +1154,10 @@ async function renderProgressContent() {
       return;
     }
 
-    // ── 2. _metrics 為主軸，progress API 只填入實際數字 ──
     var metaById    = {};
     var deptTargets = {};
     var empTargets  = {};
 
-    // 先用 _metrics 初始化（確保有指標就一定顯示欄位）
     for (var mi0=0; mi0<_metrics.length; mi0++) {
       var m0 = _metrics[mi0];
       metaById[m0.id] = {
@@ -1188,7 +1168,6 @@ async function renderProgressContent() {
       };
     }
 
-    // 呼叫 progress API 填入實際達成數字
     try {
       var params = new URLSearchParams({ period: _actualPeriod, data_period: _actualPeriod });
       if (factory) params.set('factory', factory);
@@ -1238,7 +1217,15 @@ async function renderProgressContent() {
       return match.amount||0;
     }
 
-    // ── 3. 按廠別→部門組織名冊 ──
+    // ── 過濾此部門適用的指標 ──
+    // target_dept_codes 空陣列 = 全廠適用；有值 = 只限指定部門
+    function getMetricIdsForDept(dkey) {
+      return allMetricIds.filter(function(mId) {
+        var codes = (metaById[mId].metric.target_dept_codes || []);
+        return codes.length === 0 || codes.indexOf(dkey) !== -1;
+      });
+    }
+
     var FC_ORDER  = ['售後服務處','AMA','AMD','AMC','聯合','鈑烤','零件','其他'];
     var FC_LABELS = {AMA:'AMA 內湖', AMC:'AMC 仁愛', AMD:'AMD 士林',
                      '聯合':'聯合服務中心', '鈑烤':'鈑烤廠', '零件':'零件部', '售後服務處':'售後服務處'};
@@ -1264,7 +1251,7 @@ async function renderProgressContent() {
       return;
     }
 
-    // ── 4. 整體達成摘要（有指標時才顯示）──
+    // ── 整體達成摘要 ──
     var html = '';
     if (hasMetrics) {
       var summaryItems = '';
@@ -1273,7 +1260,7 @@ async function renderProgressContent() {
         var meta0 = metaById[mId0];
         if (!meta0.useAuto && meta0.actual===null) continue;
         var isAmtS = meta0.metric.stat_field==='amount'||meta0.useAuto;
-        var fvS = function(v){return v===null||v===undefined?'—':isAmtS?Math.round(parseFloat(v)/1000).toLocaleString()+'K':Math.round(parseFloat(v)).toLocaleString();};
+        var fvS = (function(isAmt){ return function(v){return v===null||v===undefined?'—':isAmt?Math.round(parseFloat(v)/1000).toLocaleString()+'K':Math.round(parseFloat(v)).toLocaleString();}; })(isAmtS);
         var rc0 = meta0.autoRate===null?'#64748b':meta0.autoRate>=100?'#10b981':meta0.autoRate>=80?'#f59e0b':'#ef4444';
         var bw0 = meta0.autoRate!==null?Math.min(100,meta0.autoRate).toFixed(1):0;
         summaryItems += '<div style="display:inline-flex;align-items:center;gap:8px;background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:8px 12px;margin:0 6px 6px 0">'
@@ -1291,7 +1278,7 @@ async function renderProgressContent() {
       }
     }
 
-    // ── 5. 廠別→部門→人員列表 ──
+    // ── 廠別→部門→人員 ──
     for (var fi=0; fi<sortedFc.length; fi++) {
       var fc = sortedFc[fi];
       var fcDepts  = byFactory[fc];
@@ -1300,16 +1287,17 @@ async function renderProgressContent() {
       var fcId     = 'fc-bl-'+fi;
       var deptKeys = Object.keys(fcDepts).sort();
 
-      // 計算廠別獎金合計
+      // 廠別獎金合計（依各部門適用指標分別計算）
       var fcTotalBonus=0, fcTotalPpl=0, fcBonusPpl=0;
       for (var di0=0; di0<deptKeys.length; di0++) {
         var dept0 = fcDepts[deptKeys[di0]];
+        var dMIds0 = getMetricIdsForDept(deptKeys[di0]);
         fcTotalPpl += dept0.members.length;
-        for (var mi0=0; mi0<dept0.members.length; mi0++) {
-          var p0 = dept0.members[mi0];
+        for (var mi0b=0; mi0b<dept0.members.length; mi0b++) {
+          var p0 = dept0.members[mi0b];
           var pTotal0 = 0;
-          for (var mii0=0; mii0<allMetricIds.length; mii0++) {
-            var mId00 = allMetricIds[mii0];
+          for (var mii0=0; mii0<dMIds0.length; mii0++) {
+            var mId00 = dMIds0[mii0];
             var meta00 = metaById[mId00];
             var te0 = (empTargets[p0.emp_id]&&empTargets[p0.emp_id][mId00])
               ? empTargets[p0.emp_id][mId00]
@@ -1322,7 +1310,8 @@ async function renderProgressContent() {
         }
       }
 
-      // 廠別 header
+      var fcHasMetrics = deptKeys.some(function(dk){ return getMetricIdsForDept(dk).length>0; });
+
       html += '<div style="margin-bottom:14px;border:2px solid '+fcColor+'55;border-radius:12px;overflow:hidden">'
         +'<div id="'+fcId+'-hdr" style="background:'+fcColor+'1e;padding:12px 18px;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none" onclick="toggleProgSection(\''+fcId+'\')">'
           +'<span id="'+fcId+'-arrow" style="font-size:12px;color:'+fcColor+';transition:transform .2s;display:inline-block;transform:rotate(90deg)">▶</span>'
@@ -1330,16 +1319,20 @@ async function renderProgressContent() {
           +'<span style="font-size:12px;color:#64748b;background:#0f172a;padding:2px 8px;border-radius:10px">'+fcTotalPpl+' 人</span>'
           +(fcBonusPpl>0?'<span style="font-size:12px;color:#10b981;background:rgba(16,185,129,.1);padding:2px 8px;border-radius:10px">'+fcBonusPpl+' 人有獎金</span>':'')
           +'<div style="margin-left:auto;display:flex;align-items:center;gap:8px">'
-+'<button onclick="event.stopPropagation();openNewMetricForFactory(\''+fc+'\')" style="background:rgba(59,130,246,.15);color:#60a5fa;border:1px solid rgba(59,130,246,.3);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">＋ 新增指標</button>'
-            +(hasMetrics?'<span style="font-size:18px;font-weight:900;color:'+(fcTotalBonus>0?'#f59e0b':'#475569')+'">'+(fcTotalBonus>0?fcTotalBonus.toLocaleString()+' 元':'—')+'</span>':'')
+          +'<button onclick="event.stopPropagation();openNewMetricForFactory(\''+fc+'\')" style="background:rgba(59,130,246,.15);color:#60a5fa;border:1px solid rgba(59,130,246,.3);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">＋ 新增指標</button>'
+          +(fcHasMetrics?'<span style="font-size:18px;font-weight:900;color:'+(fcTotalBonus>0?'#f59e0b':'#475569')+'">'+(fcTotalBonus>0?fcTotalBonus.toLocaleString()+' 元':'—')+'</span>':'')
           +'</div>'
         +'</div>'
         +'<div id="'+fcId+'-body">';
 
-      // 各部門
       for (var di=0; di<deptKeys.length; di++) {
         var dkey = deptKeys[di];
         var dept = fcDepts[dkey];
+
+        // ★ 此部門適用的指標
+        var deptMetricIds = getMetricIdsForDept(dkey);
+        var deptHasMetrics = deptMetricIds.length > 0;
+
         var deptTotalBonus=0, deptBonusPpl=0;
         var memberRows=[];
 
@@ -1347,8 +1340,8 @@ async function renderProgressContent() {
           var person3 = dept.members[mi3];
           var personBonuses = {};
           var personTotal   = 0;
-          for (var mii2=0; mii2<allMetricIds.length; mii2++) {
-            var mId3 = allMetricIds[mii2];
+          for (var mii2=0; mii2<deptMetricIds.length; mii2++) {
+            var mId3 = deptMetricIds[mii2];
             var meta3 = metaById[mId3];
             var te3 = (empTargets[person3.emp_id]&&empTargets[person3.emp_id][mId3])
               ? empTargets[person3.emp_id][mId3]
@@ -1367,15 +1360,13 @@ async function renderProgressContent() {
         var thBase = 'text-align:left;padding:8px 10px;background:#090f1a;color:#475569;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;white-space:nowrap;border-right:1px solid #1a2535;';
 
         html += '<div style="border-top:1px solid '+fcColor+'22">'
-          // 部門標題
           +'<div style="background:#0b1422;padding:8px 18px 8px 28px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
             +'<span style="font-size:12px;font-weight:800;color:#cbd5e1">📂 '+dept.dept_name+'</span>'
             +'<span style="font-size:11px;color:#475569;background:#0f172a;padding:1px 7px;border-radius:6px">'+dept.members.length+' 人</span>'
             +(deptBonusPpl>0?'<span style="font-size:11px;color:#10b981">'+deptBonusPpl+' 人有獎金</span>':'')
-            // 各指標的部門設定按鈕
-            +(hasMetrics
+            +(deptHasMetrics
               ?'<div style="display:flex;gap:4px;flex-wrap:wrap;margin-left:6px">'
-                +allMetricIds.map(function(mId7){
+                +deptMetricIds.map(function(mId7){
                   var meta7 = metaById[mId7];
                   var hasDeptTgt = !!(deptTargets[dkey]&&deptTargets[dkey][mId7]);
                   var dRate7 = hasDeptTgt?deptTargets[dkey][mId7].rate:null;
@@ -1387,54 +1378,42 @@ async function renderProgressContent() {
                     +'<span style="font-size:10px;color:#60a5fa;font-weight:700">'+meta7.metric.metric_name+'</span>'
                     +(hasDeptTgt && dRate7!==null?'<span style="font-size:10px;color:'+rc7+';font-weight:700">'+dRate7.toFixed(0)+'%</span>':'')
                     +(hasDeptTgt && dTgt7?'<span style="font-size:10px;color:#475569">目標:'+fvM7(dTgt7)+'</span>':'')
-                    +'<button onclick="event.stopPropagation();openTargetForDept('+mId7+',\''+dkey+'\')" '
-                      +'style="background:rgba(59,130,246,.2);color:#60a5fa;border:none;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer">'
-                      +(hasDeptTgt?'✏️ 修改':'＋ 設定')+'</button>'
+                    +'<button onclick="event.stopPropagation();openTargetForDept('+mId7+',\''+dkey+'\')" style="background:rgba(59,130,246,.2);color:#60a5fa;border:none;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer">'+(hasDeptTgt?'✏️ 修改':'＋ 設定')+'</button>'
                   +'</span>';
                 }).join('')
               +'</div>'
               :'')
             +'<button onclick="event.stopPropagation();openNewMetricForDept(\''+dkey+'\',\''+dept.dept_name+'\')" style="margin-left:auto;background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3);padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">＋ 新增指標</button>'
-            +(hasMetrics&&deptTotalBonus>0
-              ?'<span style="font-size:13px;font-weight:800;color:#f59e0b">'+deptTotalBonus.toLocaleString()+' 元</span>'
-              :'')
+            +(deptHasMetrics&&deptTotalBonus>0?'<span style="font-size:13px;font-weight:800;color:#f59e0b">'+deptTotalBonus.toLocaleString()+' 元</span>':'')
           +'</div>'
-          // 人員表格
           +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
           +'<thead><tr>'
             +'<th style="'+thBase+'min-width:80px">姓名</th>'
             +'<th style="'+thBase+'min-width:65px">職務</th>'
             +'<th style="'+thBase+'min-width:55px">狀態</th>';
 
-        // 指標欄 header
-        for (var mhi=0; mhi<allMetricIds.length; mhi++) {
-          var mId4 = allMetricIds[mhi];
+        for (var mhi=0; mhi<deptMetricIds.length; mhi++) {
+          var mId4 = deptMetricIds[mhi];
           var meta4 = metaById[mId4];
           var isAmtM = meta4.metric.stat_field==='amount'||meta4.useAuto;
-          var fv4 = function(v){return v===null||v===undefined?'—':isAmtM?Math.round(parseFloat(v)/1000).toLocaleString()+'K':Math.round(parseFloat(v)).toLocaleString();};
+          var fv4 = (function(isAmt,m4){ return function(v){return v===null||v===undefined?'—':isAmt?Math.round(parseFloat(v)/1000).toLocaleString()+'K':Math.round(parseFloat(v)).toLocaleString();}; })(isAmtM,meta4);
           var rc4 = meta4.autoRate===null?'#64748b':meta4.autoRate>=100?'#10b981':meta4.autoRate>=80?'#f59e0b':'#ef4444';
           html += '<th style="'+thBase+'min-width:110px;text-align:center;background:#0c1524;border-bottom:1px solid #1e2d40">'
             +'<div style="font-size:11px;font-weight:800;color:#e2e8f0;margin-bottom:2px">'+meta4.metric.metric_name+'</div>'
             +(meta4.useAuto && meta4.autoRate!==null
-              ?'<div style="font-size:10px;margin-bottom:3px">'
-                +'<span style="color:#64748b">'+fv4(meta4.actual)+'</span>'
-                +' <span style="color:'+rc4+';font-weight:700">'+meta4.autoRate.toFixed(1)+'%</span>'
-              +'</div>'
+              ?'<div style="font-size:10px;margin-bottom:3px"><span style="color:#64748b">'+fv4(meta4.actual)+'</span> <span style="color:'+rc4+';font-weight:700">'+meta4.autoRate.toFixed(1)+'%</span></div>'
               :'')
-            +'<button onclick="event.stopPropagation();openTargetForDept('+mId4+',\''+dkey+'\')" '
-              +'style="background:rgba(59,130,246,.2);color:#60a5fa;border:1px solid rgba(59,130,246,.3);padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">'
-              +'🎯 設定目標</button>'
+            +'<button onclick="event.stopPropagation();openTargetForDept('+mId4+',\''+dkey+'\')" style="background:rgba(59,130,246,.2);color:#60a5fa;border:1px solid rgba(59,130,246,.3);padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">🎯 設定目標</button>'
           +'</th>';
         }
 
-        if (!hasMetrics) {
+        if (!deptHasMetrics) {
           html += '<th style="'+thBase+'min-width:120px;text-align:center;color:#334155">（尚無獎金指標）</th>';
         }
 
-        html += '<th style="'+thBase+'min-width:80px;text-align:right;background:#0c1524;color:#f59e0b'+(hasMetrics?'':';display:none')+'">總獎金</th>'
+        html += '<th style="'+thBase+'min-width:80px;text-align:right;background:#0c1524;color:#f59e0b'+(deptHasMetrics?'':';display:none')+'">總獎金</th>'
           +'</tr></thead><tbody>';
 
-        // 人員列
         for (var pri=0; pri<memberRows.length; pri++) {
           var mRow = memberRows[pri];
           var p4   = mRow.person;
@@ -1444,9 +1423,8 @@ async function renderProgressContent() {
             +'<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);color:#64748b;border-right:1px solid #1a2535">'+(p4.job_title||'—')+'</td>'
             +'<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);border-right:1px solid #1a2535"><span style="font-size:10px;padding:1px 6px;border-radius:6px;background:'+statusColor+'22;color:'+statusColor+';font-weight:700">'+p4.status+'</span></td>';
 
-          // 各指標獎金
-          for (var mci=0; mci<allMetricIds.length; mci++) {
-            var mId5  = allMetricIds[mci];
+          for (var mci=0; mci<deptMetricIds.length; mci++) {
+            var mId5  = deptMetricIds[mci];
             var bData = mRow.bonuses[mId5];
             var bonus5 = bData?bData.bonus:0;
             var rate5  = bData?bData.rate:null;
@@ -1460,44 +1438,40 @@ async function renderProgressContent() {
             +'</td>';
           }
 
-          if (!hasMetrics) {
+          if (!deptHasMetrics) {
             html += '<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);text-align:center;color:#334155;font-size:11px">—</td>';
           }
 
-          html += '<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);text-align:right;background:rgba(245,158,11,.04);font-weight:900;'+(hasMetrics?'':'display:none')+';">'
+          html += '<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);text-align:right;background:rgba(245,158,11,.04);font-weight:900;'+(deptHasMetrics?'':'display:none')+';">'
             +(mRow.total>0?'<span style="color:#f59e0b;font-size:14px">'+mRow.total.toLocaleString()+'<span style="font-size:9px;margin-left:1px">元</span></span>':'<span style="color:#2d4060">—</span>')
           +'</td></tr>';
         }
 
         // 部門小計
-        if (hasMetrics) {
+        if (deptHasMetrics) {
           html += '<tr style="background:'+fcColor+'0a">'
             +'<td colspan="3" style="padding:7px 10px;font-size:12px;font-weight:700;color:'+fcColor+';border-right:1px solid #1a2535">'+dept.dept_name+'（'+dept.members.length+'人）</td>';
-          for (var msi=0; msi<allMetricIds.length; msi++) {
-            var mId6  = allMetricIds[msi];
+          for (var msi=0; msi<deptMetricIds.length; msi++) {
+            var mId6  = deptMetricIds[msi];
             var dMB   = memberRows.reduce(function(s,r){return s+(r.bonuses[mId6]?r.bonuses[mId6].bonus:0);},0);
             html += '<td style="padding:7px 10px;text-align:center;border-right:1px solid #1a2535;font-weight:700;color:'+(dMB>0?'#f59e0b':'#334155')+'">'+(dMB>0?dMB.toLocaleString()+'元':'—')+'</td>';
           }
-          html += '<td style="padding:7px 10px;text-align:right;font-weight:900;color:'+(deptTotalBonus>0?'#f59e0b':'#334155')+'">'+(deptTotalBonus>0?deptTotalBonus.toLocaleString()+' 元':'—')+'</td>'
-          +'</tr>';
+          html += '<td style="padding:7px 10px;text-align:right;font-weight:900;color:'+(deptTotalBonus>0?'#f59e0b':'#334155')+'">'+(deptTotalBonus>0?deptTotalBonus.toLocaleString()+' 元':'—')+'</td></tr>';
         }
 
         html += '</tbody></table></div></div>';
       } // end depts
 
-      // 廠別 footer
       html += '<div style="background:'+fcColor+'18;border-top:1px solid '+fcColor+'44;padding:10px 18px;display:flex;align-items:center;justify-content:space-between">'
         +'<span style="font-size:13px;font-weight:700;color:'+fcColor+'">'+fcLabel+' 合計 '+fcTotalPpl+' 人'+(fcBonusPpl>0?' / <span style="color:#10b981">'+fcBonusPpl+' 人有獎金</span>':'')+'</span>'
-        +(hasMetrics?'<span style="font-size:18px;font-weight:900;color:'+(fcTotalBonus>0?'#f59e0b':'#475569')+'">'+(fcTotalBonus>0?fcTotalBonus.toLocaleString()+' 元':'—')+'</span>':'')
-      +'</div>'
-      +'</div></div>'; // close fc-body + fc-wrapper
+        +(fcHasMetrics?'<span style="font-size:18px;font-weight:900;color:'+(fcTotalBonus>0?'#f59e0b':'#475569')+'">'+(fcTotalBonus>0?fcTotalBonus.toLocaleString()+' 元':'—')+'</span>':'')
+      +'</div></div></div>';
     } // end factories
 
-    // 無指標時顯示提示
     if (!hasMetrics) {
       html += '<div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.2);border-radius:10px;padding:14px 18px;margin-top:8px;text-align:center">'
         +'<div style="font-size:13px;font-weight:700;color:#3b82f6;margin-bottom:4px">⚙️ 尚未設定獎金指標</div>'
-        +'<div style="font-size:12px;color:#64748b">上方已顯示 '+_actualPeriod+' 期間的所有人員。請至「⚙️ 獎金設定」頁籤新增指標，設定目標後即可看到各人的應得獎金。</div>'
+        +'<div style="font-size:12px;color:#64748b">請至「⚙️ 獎金設定」頁籤新增指標，設定目標後即可看到各人的應得獎金。</div>'
         +'</div>';
     }
 
@@ -1508,7 +1482,6 @@ async function renderProgressContent() {
   }
 }
 
-// 開啟特定指標的目標設定 Modal
 async function openTargetForDept(metricId, deptCode) {
   window._bonusProgressPrevPeriod = _actualPeriod;
   await openTargetModal(metricId);
@@ -1523,7 +1496,7 @@ function toggleProgSection(id) {
   if (arrow) arrow.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)';
 }
 
-// ══ openTargetModal：目標設定在 _actualPeriod ══
+// ══ openTargetModal ══
 async function openTargetModal(metricId) {
   if (!_actualPeriod){ alert('請先選擇目標 & 實績期間後按查詢'); return; }
   _tgtMetricId=metricId;
