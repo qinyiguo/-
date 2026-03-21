@@ -493,10 +493,11 @@ router.get('/bonus/progress', async (req, res) => {
       let perfTarget = null;
 
       // ── 從 factory 查詢參數或 target_dept_codes 推算分館 ──
-      const effectiveBranch =
-        (factory && ['AMA','AMC','AMD'].includes(factory))
-          ? factory
-          : inferBranchFromDeptCodes(deptCodes);
+      const branchOverride = filters.find(f => f.type === 'branch_override')?.value || null;
+      const effectiveBranch = branchOverride ||
+        (factory && ['AMA','AMC','AMD'].includes(factory)
+        ? factory
+        : inferBranchFromDeptCodes(deptCodes));
 
       // ── 連結營收目標 ──
       if (m.metric_source === 'revenue') {
