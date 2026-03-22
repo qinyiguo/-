@@ -1111,13 +1111,7 @@ async function renderProgressContent() {
       return match.amount||0;
     }
 
-    // ★ 偵測哪些 dept_code 跨廠衝突（同代碼出現在 2+ 個廠）
-    var conflictedDeptCodes={};
-    sortedFc.forEach(function(f){
-      Object.keys(byFactory[f]).forEach(function(dk){
-        conflictedDeptCodes[dk]=(conflictedDeptCodes[dk]||0)+1;
-      });
-    });
+    // ★ 過濾此部門適用的指標（conflictedDeptCodes 在 sortedFc 建好後才計算，見下方）
 
     // ★ 過濾此部門適用的指標
     function getMetricIdsForDept(dkey, fcName) {
@@ -1169,6 +1163,14 @@ async function renderProgressContent() {
 
     var sortedFc=Object.keys(byFactory).sort(function(a,b){return (FC_ORDER.indexOf(a)<0?99:FC_ORDER.indexOf(a))-(FC_ORDER.indexOf(b)<0?99:FC_ORDER.indexOf(b));});
     if (!sortedFc.length){ el.innerHTML='<div class="empty">此廠別無人員資料</div>'; return; }
+
+    // ★ 偵測哪些 dept_code 跨廠衝突（同代碼出現在 2+ 個廠，如零件部 05700）
+    var conflictedDeptCodes={};
+    sortedFc.forEach(function(f){
+      Object.keys(byFactory[f]).forEach(function(dk){
+        conflictedDeptCodes[dk]=(conflictedDeptCodes[dk]||0)+1;
+      });
+    });
 
     // ★ 偵測跨廠重複的部門名稱
     var progDeptNameCount={};
