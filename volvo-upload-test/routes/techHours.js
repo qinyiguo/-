@@ -49,7 +49,59 @@ async function getConfig() {
   return { utilization_rates: DEFAULT_RATES };
 }
 
-// ── GET /api/stats/tech-hours ──
+// ══════════════════════════════════════════════
+// 姓名模糊比對：tech_name_clean 可能是「吳開健-KCW」「林新祐/張○○」等
+// 名冊的 emp_name 是「吳開健」「林新祐」
+// 規則：取 tech_name_clean 以「-/、,，空格」分割後的第一段，
+//        若 emp_name 與任一段完全相符 → 匹配
+// ══════════════════════════════════════════════
+function splitTechName(rawName) {
+  if (!rawName) return [];
+  return rawName
+    .split(/[-\/、,，\s]+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function buildActualMap(rows) {
+  // key: 每個分割後的名字片段 → 累加工時
+  // 同時也保留原始 key
+  const map = {};
+  rows.forEach(r => {
+    const name = (r.tech_name_clean || '').trim();
+    const hours = parseFloat(r.actual_hours || 0);
+    if (!name) return;
+    // 原始 key
+    map[name] = (map[name] || 0) + hours;
+    // 分割後各片段
+    splitTechName(name).forEach(seg => {
+      if (seg && seg !== name) {
+        map[seg] = (map[seg] || 0) + hours;
+      }
+    });
+  });
+  return map;
+}
+
+function findActualHours(empName, actualMap) {
+  if (!empName) return 0;
+  const name = empName.trim();
+  // 1. 精確匹配
+  if (actualMap[name] !== undefined) return actualMap[name];
+  // 2. actualMap 的 key 包含 empName（如 key="吳開健-KCW" ⊇ empName="吳開健"）
+  for (const [key, val] of Object.entries(actualMap)) {
+    if (key.includes(name)) return val;
+  }
+  // 3. empName 包含某個 key（反向）
+  for (const [key, val] of Object.entries(actualMap)) {
+    if (key.length >= 2 && name.includes(key)) return val;
+  }
+  return 0;
+}
+
+// ══════════════════════════════════════════════
+// GET /api/stats/tech-hours
+// ══════════════════════════════════════════════
 router.get('/stats/tech-hours', async (req, res) => {
   const { period, branch } = req.query;
   if (!period) return res.status(400).json({ error: 'period 為必填' });
@@ -80,7 +132,6 @@ router.get('/stats/tech-hours', async (req, res) => {
       if (wdRes.rows[0]?.work_dates?.length) {
         workingDays = wdRes.rows[0].work_dates.length;
       } else {
-        // 從 business_query 自動偵測
         const autoWd = await pool.query(
           `SELECT COUNT(DISTINCT open_time::date) AS cnt
            FROM business_query WHERE period=$1 AND branch=$2 AND open_time IS NOT NULL`,
@@ -93,7 +144,8 @@ router.get('/stats/tech-hours', async (req, res) => {
       const rosterRes = await pool.query(
         `SELECT emp_id, emp_name, job_title, dept_code, dept_name, factory
          FROM staff_roster
-         WHERE period=$1 AND (factory=$2 OR (factory IS NULL AND dept_name ILIKE $3))
+         WHERE period=$1
+           AND (factory=$2 OR (factory IS NULL AND dept_name ILIKE $3))
            AND status='在職'
            AND COALESCE(job_category,'') NOT ILIKE '%計時%'
          ORDER BY dept_code, emp_id`,
@@ -109,17 +161,17 @@ router.get('/stats/tech-hours', async (req, res) => {
         deptTypeMap[dt].push(r);
       });
 
-      // 3. 實際工時
+      // 3. 實際工時 — 從 tech_performance.standard_hours 抓，依 branch + period
+      //    tech_name_clean 可能含後綴（-KCW 等），用 buildActualMap 處理
       const actualRes = await pool.query(
-        `SELECT tech_name_clean, SUM(standard_hours) AS actual_hours
-         FROM tech_performance WHERE period=$1 AND branch=$2
+        `SELECT tech_name_clean,
+                SUM(standard_hours) AS actual_hours
+         FROM tech_performance
+         WHERE period=$1 AND branch=$2
          GROUP BY tech_name_clean`,
         [period, br]
       );
-      const actualMap = {};
-      actualRes.rows.forEach(r => {
-        actualMap[r.tech_name_clean] = parseFloat(r.actual_hours || 0);
-      });
+      const actualMap = buildActualMap(actualRes.rows);
 
       // 4. 組合結果
       const branchResult = { working_days: workingDays, dept_types: {} };
@@ -130,9 +182,9 @@ router.get('/stats/tech-hours', async (req, res) => {
           label: DEPT_LABELS[deptType] || deptType,
           techs: techs.map(t => {
             const rate = typeRates[t.job_title] !== undefined
-              ? typeRates[t.job_title] : (typeRates.default || 1.0);
+              ? typeRates[t.job_title] : (typeRates.default ?? 1.0);
             const targetHours = Math.round(workingDays * 8 * rate * 10) / 10;
-            const actualHours = actualMap[t.emp_name] || 0;
+            const actualHours = findActualHours(t.emp_name, actualMap);
             const achieveRate = targetHours > 0
               ? Math.round(actualHours / targetHours * 1000) / 10 : null;
             return {
@@ -155,7 +207,15 @@ router.get('/stats/tech-hours', async (req, res) => {
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── GET/PUT /api/tech-capacity-config ──
+// ══════════════════════════════════════════════
+// GET /api/tech-capacity-config  — 取得產能設定
+// PUT /api/tech-capacity-config  — 儲存產能設定
+// GET /api/tech-capacity-config/default — 取得預設值（供前端 reset 用）
+// ══════════════════════════════════════════════
+router.get('/tech-capacity-config/default', (req, res) => {
+  res.json({ utilization_rates: DEFAULT_RATES });
+});
+
 router.get('/tech-capacity-config', async (req, res) => {
   try { res.json(await getConfig()); }
   catch(err) { res.status(500).json({ error: err.message }); }
