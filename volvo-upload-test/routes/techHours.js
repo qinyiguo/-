@@ -247,6 +247,72 @@ router.get('/stats/tech-hours', async (req, res) => {
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
+// ══════════════════════════════════════════════
+// GET /api/stats/tech-hours-raw
+// 回傳指定技師的原始工時明細，供查核折扣回推是否正確
+// ══════════════════════════════════════════════
+router.get('/stats/tech-hours-raw', async (req, res) => {
+  const { period, branch, emp_name } = req.query;
+  if (!period || !branch || !emp_name) {
+    return res.status(400).json({ error: 'period / branch / emp_name 為必填' });
+  }
+  try {
+    // 找出所有可能匹配的 tech_name_clean
+    const allRes = await pool.query(
+      `SELECT DISTINCT tech_name_clean FROM tech_performance WHERE period=$1 AND branch=$2`,
+      [period, branch]
+    );
+    const matchedNames = allRes.rows
+      .map(r => r.tech_name_clean)
+      .filter(n => {
+        if (!n) return false;
+        const segs = n.split(/[-\/、,，\s]+/).map(s => s.trim()).filter(Boolean);
+        return n.includes(emp_name) || segs.some(s => s === emp_name || emp_name.includes(s));
+      });
+
+    if (!matchedNames.length) {
+      return res.json({ emp_name, matched_names: [], rows: [], summary: null });
+    }
+
+    const rawRes = await pool.query(
+      `SELECT
+         dispatch_date,
+         work_order,
+         work_code,
+         task_content,
+         account_type,
+         discount,
+         standard_hours                                              AS original_hours,
+         CASE
+           WHEN discount IS NOT NULL AND discount > 0 AND discount < 1
+           THEN ROUND((standard_hours / discount)::numeric, 4)
+           ELSE standard_hours
+         END                                                         AS restored_hours,
+         CASE
+           WHEN discount IS NOT NULL AND discount > 0 AND discount < 1
+           THEN true ELSE false
+         END                                                         AS was_discounted
+       FROM tech_performance
+       WHERE period=$1 AND branch=$2 AND tech_name_clean = ANY($3)
+       ORDER BY dispatch_date, work_order`,
+      [period, branch, matchedNames]
+    );
+
+    const rows = rawRes.rows;
+    const sumOrig = rows.reduce((s, r) => s + parseFloat(r.original_hours || 0), 0);
+    const sumRest = rows.reduce((s, r) => s + parseFloat(r.restored_hours  || 0), 0);
+    const summary = {
+      total_rows:         rows.length,
+      discounted_rows:    rows.filter(r => r.was_discounted).length,
+      sum_original_hours: Math.round(sumOrig * 100) / 100,
+      sum_restored_hours: Math.round(sumRest * 100) / 100,
+      difference:         Math.round((sumRest - sumOrig) * 100) / 100,
+    };
+
+    res.json({ emp_name, matched_names: matchedNames, rows, summary });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Config CRUD ──
 router.get('/tech-capacity-config/default', (req, res) => {
   res.json(JSON.parse(JSON.stringify(DEFAULT_CONFIG)));
