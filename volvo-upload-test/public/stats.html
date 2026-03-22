@@ -1404,28 +1404,38 @@ async function loadTechHours(period, branch) {
       return;
     }
 
-    // ── KPI 卡片 ──
     let kpiHtml = '';
-    let gtTgt = 0, gtAct = 0, gtPpl = 0;
+    let gtTgt = 0, gtAct = 0, gtPpl = 0, gtPplResigned = 0;
     branches.forEach(br => {
       const bd  = data.branches[br];
       const col = FC_COLORS_TH[br] || '#94a3b8';
-      let brTgt = 0, brAct = 0, brPpl = 0;
+      let brTgt = 0, brAct = 0, brPpl = 0, brResigned = 0;
       DT_ORDER_TH.forEach(dt => {
         const dtd = bd.dept_types?.[dt];
         if (!dtd) return;
-        dtd.techs.forEach(t => { brTgt += t.target_hours; brAct += t.actual_hours; brPpl++; });
+        dtd.techs.forEach(t => {
+          brTgt += t.target_hours;
+          brAct += t.actual_hours;
+          if (t.status === '離職') brResigned++;
+          else brPpl++;
+        });
       });
       const brPct = brTgt > 0 ? brAct / brTgt * 100 : null;
-      gtTgt += brTgt; gtAct += brAct; gtPpl += brPpl;
+      gtTgt += brTgt; gtAct += brAct; gtPpl += brPpl; gtPplResigned += brResigned;
+      const brPplLabel = brResigned > 0
+        ? `${brAct.toFixed(0)} / ${brTgt.toFixed(0)} H · ${brPpl} 人<span style="color:#ef4444;font-size:10px"> (+${brResigned}離)</span>`
+        : `${brAct.toFixed(0)} / ${brTgt.toFixed(0)} H · ${brPpl} 人`;
       kpiHtml += `<div class="kpi-card"><div class="kpi-label" style="color:${col}">${br} 達成率</div>
         <div class="kpi-value" style="color:${pctColorTH(brPct)}">${brPct !== null ? brPct.toFixed(1)+'%' : '—'}</div>
-        <div class="kpi-sub">${brAct.toFixed(0)} / ${brTgt.toFixed(0)} H · ${brPpl} 人</div></div>`;
+        <div class="kpi-sub">${brPplLabel}</div></div>`;
     });
     const gtPct = gtTgt > 0 ? gtAct / gtTgt * 100 : null;
+    const gtPplLabel = gtPplResigned > 0
+      ? `${gtPpl} 人 (+${gtPplResigned}離) · ${gtAct.toFixed(0)}/${gtTgt.toFixed(0)} H`
+      : `${gtPpl} 人 · ${gtAct.toFixed(0)}/${gtTgt.toFixed(0)} H`;
     kpiHtml = `<div class="kpi-card"><div class="kpi-label">⏱️ 整體達成率</div>
       <div class="kpi-value" style="color:${pctColorTH(gtPct)}">${gtPct !== null ? gtPct.toFixed(1)+'%' : '—'}</div>
-      <div class="kpi-sub">${gtPpl} 人 · ${gtAct.toFixed(0)}/${gtTgt.toFixed(0)} H</div></div>` + kpiHtml;
+      <div class="kpi-sub">${gtPplLabel}</div></div>` + kpiHtml;
     kpiEl.innerHTML = kpiHtml;
 
     // ── 各廠卡片 ──
@@ -1440,14 +1450,24 @@ async function loadTechHours(period, branch) {
       const col = FC_COLORS_TH[br] || '#94a3b8';
       const dts = DT_ORDER_TH.filter(dt => bd.dept_types?.[dt]);
 
-      let fcTgt = 0, fcAct = 0, fcPpl = 0;
-      dts.forEach(dt => { bd.dept_types[dt].techs.forEach(t => { fcTgt += t.target_hours; fcAct += t.actual_hours; fcPpl++; }); });
+      let fcTgt = 0, fcAct = 0, fcPpl = 0, fcResigned = 0;
+      dts.forEach(dt => {
+        bd.dept_types[dt].techs.forEach(t => {
+          fcTgt += t.target_hours;
+          fcAct += t.actual_hours;
+          if (t.status === '離職') fcResigned++;
+          else fcPpl++;
+        });
+      });
       const fcPct = fcTgt > 0 ? fcAct / fcTgt * 100 : null;
+      const fcPplLabel = fcResigned > 0
+        ? `工作天 ${wd} 天 · ${fcPpl} 人 <span style="color:#ef4444;font-size:11px">(+${fcResigned}離職)</span>`
+        : `工作天 ${wd} 天 · ${fcPpl} 人`;
 
       html += `<div class="card" style="border-left:3px solid ${col}">
         <div class="card-title" style="color:${col}">
           ${br}
-          <span style="font-size:12px;font-weight:400;color:#64748b;margin-left:4px">工作天 ${wd} 天 · ${fcPpl} 人</span>
+          <span style="font-size:12px;font-weight:400;color:#64748b;margin-left:4px">${fcPplLabel}</span>
           <span style="font-size:11px;color:#475569;margin-left:auto">${rosterLabel}</span>
           <span style="font-size:15px;font-weight:800;margin-left:12px;color:${pctColorTH(fcPct)}">${fcPct !== null ? fcPct.toFixed(1)+'%' : '—'}</span>
         </div>`;
@@ -1459,12 +1479,17 @@ async function loadTechHours(period, branch) {
         const dtTgt = techs.reduce((s,t) => s + t.target_hours, 0);
         const dtAct = techs.reduce((s,t) => s + t.actual_hours, 0);
         const dtPct = dtTgt > 0 ? dtAct / dtTgt * 100 : null;
+        const dtActivePpl   = techs.filter(t => t.status !== '離職').length;
+        const dtResignedPpl = techs.filter(t => t.status === '離職').length;
+        const dtPplLabel = dtResignedPpl > 0
+          ? `${dtActivePpl} 人 <span style="color:#ef4444;font-size:10px">(+${dtResignedPpl}離)</span>`
+          : `${techs.length} 人`;
 
         html += `<div style="margin-bottom:16px">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:6px 0;border-bottom:1px solid #2d3f56">
             <span>${DT_ICONS_TH[dt]}</span>
             <span style="font-size:12px;font-weight:700;color:${dtCol}">${DT_LABELS_TH[dt] || dt}</span>
-            <span style="font-size:11px;color:#475569">${techs.length} 人</span>
+            <span style="font-size:11px;color:#475569">${dtPplLabel}</span>
             <span style="margin-left:auto;font-size:12px;color:#64748b">
               目標 <strong style="color:#94a3b8">${dtTgt.toFixed(1)} H</strong>　
               實績 <strong style="color:${pctColorTH(dtPct)}">${dtAct.toFixed(1)} H</strong>
@@ -1482,12 +1507,20 @@ async function loadTechHours(period, branch) {
               </tr></thead>
               <tbody>
                 ${techs.map(t => {
-                  const pct  = t.achieve_rate;
-                  const clr  = pctColorTH(pct);
-                  const fillW = pct !== null ? Math.min(100, pct).toFixed(1) : 0;
+                  const pct    = t.achieve_rate;
+                  const clr    = pctColorTH(pct);
+                  const fillW  = pct !== null ? Math.min(100, pct).toFixed(1) : 0;
                   const isZero = t.actual_hours === 0;
-                  return `<tr ${isZero ? 'style="opacity:.55"' : ''}>
-                    <td style="font-weight:700">${t.emp_name}</td>
+                  const isResigned   = t.status === '離職';
+                  const isUnpaid     = t.status === '留職停薪';
+                  const rowOpacity   = isResigned ? 'opacity:.65' : isUnpaid ? 'opacity:.8' : '';
+                  const statusBadge  = isResigned
+                    ? `<span style="display:inline-block;margin-left:5px;padding:1px 6px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(239,68,68,.15);color:#ef4444">離職${t.resign_date?(' '+t.resign_date.slice(5)):''}</span>`
+                    : isUnpaid
+                    ? `<span style="display:inline-block;margin-left:5px;padding:1px 6px;border-radius:5px;font-size:10px;font-weight:700;background:rgba(245,158,11,.15);color:#f59e0b">留停</span>`
+                    : '';
+                  return `<tr style="${rowOpacity}">
+                    <td style="font-weight:700">${t.emp_name}${statusBadge}</td>
                     <td><span class="badge badge-gray" style="font-size:11px">${t.job_title}</span></td>
                     <td class="num"><span style="color:${dtCol};font-weight:700">${Math.round(t.utilization*100)}%</span></td>
                     <td class="num" style="color:#94a3b8">${t.target_hours.toFixed(1)}</td>
@@ -1503,7 +1536,7 @@ async function loadTechHours(period, branch) {
                   </tr>`;
                 }).join('')}
                 <tr class="subtotal-row">
-                  <td colspan="3" style="color:${dtCol}">小計（${techs.length} 人）</td>
+                  <td colspan="3" style="color:${dtCol}">小計（${dtActivePpl}人${dtResignedPpl>0?` +${dtResignedPpl}離`:``}）</td>
                   <td class="num">${dtTgt.toFixed(1)}</td>
                   <td class="num" style="color:${pctColorTH(dtPct)}">${dtAct.toFixed(1)}</td>
                   <td style="color:${pctColorTH(dtPct)};font-weight:800;padding:9px 12px">${dtPct !== null ? dtPct.toFixed(1)+'%' : '—'}</td>
