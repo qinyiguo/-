@@ -1263,7 +1263,7 @@ async function loadWip(period,branch){
         <div class="kpi-sub">K元（扣PDI: ${fmtK(E.wage)}K）</div>
       </div>
       <div class="kpi-card">
-        <div class="kpi-label">銷售金額</div>
+        <div class="kpi-label">預估總額（repair_amount）</div>
         <div class="kpi-value">${fmtK(T.sales)}</div>
         <div class="kpi-sub">K元（扣PDI: ${fmtK(E.sales)}K）</div>
       </div>`;
@@ -1425,8 +1425,9 @@ async function loadTechHours(period,branch){
           const tAch=t.achieve_rate;
           const tAchCol=tAch===null?'#475569':tAch>=100?'#10b981':tAch>=80?'#f59e0b':'#ef4444';
           const tBarW=t.target_hours>0?Math.min(100,t.actual_hours/t.target_hours*100):0;
+          const safeEmpName=t.emp_name.replace(/'/g,"\\'");
           html+=`<tr style="${isResigned?'opacity:.65':''} ${t.is_dms_only?'background:rgba(100,116,139,.04)':''}">
-            <td style="font-weight:600">${t.emp_name}</td>
+            <td style="font-weight:600;cursor:pointer;color:#93c5fd" onclick="openTechHoursDetail('${safeEmpName}','${br}')" title="點擊查看折扣明細">${t.emp_name} <span style="font-size:10px;opacity:.6">🔍</span></td>
             <td style="font-size:12px;color:#94a3b8">${t.job_title||'—'}</td>
             <td><span style="font-size:10px;padding:1px 6px;border-radius:6px;background:${t.status==='在職'?'rgba(16,185,129,.15)':t.status==='留職停薪'?'rgba(245,158,11,.15)':'rgba(239,68,68,.15)'};color:${t.status==='在職'?'#10b981':t.status==='留職停薪'?'#f59e0b':'#ef4444'}">${t.status}</span></td>
             <td class="num" style="color:#64748b">${t.target_excluded?'—':(t.utilization*100).toFixed(0)+'%'}</td>
@@ -1446,6 +1447,121 @@ async function loadTechHours(period,branch){
   }catch(e){contentEl.innerHTML=`<div style="color:#ef4444;padding:16px">${e.message}</div>`;}
 }
 
+// ══ 技師工時折扣明細 Modal ══
+let _techHoursDetailModal = { period:'', branch:'', empName:'' };
+
+function openTechHoursDetail(empName, branch) {
+  const period = getPeriod();
+  if (!period) return;
+  _techHoursDetailModal = { period, branch, empName };
+  const modal = document.getElementById('techHoursDetailModal');
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  document.getElementById('thdModalTitle').textContent = empName + ' — 折扣明細';
+  document.getElementById('thdModalBody').innerHTML = '<div class="loading"><span class="spinner"></span>載入中</div>';
+  loadTechHoursDetail(period, branch, empName);
+}
+
+function closeTechHoursDetail() {
+  document.getElementById('techHoursDetailModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function loadTechHoursDetail(period, branch, empName) {
+  const bodyEl = document.getElementById('thdModalBody');
+  const summEl = document.getElementById('thdModalSummary');
+  try {
+    const params = new URLSearchParams({ period, emp_name: empName });
+    if (branch) params.set('branch', branch);
+    const data = await fetch(`/api/stats/tech-hours-raw?${params}`).then(r => r.json());
+    if (data.error) throw new Error(data.error);
+
+    const { rows, summary, hourly_rate } = data;
+    if (!rows.length) {
+      bodyEl.innerHTML = '<div class="empty">此期間無工資資料</div>';
+      summEl.innerHTML = '';
+      return;
+    }
+
+    const s = summary;
+    const discountedPct = s.total_rows > 0 ? (s.discounted_rows / s.total_rows * 100).toFixed(0) : 0;
+    summEl.innerHTML = `
+      <div style="display:flex;gap:10px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid #2d3f56;margin-bottom:12px">
+        <div style="background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:10px 14px;min-width:110px">
+          <div style="font-size:10px;color:#64748b;margin-bottom:3px">工資總額</div>
+          <div style="font-size:16px;font-weight:800;color:#10b981">${Math.round(s.sum_wage/1000)}K</div>
+        </div>
+        <div style="background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:10px 14px;min-width:110px">
+          <div style="font-size:10px;color:#64748b;margin-bottom:3px">折扣後工時</div>
+          <div style="font-size:16px;font-weight:800;color:#8b5cf6">${s.sum_original_hours}H</div>
+          <div style="font-size:10px;color:#475569">未回推</div>
+        </div>
+        <div style="background:#0f172a;border:1px solid ${s.difference>0?'#10b981':'#2d3f56'};border-radius:8px;padding:10px 14px;min-width:110px">
+          <div style="font-size:10px;color:#64748b;margin-bottom:3px">回推後工時 ✅</div>
+          <div style="font-size:16px;font-weight:800;color:#10b981">${s.sum_restored_hours}H</div>
+          <div style="font-size:10px;color:${s.difference>0?'#10b981':'#475569'}">+${s.difference}H 折扣補回</div>
+        </div>
+        <div style="background:#0f172a;border:1px solid ${parseInt(discountedPct)>0?'#f59e0b':'#2d3f56'};border-radius:8px;padding:10px 14px;min-width:110px">
+          <div style="font-size:10px;color:#64748b;margin-bottom:3px">有折扣筆數</div>
+          <div style="font-size:16px;font-weight:800;color:${parseInt(discountedPct)>0?'#f59e0b':'#475569'}">${s.discounted_rows}筆</div>
+          <div style="font-size:10px;color:#475569">${discountedPct}% 有折扣</div>
+        </div>
+        <div style="background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:10px 14px;min-width:110px">
+          <div style="font-size:10px;color:#64748b;margin-bottom:3px">時薪設定</div>
+          <div style="font-size:16px;font-weight:800;color:#64748b">${hourly_rate}</div>
+          <div style="font-size:10px;color:#475569">元/H</div>
+        </div>
+      </div>`;
+
+    const thS = 'padding:8px 10px;background:#090f1a;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;white-space:nowrap;text-align:left;';
+    const thN = thS + 'text-align:right;';
+    let html = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr>
+        <th style="${thS}">出廠日期</th>
+        <th style="${thS}">工單號</th>
+        <th style="${thS}">工資代碼</th>
+        <th style="${thS}">帳類</th>
+        <th style="${thN}">折扣</th>
+        <th style="${thN}">工資(元)</th>
+        <th style="${thN}">折扣後工時</th>
+        <th style="${thN}">回推工時</th>
+        <th style="${thS}">狀態</th>
+      </tr></thead><tbody>`;
+
+    rows.forEach((r, i) => {
+      const bg = i % 2 === 0 ? '#111827' : '#0e1a29';
+      const discounted = r.was_discounted;
+      const origH = parseFloat(r.original_hours || 0).toFixed(2);
+      const restH = parseFloat(r.restored_hours || 0).toFixed(2);
+      const diff = (parseFloat(restH) - parseFloat(origH)).toFixed(2);
+      const discVal = r.discount !== null ? parseFloat(r.discount) : null;
+      const discDisplay = discVal === null ? '—' : discVal < 1 ? (discVal * 100).toFixed(0) + '%' : discVal.toFixed(0) + '%';
+      html += `<tr style="background:${bg}">
+        <td style="padding:6px 10px;border-bottom:1px solid rgba(45,63,86,.3);white-space:nowrap">${r.dispatch_date ? String(r.dispatch_date).slice(0,10) : '—'}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid rgba(45,63,86,.3);font-family:monospace;font-size:11px">${r.work_order}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid rgba(45,63,86,.3)">${r.work_code || '—'}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid rgba(45,63,86,.3);font-size:11px;color:#94a3b8">${r.account_type || '—'}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid rgba(45,63,86,.3);text-align:right;color:${discounted?'#f59e0b':'#475569'};font-weight:${discounted?700:400}">${discDisplay}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid rgba(45,63,86,.3);text-align:right;font-variant-numeric:tabular-nums">${Math.round(r.wage).toLocaleString()}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid rgba(45,63,86,.3);text-align:right;color:#8b5cf6">${origH}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid rgba(45,63,86,.3);text-align:right;color:${discounted?'#10b981':'#64748b'};font-weight:${discounted?700:400}">${restH}${discounted&&parseFloat(diff)>0?` <span style="font-size:10px;color:#10b981">(+${diff})</span>`:''}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid rgba(45,63,86,.3)">${discounted?'<span style="background:rgba(245,158,11,.15);color:#f59e0b;padding:1px 6px;border-radius:4px;font-size:10px">有折扣</span>':'<span style="color:#475569;font-size:11px">—</span>'}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+    bodyEl.innerHTML = html;
+  } catch(e) {
+    bodyEl.innerHTML = `<div style="color:#ef4444;padding:16px">${e.message}</div>`;
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const m = document.getElementById('techHoursDetailModal');
+    if (m && m.style.display !== 'none') closeTechHoursDetail();
+  }
+});
+
 // ══ Init ══
 document.addEventListener('DOMContentLoaded',async()=>{
   await loadPeriods();
@@ -1453,5 +1569,26 @@ document.addEventListener('DOMContentLoaded',async()=>{
   await loadAll();
 });
 </script>
+<div id="techHoursDetailModal"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:600;
+         align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto"
+  onclick="if(event.target===this)closeTechHoursDetail()">
+  <div style="background:#1a2740;border:1px solid #2d4060;border-radius:14px;
+              width:100%;max-width:1000px;display:flex;flex-direction:column;
+              box-shadow:0 24px 64px rgba(0,0,0,.85);margin:auto">
+    <div style="display:flex;align-items:center;gap:10px;padding:16px 20px 12px;border-bottom:1px solid #2d3f56;flex-shrink:0">
+      <div id="thdModalTitle" style="font-size:15px;font-weight:800;flex:1;color:#fff"></div>
+      <div style="font-size:11px;color:#64748b">折扣後工時 → 回推工時（÷折扣），顯示真實貢獻工時</div>
+      <button onclick="closeTechHoursDetail()"
+        style="width:30px;height:30px;border-radius:8px;border:1px solid #2d3f56;
+               background:#0f172a;color:#64748b;font-size:18px;line-height:1;cursor:pointer;
+               display:flex;align-items:center;justify-content:center;flex-shrink:0">&times;</button>
+    </div>
+    <div style="padding:14px 20px 0" id="thdModalSummary"></div>
+    <div style="overflow:auto;flex:1;padding:0 20px 16px;max-height:calc(100vh - 220px)" id="thdModalBody">
+      <div class="loading"><span class="spinner"></span>載入中</div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
