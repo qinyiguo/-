@@ -118,7 +118,44 @@ router.get('/stats/person-performance', async (req, res) => {
     const filters = metric.filters || [];
     let persons = [];
 
-    if (['repair_income','repair_subfield'].includes(metric.metric_type)) {
+    if (metric.metric_type === 'sa_config') {
+      // 從 sa_sales_config 取 work_code filters，JOIN tech_performance + repair_income 取 SA 實績
+      const saConfigRes = await pool.query(
+        'SELECT * FROM sa_sales_config WHERE config_name=$1 LIMIT 1', [metric.metric_name]
+      );
+      if (saConfigRes.rows.length) {
+        const saConfig = saConfigRes.rows[0];
+        const scFilters = saConfig.filters || [];
+        const workCodes = scFilters.filter(f => f.type === 'work_code');
+        const acTypes   = scFilters.filter(f => f.type === 'account_type').map(f => f.value);
+        const statMethod = saConfig.stat_method || 'amount';
+        const selectExpr = statMethod === 'count' ? 'COUNT(*)' : statMethod === 'qty' ? 'SUM(tp.standard_hours)' : 'SUM(tp.wage)';
+        const personType = saConfig.person_type || 'sales_person';
+        const groupField = personType === 'tech_name_clean' ? 'tp.tech_name_clean' : 'ri.service_advisor';
+        const conds  = [`tp.period=$1`, `tp.branch=$2`, `${groupField} IS NOT NULL`, `${groupField}!=''`];
+        const params = [period, branch]; let idx = 3;
+        if (acTypes.length) { conds.push(`tp.account_type=ANY($${idx++})`); params.push(acTypes); }
+        const wcConds = [];
+        for (const wc of workCodes) {
+          if (wc.value && wc.value.includes('-')) {
+            const [f, t] = wc.value.split('-');
+            wcConds.push(`(tp.work_code BETWEEN $${idx++} AND $${idx++})`);
+            params.push(f.trim(), t.trim());
+          } else if (wc.value) {
+            wcConds.push(`tp.work_code=$${idx++}`);
+            params.push(wc.value);
+          }
+        }
+        if (wcConds.length) conds.push(`(${wcConds.join(' OR ')})`);
+        const joinClause = personType !== 'tech_name_clean'
+          ? 'LEFT JOIN repair_income ri ON tp.work_order=ri.work_order AND tp.period=ri.period AND tp.branch=ri.branch'
+          : '';
+        const sql = `SELECT ${groupField} AS person_name, COALESCE(${selectExpr},0) AS actual FROM tech_performance tp ${joinClause} WHERE ${conds.join(' AND ')} GROUP BY ${groupField} ORDER BY actual DESC`;
+        const r = await pool.query(sql, params);
+        persons = r.rows;
+      }
+
+    } else if (['repair_income','repair_subfield'].includes(metric.metric_type)) {
       const acTypes = filters.filter(f=>f.type==='account_type').map(f=>f.value);
       const conds = [`period=$1`,`branch=$2`,`service_advisor IS NOT NULL`,`service_advisor!=''`];
       const params = [period, branch]; let idx = 3;
