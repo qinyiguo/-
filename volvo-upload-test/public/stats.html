@@ -2093,7 +2093,18 @@ async function _ppSaveRow(dKey, ni, personName) {
       });
     }
     if (msgEl) { msgEl.textContent = '✅'; msgEl.style.color = '#10b981'; }
-    await loadPersonPerfDashboard();
+    // 更新記憶體 ptMap（不重載整頁，保留拖曳順序）
+    const dNew = _ppDeptData[dKey];
+    if (dNew) {
+      if (!dNew.ptMap[personName]) dNew.ptMap[personName] = {};
+      dNew.metrics.forEach(m => {
+        if (!dNew.ptMap[personName][m.id]) dNew.ptMap[personName][m.id] = {};
+        dNew.ptMap[personName][m.id].weight = weight;
+      });
+      const viewEl = document.getElementById(`ppview-${dNew.branch}-${dNew.deptKey}`);
+      if (viewEl) viewEl.innerHTML = _ppBuildTable(dKey);
+    }
+    setTimeout(() => { if (msgEl) msgEl.textContent = ''; }, 1500);
   } catch (e) {
     if (msgEl) { msgEl.textContent = '❌'; msgEl.style.color = '#ef4444'; }
     console.error('_ppSaveRow', e);
@@ -2131,7 +2142,24 @@ async function _ppSaveDept(dKey) {
       msgEl.textContent = saved ? '✅ 已儲存' : '⚠️ 無有效權重';
       msgEl.style.color = saved ? '#10b981' : '#f59e0b';
     }
-    await loadPersonPerfDashboard();
+    // 更新記憶體 ptMap，重繪此科別（保留拖曳順序）
+    const dSaved = _ppDeptData[dKey];
+    if (dSaved && saved) {
+      dSaved.roster.forEach((p, ni) => {
+        const wInput = document.getElementById(`ppW-${dSaved.branch}-${dSaved.deptKey}-${ni}`);
+        const rawW = wInput ? parseFloat(wInput.value) : NaN;
+        if (!isNaN(rawW) && rawW > 0) {
+          if (!dSaved.ptMap[p.emp_name]) dSaved.ptMap[p.emp_name] = {};
+          dSaved.metrics.forEach(m => {
+            if (!dSaved.ptMap[p.emp_name][m.id]) dSaved.ptMap[p.emp_name][m.id] = {};
+            dSaved.ptMap[p.emp_name][m.id].weight = rawW;
+          });
+        }
+      });
+      const viewEl = document.getElementById(`ppview-${dSaved.branch}-${dSaved.deptKey}`);
+      if (viewEl) viewEl.innerHTML = _ppBuildTable(dKey);
+    }
+    setTimeout(() => { if (msgEl) msgEl.textContent = ''; }, 2000);
   } catch (e) {
     if (msgEl) { msgEl.textContent = '❌ ' + e.message; msgEl.style.color = '#ef4444'; }
     console.error('_ppSaveDept', e);
