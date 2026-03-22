@@ -530,9 +530,9 @@ router.get('/stats/wip', async (req, res) => {
         COALESCE(bq.car_series, '')          AS car_series,
         COALESCE(bq.repair_type, '')         AS account_type,
         COALESCE(bq.labor_fee, 0)            AS wage,
-        COALESCE(bq.sales_material_fee, 0)   AS sales_amt,
+        COALESCE(bq.repair_amount, 0)        AS sales_amt,
         COALESCE(bq.repair_material_fee, 0)  AS cost_amt,
-        COALESCE(bq.repair_amount, 0)        AS repair_amount,
+        COALESCE(bq.sales_material_fee, 0)   AS parts_sales_amt,
         CASE
           WHEN bq.open_time IS NOT NULL
           THEN EXTRACT(DAY FROM (NOW() - bq.open_time))
