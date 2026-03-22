@@ -1672,6 +1672,7 @@ document.addEventListener('keydown', e => {
 });
 
 // ══ 個人業績 ══
+
 let _ppMetrics  = [];
 let _ppDeptData = {}; // key: "branch-deptKey" → { branch, deptKey, personNames, metricIds }
 
@@ -1837,10 +1838,17 @@ function _ppBuildTable(branch, deptKey, roster, metrics, branchTargets, saActual
   const bt        = branchTargets[branch] || {};
   const isAmt     = m => !['count', 'qty'].includes(m.stat_field);
   const rateColor = r => r === null ? '#475569' : r >= 100 ? '#10b981' : r >= 80 ? '#f59e0b' : '#ef4444';
-  const fmtV      = (v, m) => {
+  const fmtV = (v, m) => {
     const n = parseFloat(v || 0);
     if (!n || isNaN(n)) return '—';
     return isAmt(m) && n >= 1000 ? Math.round(n / 1000).toLocaleString() + 'K' : n.toLocaleString();
+  };
+  // 目標專用：無條件進位，不顯示小數
+  const fmtT = (v, m) => {
+    const n = parseFloat(v || 0);
+    if (!n || isNaN(n)) return '未設';
+    const c = Math.ceil(n);
+    return isAmt(m) && c >= 1000 ? Math.ceil(c / 1000).toLocaleString() + 'K' : c.toLocaleString();
   };
   const esc = s => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
@@ -1860,7 +1868,7 @@ function _ppBuildTable(branch, deptKey, roster, metrics, branchTargets, saActual
   const thMetrics = metrics.map(m => `
     <th style="${TH}text-align:right;min-width:110px;border-right:1px solid #1e3050">
       <div style="color:#8b5cf6;font-weight:800">${m.metric_name}</div>
-      <div style="color:#475569;font-size:10px;font-weight:400;margin-top:1px">廠目標 ${fmtV(bt[m.id], m)}</div>
+      <div style="color:#475569;font-size:10px;font-weight:400;margin-top:1px">廠目標 ${fmtT(bt[m.id], m)}</div>
     </th>`).join('');
 
   let rows = '';
@@ -1883,7 +1891,7 @@ function _ppBuildTable(branch, deptKey, roster, metrics, branchTargets, saActual
       return `<td style="${TD}background:${bg};border-right:1px solid #1a2535;min-width:110px">
         <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-end">
           <span style="font-size:13px;font-weight:800;color:${actual > 0 ? '#10b981' : '#475569'}">${fmtV(actual, m)}</span>
-          <span style="font-size:10px;color:#64748b">目標 ${calcT ? fmtV(calcT, m) : '未設'}</span>
+          <span style="font-size:10px;color:#64748b">目標 ${fmtT(calcT, m)}</span>
           ${rate !== null
             ? `<div style="display:flex;align-items:center;gap:5px;width:100%;margin-top:1px">
                  <div style="flex:1;background:#0f172a;border-radius:2px;height:4px">
