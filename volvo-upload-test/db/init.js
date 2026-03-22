@@ -275,6 +275,21 @@ const initDatabase = async () => {
       ON bonus_targets (metric_id, COALESCE(emp_id,''), COALESCE(dept_code,''), period)
     `);
 
+    // ── 個人業績目標 ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS person_metric_targets (
+        id            SERIAL PRIMARY KEY,
+        metric_id     INTEGER NOT NULL,
+        period        VARCHAR(6)   NOT NULL,
+        branch        VARCHAR(10)  NOT NULL,
+        person_name   VARCHAR(100) NOT NULL,
+        weight        NUMERIC(7,4),
+        target_value  NUMERIC(15,2),
+        note          TEXT DEFAULT '',
+        updated_at    TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(metric_id, period, branch, person_name)
+      )`);
+
     console.log('[initDB] ✅ 所有表格建立完成');
   } catch (err) {
     console.error('[initDB] ❌ 失敗:', err.message);
