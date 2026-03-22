@@ -83,25 +83,6 @@ router.get('/stats/income-summary', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── 技師工資 ──
-router.get('/stats/tech', async (req, res) => {
-  try {
-    const { period, branch } = req.query;
-    const conds = []; const params = []; let idx = 1;
-    if (period) { conds.push(`period=$${idx++}`); params.push(period); }
-    if (branch) { conds.push(`branch=$${idx++}`); params.push(branch); }
-    const where = conds.length ? 'WHERE '+conds.join(' AND ') : '';
-    const r = await pool.query(`
-      SELECT branch,tech_name_clean,COUNT(DISTINCT work_order) AS car_count,
-        SUM(standard_hours) AS total_hours,SUM(wage) AS total_wage,
-        SUM(CASE WHEN wage_category ILIKE '%美容%' THEN wage ELSE 0 END) AS beauty_wage,
-        SUM(CASE WHEN wage_category NOT ILIKE '%美容%' THEN wage ELSE 0 END) AS net_wage
-      FROM tech_performance ${where} GROUP BY branch,tech_name_clean ORDER BY total_wage DESC
-    `, params);
-    res.json({ ranking: r.rows });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
 // ── 零件銷售 ──
 router.get('/stats/parts', async (req, res) => {
   try {
@@ -526,18 +507,10 @@ router.get('/stats/performance', async (req, res) => {
 });
 
 // ── WIP 未結工單（累計制）──
-// 邏輯：
-//   來源：business_query，open_time 在「選定月份月底」之前的所有工單（跨月累計）
-//   結算檢查：repair_income 不限 period（跨月結算也算結清）
-//   WIP = 截至月底仍未出現在 repair_income 的工單
-//   排除：PDI、PV（SQL 層過濾）
-//   金額：business_query 的 labor_fee / sales_material_fee / repair_material_fee
 router.get('/stats/wip', async (req, res) => {
   const { period, branch } = req.query;
   if (!period) return res.status(400).json({ error: 'period 為必填' });
   try {
-    // 計算「選定月份下個月初」，作為 open_time 上限（累計至月底）
-    // period = YYYYMM，e.g. 202503 → cutoff = 2025-04-01
     const params = [period]; let idx = 2;
     const branchCond = branch ? ` AND bq.branch=$${idx++}` : '';
     if (branch) params.push(branch);
@@ -567,12 +540,9 @@ router.get('/stats/wip', async (req, res) => {
         END AS days_open
       FROM business_query bq
       WHERE
-        -- 累計：open_time 在選定月份月底之前（含當月整月）
         bq.open_time < (to_date($1 || '01', 'YYYYMMDD') + interval '1 month')
         ${branchCond}
-        -- 只排除外賣 PV，PDI 保留（在前端標記顯示）
         AND COALESCE(bq.repair_type, '') NOT ILIKE '%PV%'
-        -- 未結：repair_income 無對應工單（不限 period）
         AND NOT EXISTS (
           SELECT 1 FROM repair_income ri
           WHERE ri.work_order = bq.work_order
@@ -582,7 +552,6 @@ router.get('/stats/wip', async (req, res) => {
     `, params);
 
     const rows = r.rows;
-
     const byRepairType = {};
     const byPeriod     = {};
     let total   = { count: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
@@ -596,7 +565,6 @@ router.get('/stats/wip', async (req, res) => {
       const c       = parseFloat(row.cost_amt  || 0);
       const days    = row.days_open !== null ? parseFloat(row.days_open) : null;
       const isOver30 = days !== null && days > 30;
-      // is_pdi: repair_type 或 repair_item 含 PDI
       const isPdi   = /PDI/i.test(row.repair_type || '') || /PDI/i.test(row.repair_item || '');
 
       const inc = (obj) => {
@@ -609,27 +577,142 @@ router.get('/stats/wip', async (req, res) => {
 
       if (!byRepairType[rt]) byRepairType[rt] = { label: rt, count: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
       inc(byRepairType[rt]);
-
       if (!byPeriod[per]) byPeriod[per] = { label: per, count: 0, wage: 0, sales: 0, cost: 0, c30: 0, cOver30: 0 };
       inc(byPeriod[per]);
-
       inc(total);
       if (!isPdi) inc(exclPdi);
-
-      // 在 row 上標記，供前端用
       row.is_pdi = isPdi;
     }
 
     res.json({
       rows,
       summary: {
-        total,
-        exclPdi,
-        byAccountType: Object.values(byPeriod).sort((a,b) => a.label < b.label ? -1 : 1), // 用「進廠月份」替代帳類，升序
+        total, exclPdi,
+        byAccountType: Object.values(byPeriod).sort((a,b) => a.label < b.label ? -1 : 1),
         byRepairType:  Object.values(byRepairType).sort((a,b) => b.count - a.count),
       },
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── 單車銷售額 ──
+// 分類邏輯：
+//   工單有工資代碼 17300/17301/17398 → 保養
+//   帳類含「延保」→ 延保
+//   帳類含「保險」→ 保險
+//   帳類含「一般」且 bodywork/paint > 0 → 自費鈑烤
+//   其餘 → 維修
+// 台數計算：plate_no + visit_date + repair_category 三合一去重
+//   同日同車牌同類型 = 1 台；同日同車牌不同類型 = 2 台
+router.get('/stats/revenue-per-vehicle', async (req, res) => {
+  const { period, branch } = req.query;
+  if (!period) return res.status(400).json({ error: 'period 為必填' });
+  try {
+    const params = [period]; let idx = 2;
+    const branchCond = branch ? ` AND ri.branch=$${idx++}` : '';
+    if (branch) params.push(branch);
+
+    const r = await pool.query(`
+      WITH classified_orders AS (
+        SELECT
+          ri.branch,
+          ri.work_order,
+          ri.total_untaxed,
+          ri.account_type,
+          CASE
+            WHEN EXISTS (
+              SELECT 1 FROM tech_performance tp
+              WHERE tp.work_order = ri.work_order
+                AND tp.branch = ri.branch
+                AND tp.work_code IN ('17300','17301','17398')
+            ) THEN '保養'
+            WHEN ri.account_type ILIKE '%延保%' THEN '延保'
+            WHEN ri.account_type ILIKE '%保險%' THEN '保險'
+            WHEN (COALESCE(ri.bodywork_income,0)>0 OR COALESCE(ri.paint_income,0)>0) THEN '自費鈑烤'
+            ELSE '維修'
+          END AS repair_category
+        FROM repair_income ri
+        WHERE ri.period=$1${branchCond}
+      ),
+      vehicle_visits AS (
+        SELECT
+          co.branch,
+          co.repair_category,
+          co.work_order,
+          co.total_untaxed,
+          COALESCE(NULLIF(TRIM(bq.plate_no),''), co.work_order) AS plate_key,
+          COALESCE(bq.open_time::date::text, co.work_order)     AS visit_date
+        FROM classified_orders co
+        LEFT JOIN business_query bq
+          ON bq.work_order = co.work_order AND bq.branch = co.branch
+      ),
+      distinct_vehicles AS (
+        SELECT DISTINCT branch, repair_category, plate_key, visit_date
+        FROM vehicle_visits
+      ),
+      vehicle_counts AS (
+        SELECT branch, repair_category, COUNT(*) AS vehicle_count
+        FROM distinct_vehicles
+        GROUP BY branch, repair_category
+      ),
+      revenue_sums AS (
+        SELECT branch, repair_category,
+          SUM(total_untaxed) AS total_revenue,
+          COUNT(*)           AS wo_count
+        FROM classified_orders
+        GROUP BY branch, repair_category
+      )
+      SELECT
+        rs.branch,
+        rs.repair_category,
+        CASE
+          WHEN rs.repair_category IN ('保養','維修','自費鈑烤') THEN '一般'
+          ELSE rs.repair_category
+        END                                              AS main_category,
+        ROUND(COALESCE(rs.total_revenue,0))              AS total_revenue,
+        rs.wo_count,
+        COALESCE(vc.vehicle_count,0)                     AS vehicle_count,
+        CASE WHEN COALESCE(vc.vehicle_count,0) > 0
+          THEN ROUND(rs.total_revenue / vc.vehicle_count)
+          ELSE 0
+        END                                              AS revenue_per_vehicle
+      FROM revenue_sums rs
+      LEFT JOIN vehicle_counts vc
+        ON vc.branch = rs.branch AND vc.repair_category = rs.repair_category
+      ORDER BY rs.branch,
+        CASE rs.repair_category
+          WHEN '保養'     THEN 1
+          WHEN '維修'     THEN 2
+          WHEN '自費鈑烤' THEN 3
+          WHEN '延保'     THEN 4
+          WHEN '保險'     THEN 5
+          ELSE 6
+        END
+    `, params);
+
+    const rows = r.rows;
+    const grandMap = {};
+    rows.forEach(row => {
+      const key = row.repair_category;
+      if (!grandMap[key]) grandMap[key] = {
+        repair_category: key, main_category: row.main_category,
+        total_revenue: 0, wo_count: 0, vehicle_count: 0,
+      };
+      grandMap[key].total_revenue  += parseFloat(row.total_revenue  || 0);
+      grandMap[key].wo_count       += parseInt(row.wo_count         || 0);
+      grandMap[key].vehicle_count  += parseInt(row.vehicle_count    || 0);
+    });
+    const grand = Object.values(grandMap).map(g => ({
+      ...g,
+      branch: '全廠合計',
+      revenue_per_vehicle: g.vehicle_count > 0 ? Math.round(g.total_revenue / g.vehicle_count) : 0,
+    })).sort((a,b) => {
+      const o = { '保養':1,'維修':2,'自費鈑烤':3,'延保':4,'保險':5 };
+      return (o[a.repair_category]||6) - (o[b.repair_category]||6);
+    });
+
+    res.json({ rows, grand });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;
