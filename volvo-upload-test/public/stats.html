@@ -228,6 +228,7 @@
         <button class="tab" onclick="switchTab('trend')">📈 月份趨勢</button>
         <button class="tab" onclick="switchTab('daily')">📅 每日進廠</button>
         <button class="tab" onclick="switchTab('wip')">🔧 WIP 未結工單</button>
+        <button class="tab" onclick="switchTab('tech-hours')">⏱️ 技師工時</button>
       </div>
     </div>
   </div>
@@ -411,6 +412,18 @@
     </div>
   </div>
 
+  <!-- ══ 技師工時 ══ -->
+  <div id="tab-tech-hours" style="display:none">
+    <div style="background:rgba(139,92,246,.07);border:1px solid rgba(139,92,246,.25);border-radius:8px;padding:10px 14px;font-size:12px;color:#a78bfa;margin-bottom:14px;line-height:1.8">
+      ⏱️ <strong>資料來源</strong>：人員名冊（staff_roster）× 工作天數 × 產能利用率 計算月工時目標，實績來自 tech_performance.standard_hours。<br>
+      💡 部門名稱含「引擎」「鈑金」「烤漆」的技師才會顯示。職稱利用率可至 <a href="/settings.html" style="color:#a78bfa">⚙️ 設定</a> 調整。
+    </div>
+    <div id="techHoursKPI" class="kpi-grid"></div>
+    <div id="techHoursContent">
+      <div class="loading"><span class="spinner"></span>載入中</div>
+    </div>
+  </div>
+
 </div><!-- /.container -->
 
 <!-- ══ WIP 明細 Modal ══ -->
@@ -491,7 +504,7 @@ const GROUP_META={
 
 function switchTab(tab){
   currentTab=tab;
-  const tabs=['repair','tech','parts','boutique','sa-sales','trend','daily','wip'];
+  const tabs=['repair','tech','parts','boutique','sa-sales','trend','daily','wip','tech-hours'];
   document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.toggle('active',tabs[i]===tab);});
   tabs.forEach(t=>{document.getElementById(`tab-${t}`).style.display=t===tab?'':'none';});
 }
@@ -519,6 +532,7 @@ async function loadAll(){
     loadDaily(period,branch),
     loadSASales(),
     loadWip(period,branch),
+    loadTechHours(period,branch),
   ]);
   document.getElementById('lastUpdate').textContent=`${new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})} 更新`;
 }
@@ -864,7 +878,6 @@ function renderWipSummary(summary){
       <td></td>
     </tr>`;
 
-    // 計算扣PDI小計
     const pdiInScope=_wipRows.filter(r=>{
       if(!r.is_pdi)return false;
       const val=clickType==='open_period'?(r.open_period||'（未知）'):clickType==='account_type'?(r.account_type||'（未知）'):(r.repair_type||'（未知）');
@@ -895,7 +908,6 @@ function renderWipSummary(summary){
       <td></td>
     </tr>`:'';
 
-
     return `
       <div style="margin-bottom:24px">
         <div style="font-size:12px;font-weight:700;color:#475569;display:flex;align-items:center;gap:8px;margin-bottom:10px;letter-spacing:.04em">
@@ -924,7 +936,6 @@ function renderWipSummary(summary){
       </div>`;
   };
 
-  // byAccountType 現在存的是「進廠月份」分組，byRepairType 是維修類型
   const html=(buildTable(byAccountType,'進廠月份','open_period')||'')
             +(buildTable(byRepairType,'維修類型','repair_type')||'')
             ||'<div class="empty">此期間無未結工單</div>';
@@ -932,7 +943,6 @@ function renderWipSummary(summary){
 }
 
 function openWipDetail(filterType,filterValue){
-  // ── FIX: 依正確的欄位過濾 ──
   const filtered=filterType==='open_period'
     ?_wipRows.filter(r=>(r.open_period||'（未知）')===filterValue)
     :filterType==='account_type'
@@ -1020,7 +1030,6 @@ function openWipDetail(filterType,filterValue){
   document.getElementById('wipDetailModal').style.display='flex';
 }
 
-// ── closeWipModal（FIX：原本缺少這個函式導致無法關閉）──
 function closeWipModal(){
   document.getElementById('wipDetailModal').style.display='none';
   _wipModalFiltered=[];
@@ -1046,7 +1055,7 @@ function exportWipModalCSV(){
   const a=document.createElement('a');a.href=url;a.download=`wip_detail_${Date.now()}.csv`;a.click();URL.revokeObjectURL(url);
 }
 
- // ══ 技師工時 ══
+// ══ 技師工時 ══
 const DT_COLORS_TH = { engine:'#8b5cf6', bodywork:'#f97316', paint:'#06b6d4' };
 const DT_ICONS_TH  = { engine:'🔧', bodywork:'🔨', paint:'🎨' };
 const DT_LABELS_TH = { engine:'引擎維護科', bodywork:'鈑金科', paint:'烤漆科' };
@@ -1064,6 +1073,9 @@ async function loadTechHours(period, branch) {
   if (!kpiEl || !contentEl) return;
   if (!period) { contentEl.innerHTML = '<div class="empty">請選擇期間後按查詢</div>'; return; }
 
+  kpiEl.innerHTML = '';
+  contentEl.innerHTML = '<div class="loading"><span class="spinner"></span>載入中</div>';
+
   try {
     const params = new URLSearchParams({ period });
     if (branch) params.set('branch', branch);
@@ -1076,7 +1088,7 @@ async function loadTechHours(period, branch) {
 
     if (!branches.length) {
       kpiEl.innerHTML = '';
-      contentEl.innerHTML = '<div class="empty">此期間無技師工時資料，請確認已上傳人員名冊</div>';
+      contentEl.innerHTML = '<div class="empty">此期間無技師工時資料，請確認已上傳人員名冊（獎金表頁面右上角）</div>';
       return;
     }
 
@@ -1154,7 +1166,7 @@ async function loadTechHours(period, branch) {
                 <th class="num">產能利用率</th>
                 <th class="num">月工時目標 (H)</th>
                 <th class="num">實績工時 (H)</th>
-                <th style="min-width:140px">達成率</th>
+                <th style="min-width:160px">達成率</th>
               </tr></thead>
               <tbody>
                 ${techs.map(t => {
@@ -1173,7 +1185,7 @@ async function loadTechHours(period, branch) {
                         <div style="flex:1;background:#0f172a;border-radius:3px;height:5px;min-width:40px">
                           <div style="width:${fillW}%;height:5px;border-radius:3px;background:${clr}"></div>
                         </div>
-                        <span style="font-size:12px;font-weight:800;color:${clr};min-width:44px;text-align:right">${pct.toFixed(1)}%</span>
+                        <span style="font-size:12px;font-weight:800;color:${clr};min-width:48px;text-align:right">${pct.toFixed(1)}%</span>
                       </div>` : '<span style="color:#334155;font-size:11px">—</span>'}
                     </td>
                   </tr>`;
@@ -1182,7 +1194,7 @@ async function loadTechHours(period, branch) {
                   <td colspan="3" style="color:${dtCol}">小計（${techs.length} 人）</td>
                   <td class="num">${dtTgt.toFixed(1)}</td>
                   <td class="num" style="color:${pctColorTH(dtPct)}">${dtAct.toFixed(1)}</td>
-                  <td style="color:${pctColorTH(dtPct)};font-weight:800">${dtPct !== null ? dtPct.toFixed(1)+'%' : '—'}</td>
+                  <td style="color:${pctColorTH(dtPct)};font-weight:800;padding:9px 12px">${dtPct !== null ? dtPct.toFixed(1)+'%' : '—'}</td>
                 </tr>
               </tbody>
             </table>
