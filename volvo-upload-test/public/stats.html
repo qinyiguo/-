@@ -583,6 +583,21 @@ function closeTechHoursConfig() {
 async function loadTechCapacityConfig() {
   try {
     _trConfig = await fetch('/api/tech-capacity-config').then(r => r.json());
+    // 確保每個科別的預設職務都存在於 rates（第一次載入或缺少時補入）
+    const DEF = (await fetch('/api/tech-capacity-config/default').then(r => r.json())).utilization_rates || {};
+    if (!_trConfig.utilization_rates) _trConfig.utilization_rates = {};
+    for (const dept of ['engine','bodywork','paint','beauty']) {
+      if (!_trConfig.utilization_rates[dept]) {
+        _trConfig.utilization_rates[dept] = { ...(DEF[dept] || {}) };
+      } else {
+        // 只補入尚未存在的預設職務，不覆蓋已自訂的值
+        for (const [k, v] of Object.entries(DEF[dept] || {})) {
+          if (!(_trConfig.utilization_rates[dept].hasOwnProperty(k))) {
+            _trConfig.utilization_rates[dept][k] = v;
+          }
+        }
+      }
+    }
     syncResignedRadio();
     // ★ 同步時薪輸入框
     const hrEl = document.getElementById('trHourlyRate');
@@ -642,8 +657,14 @@ function renderTrTable(dept) {
   if (!el || !_trConfig) return;
   const rates = (_trConfig.utilization_rates || {})[dept] || {};
   const col   = TR_DEPT_COLORS[dept];
-  const allKeys = [...new Set([...TR_JOB_ORDER, ...Object.keys(rates)])];
-  const sorted  = allKeys.filter(k => rates[k] !== undefined || TR_JOB_ORDER.includes(k));
+  // 只顯示 rates 裡實際存在的 key，刪除後不會被 TR_JOB_ORDER 補回
+  const sorted = Object.keys(rates).sort((a, b) => {
+    const ai = TR_JOB_ORDER.indexOf(a), bi = TR_JOB_ORDER.indexOf(b);
+    if (ai >= 0 && bi >= 0) return ai - bi;
+    if (ai >= 0) return -1;
+    if (bi >= 0) return 1;
+    return a.localeCompare(b, 'zh-TW');
+  });
 
   let html = `<div style="overflow-x:auto;border-radius:8px;border:1px solid #2d3f56">
     <table style="width:100%;border-collapse:collapse;font-size:12px">
