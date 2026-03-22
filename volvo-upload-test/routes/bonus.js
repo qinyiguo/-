@@ -43,8 +43,8 @@ function inferFactory(deptCode) {
   if (code.startsWith('051')) return 'AMA';
   if (code.startsWith('053')) return 'AMC';
   if (code.startsWith('054')) return 'AMD';
-  if (code.startsWith('055')) return '聯合';
-  if (code.startsWith('056') || code.startsWith('061')) return '鈑烤';
+  if (code.startsWith('055')) return '鈑烤';
+  if (code.startsWith('056')) return '聯合';
   if (code.startsWith('057') || code.startsWith('07'))  return '零件';
   // 其餘（050/052 等集團層級部門）歸屬售後服務處
   return '售後服務處';
