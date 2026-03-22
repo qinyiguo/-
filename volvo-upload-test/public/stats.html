@@ -1673,33 +1673,21 @@ document.addEventListener('keydown', e => {
 
 // ══ 個人業績 ══
 let _ppMetrics = [];
-let _ppRosterCache = {};   // { branch: rows }
-let _ppLoadedPeriod = '';
-let _ppLoadedBranch = '';
  
 async function initPPMetrics() {
-  try {
-    _ppMetrics = await fetch('/api/performance-metrics').then(r=>r.json());
-  } catch(e) {}
+  try { _ppMetrics = await fetch('/api/performance-metrics').then(r=>r.json()); } catch(e) {}
 }
  
-// 主入口：切換 tab 或 loadAll 時呼叫
+// 主入口
 async function loadPersonPerfDashboard() {
   const period = getPeriod();
   const branch = document.getElementById('selBranch').value;
   const el = document.getElementById('ppContent');
   if (!el) return;
   if (!period) { el.innerHTML = '<div class="empty">請先選擇期間後按查詢</div>'; return; }
- 
   el.innerHTML = '<div class="loading"><span class="spinner"></span>載入人員與指標資料...</div>';
- 
   try {
-    // 載入指標
     if (!_ppMetrics.length) _ppMetrics = await fetch('/api/performance-metrics').then(r=>r.json());
-    if (!_ppMetrics.length) {
-      el.innerHTML = '<div class="empty">尚未設定任何指標，請至 ⚙️ 設定 → 零配精品銷售 新增</div>';
-      return;
-    }
  
     // 廠別目標
     const tRes = await fetch(`/api/performance-targets?period=${period}`).then(r=>r.json());
@@ -1709,297 +1697,308 @@ async function loadPersonPerfDashboard() {
       branchTargets[t.branch][t.metric_id] = parseFloat(t.target_value || 0);
     });
  
-    // 名冊期間
+    // 名冊期間（最新）
     const rosterPeriods = await fetch('/api/bonus/roster-periods').then(r=>r.json()).catch(()=>[]);
     const rosterPeriod = rosterPeriods[0] || null;
  
     const BRANCHES = branch ? [branch] : ['AMA','AMC','AMD'];
-    let html = '';
+    const branchColors = {AMA:'#3b82f6', AMC:'#10b981', AMD:'#f59e0b'};
  
-    for (const br of BRANCHES) {
-      html += await _renderBranchMatrix(br, period, rosterPeriod, branchTargets);
+    // 各指標實績（全廠一次抓完）
+    // actualsMap[branch][metricId][personName] = actual
+    const actualsMap = {};
+    const ptMap = {};  // ptMap[branch][metricId][personName] = {weight, target_value}
+ 
+    await Promise.all(_ppMetrics.map(async m => {
+      for (const br of BRANCHES) {
+        const [perfData, ptRows] = await Promise.all([
+          fetch(`/api/stats/person-performance?metric_id=${m.id}&period=${period}&branch=${br}`).then(r=>r.json()).catch(()=>({persons:[]})),
+          fetch(`/api/person-targets?metric_id=${m.id}&period=${period}&branch=${br}`).then(r=>r.json()).catch(()=>[]),
+        ]);
+        if (!actualsMap[br]) actualsMap[br] = {};
+        if (!actualsMap[br][m.id]) actualsMap[br][m.id] = {};
+        (perfData.persons || []).forEach(p => { actualsMap[br][m.id][p.person_name] = parseFloat(p.actual||0); });
+        if (!ptMap[br]) ptMap[br] = {};
+        if (!ptMap[br][m.id]) ptMap[br][m.id] = {};
+        ptRows.forEach(pt => {
+          ptMap[br][m.id][pt.person_name] = {
+            weight:       pt.weight       != null ? Math.round(parseFloat(pt.weight)*1000)/10 : '',
+            target_value: pt.target_value != null ? parseFloat(pt.target_value) : '',
+          };
+        });
+      }
+    }));
+ 
+    // 名冊
+    let allRoster = [];
+    if (rosterPeriod) {
+      for (const br of BRANCHES) {
+        const rows = await fetch(`/api/bonus/roster?period=${rosterPeriod}&factory=${br}`).then(r=>r.json()).catch(()=>[]);
+        rows.forEach(r => { r._branch = br; });
+        allRoster.push(...rows);
+      }
     }
  
-    el.innerHTML = html || '<div class="empty">無資料</div>';
-    _ppLoadedPeriod = period;
-    _ppLoadedBranch = branch;
+    let html = '';
+    for (const br of BRANCHES) {
+      const col = branchColors[br] || '#94a3b8';
+      // 分兩科
+      const roster維修 = allRoster.filter(p => p._branch===br && p.dept_name && p.dept_name.includes('維修服務'));
+      const roster客服 = allRoster.filter(p => p._branch===br && p.dept_name && p.dept_name.includes('客戶服務'));
+      if (!roster維修.length && !roster客服.length) continue;
+ 
+      // 指標分類：精品 or 非精品
+      const isBoutique = m => m.metric_type === 'boutique' || m.metric_name.includes('精品') || m.metric_name.includes('配件');
+      const metrics維修 = _ppMetrics.filter(m => !isBoutique(m));
+      const metrics客服 = _ppMetrics.filter(m => isBoutique(m));
+ 
+      const brId = `ppbr-${br}`;
+      html += `
+      <div style="margin-bottom:28px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+          <span style="font-size:16px;font-weight:900;color:${col}">${br}</span>
+          <span style="font-size:11px;color:#64748b;background:#1e293b;border:1px solid #2d3f56;padding:2px 10px;border-radius:6px">${period.slice(0,4)}年${parseInt(period.slice(4))}月</span>
+          <div id="ppmsg-${br}" style="font-size:12px;min-height:18px"></div>
+        </div>
+        <!-- 科別頁籤 -->
+        <div style="display:flex;gap:2px;background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:3px;width:fit-content;margin-bottom:10px">
+          <button id="pptab-${br}-repair" onclick="_ppSwitchDept('${br}','repair')"
+            style="padding:7px 20px;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;background:#3b82f6;color:#fff;white-space:nowrap">
+            🔧 接待部維修服務科 <span style="font-size:11px;font-weight:400">${roster維修.length}人</span>
+          </button>
+          <button id="pptab-${br}-service" onclick="_ppSwitchDept('${br}','service')"
+            style="padding:7px 20px;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;white-space:nowrap">
+            👥 接待部客戶服務科 <span style="font-size:11px;font-weight:400">${roster客服.length}人</span>
+          </button>
+        </div>
+ 
+        <!-- 維修服務科 -->
+        <div id="ppview-${br}-repair">
+          ${_buildDeptTable(br, 'repair', roster維修, metrics維修, branchTargets, actualsMap, ptMap, col)}
+        </div>
+        <!-- 客戶服務科 -->
+        <div id="ppview-${br}-service" style="display:none">
+          ${_buildDeptTable(br, 'service', roster客服, metrics客服, branchTargets, actualsMap, ptMap, col)}
+        </div>
+      </div>`;
+    }
+ 
+    el.innerHTML = html || '<div class="empty">名冊無接待部人員，請確認已上傳人員資料</div>';
   } catch(err) {
     el.innerHTML = `<div style="color:#ef4444;padding:16px">❌ ${err.message}</div>`;
   }
 }
  
-async function _renderBranchMatrix(branch, period, rosterPeriod, branchTargets) {
-  const branchColors = {AMA:'#3b82f6', AMC:'#10b981', AMD:'#f59e0b'};
-  const col = branchColors[branch] || '#94a3b8';
+function _ppSwitchDept(branch, dept) {
+  ['repair','service'].forEach(d => {
+    const view = document.getElementById(`ppview-${branch}-${d}`);
+    const btn  = document.getElementById(`pptab-${branch}-${d}`);
+    if (!view || !btn) return;
+    const active = d === dept;
+    view.style.display = active ? '' : 'none';
+    btn.style.background = active ? '#3b82f6' : 'transparent';
+    btn.style.color      = active ? '#fff'    : '#64748b';
+  });
+}
  
-  // 1. 名冊人員（接待部維修服務科 + 客戶服務科）
-  let rosterRows = [];
-  if (rosterPeriod) {
-    try {
-      const all = await fetch(`/api/bonus/roster?period=${rosterPeriod}&factory=${branch}`).then(r=>r.json());
-      rosterRows = all.filter(p =>
-        p.dept_name && (p.dept_name.includes('維修服務') || p.dept_name.includes('客戶服務')) &&
-        p.status !== '離職'
-      );
-    } catch(e) {}
-  }
+function _buildDeptTable(branch, deptKey, roster, metrics, branchTargets, actualsMap, ptMap, branchCol) {
+  if (!roster.length) return '<div style="color:#64748b;font-size:13px;padding:12px">此科別無人員</div>';
+  if (!metrics.length) return '<div style="color:#64748b;font-size:13px;padding:12px">此科別無對應指標</div>';
  
-  // 2. 各指標的實績（person-performance）與已設定目標
-  const actualsMap = {};   // person_name -> metric_id -> actual
-  const targetsMap = {};   // person_name -> metric_id -> { weight%, target_value }
- 
-  await Promise.all(_ppMetrics.map(async m => {
-    try {
-      const [perfData, ptRows] = await Promise.all([
-        fetch(`/api/stats/person-performance?metric_id=${m.id}&period=${period}&branch=${branch}`).then(r=>r.json()),
-        fetch(`/api/person-targets?metric_id=${m.id}&period=${period}&branch=${branch}`).then(r=>r.json()),
-      ]);
-      (perfData.persons || []).forEach(p => {
-        if (!actualsMap[p.person_name]) actualsMap[p.person_name] = {};
-        actualsMap[p.person_name][m.id] = parseFloat(p.actual || 0);
-      });
-      ptRows.forEach(pt => {
-        if (!targetsMap[pt.person_name]) targetsMap[pt.person_name] = {};
-        targetsMap[pt.person_name][m.id] = {
-          weight:       pt.weight      != null ? Math.round(parseFloat(pt.weight) * 1000) / 10 : '',
-          target_value: pt.target_value != null ? parseFloat(pt.target_value) : '',
-        };
-      });
-    } catch(e) {}
-  }));
- 
-  // 3. 合併人員清單：名冊 + DMS 有資料的人 + 已設定目標的人
-  const rosterNames = rosterRows.map(r => r.emp_name);
-  const dmsNames    = Object.keys(actualsMap);
-  const tgtNames    = Object.keys(targetsMap);
-  const allNames    = [...new Set([...rosterNames, ...dmsNames, ...tgtNames])];
- 
-  if (!allNames.length) return '';
- 
-  // 格式化
+  const bt = branchTargets[branch] || {};
   const isAmt = m => !m || !['count','qty'].includes(m.stat_field);
-  const fmtV  = (v, m) => {
-    const n = parseFloat(v||0);
-    if (!n || isNaN(n)) return '—';
-    return isAmt(m) && n >= 1000 ? Math.round(n/1000).toLocaleString()+'K' : n.toLocaleString();
-  };
+  const fmtV  = (v, m) => { const n=parseFloat(v||0); if(!n||isNaN(n))return'—'; return isAmt(m)&&n>=1000?Math.round(n/1000).toLocaleString()+'K':n.toLocaleString(); };
   const rateColor = r => r===null?'#475569':r>=100?'#10b981':r>=80?'#f59e0b':'#ef4444';
-  const safeName  = n => n.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+  const esc = s => String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
  
-  // ── Header ──
-  const bt_header = _ppMetrics.map(m => {
-    const bt = (branchTargets[branch] || {})[m.id] || 0;
-    return `<th style="text-align:center;padding:7px 8px;background:#0c1524;color:#8b5cf6;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;border-right:1px solid #1e3050;min-width:155px;white-space:nowrap">
-      ${m.metric_name}
-      <div style="font-size:10px;color:#475569;font-weight:400;margin-top:2px">廠目標 ${fmtV(bt, m)}</div>
+  // 表頭 —— 指標欄
+  const thMetrics = metrics.map(m => {
+    const target = bt[m.id] || 0;
+    return `<th style="${TH}text-align:center;min-width:110px;border-right:1px solid #1e3050">
+      <div style="color:#8b5cf6;font-size:11px;font-weight:800">${m.metric_name}</div>
+      <div style="color:#475569;font-size:10px;font-weight:400;margin-top:1px">廠目標 ${fmtV(target,m)}</div>
     </th>`;
   }).join('');
  
-  // ── Rows ──
+  // 行
   let rows = '';
-  allNames.forEach((name, ni) => {
-    const roster  = rosterRows.find(r => r.emp_name === name);
-    const statCol = roster ? (roster.status === '在職' ? '#10b981' : '#f59e0b') : '#64748b';
-    const statLbl = roster ? roster.status : 'DMS';
-    const dept    = roster ? (roster.dept_name || '—') : '（DMS）';
-    const bg      = ni % 2 === 0 ? '#111827' : '#0e1a29';
+  roster.forEach((person, ni) => {
+    const name = person.emp_name;
+    const bg   = ni % 2 === 0 ? '#111827' : '#0e1a29';
+    const statColor = person.status==='在職'?'#10b981':person.status==='留職停薪'?'#f59e0b':'#ef4444';
  
-    const cells = _ppMetrics.map(m => {
-      const actual     = (actualsMap[name] || {})[m.id] || 0;
-      const tgt        = (targetsMap[name] || {})[m.id] || {};
-      const wVal       = tgt.weight       !== undefined ? tgt.weight       : '';
-      const tvVal      = tgt.target_value !== undefined ? tgt.target_value : '';
-      const bt         = (branchTargets[branch] || {})[m.id] || 0;
-      const calcTarget = tvVal > 0 ? parseFloat(tvVal)
-                       : (wVal > 0 && bt > 0 ? bt * parseFloat(wVal) / 100 : null);
-      const rate       = calcTarget && calcTarget > 0 ? actual / calcTarget * 100 : null;
-      const rCol       = rateColor(rate);
-      const barW       = rate !== null ? Math.min(100, rate).toFixed(0) : 0;
-      const sn         = safeName(name);
+    // 取這個人、這個廠、任一指標的個人權重（統一一個值）
+    let savedWeight = '';
+    for (const m of metrics) {
+      const pt = (ptMap[branch]?.[m.id]?.[name]);
+      if (pt && pt.weight !== '') { savedWeight = pt.weight; break; }
+    }
  
-      return `<td style="padding:6px 8px;border-bottom:1px solid rgba(45,63,86,.2);border-right:1px solid #1a2535;background:${bg};vertical-align:top">
-        <div style="display:flex;flex-direction:column;gap:3px;min-width:145px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1px">
-            <span style="font-size:10px;color:#64748b">本期實績</span>
-            <span style="font-size:12px;font-weight:800;color:#10b981">${fmtV(actual, m)}</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:4px">
-            <span style="font-size:10px;color:#3b82f6;white-space:nowrap;min-width:36px">權重 %</span>
-            <input type="number" value="${wVal}" min="0" max="300" step="0.1" placeholder="—"
-              id="ppw-${branch}-${m.id}-${ni}"
-              data-branch="${branch}" data-metric="${m.id}" data-name="${sn}" data-field="weight" data-ni="${ni}" data-bt="${bt}" data-isamt="${isAmt(m)?1:0}"
-              style="background:#0f172a;border:1px solid #2d3f56;color:#3b82f6;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;width:56px;text-align:right;outline:none"
-              oninput="_ppCellUpdate(this)">
-            <span id="ppc-${branch}-${m.id}-${ni}" style="font-size:10px;color:#3b82f6;min-width:40px">${wVal > 0 && bt > 0 ? fmtV(bt * parseFloat(wVal) / 100, m) : ''}</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:4px">
-            <span style="font-size:10px;color:#f97316;white-space:nowrap;min-width:36px">直接目標</span>
-            <input type="number" value="${tvVal}" min="0" step="1" placeholder="—"
-              id="ppt-${branch}-${m.id}-${ni}"
-              data-branch="${branch}" data-metric="${m.id}" data-name="${sn}" data-field="target_value" data-ni="${ni}" data-actual="${actual}"
-              style="background:#0f172a;border:1px solid #2d3f56;color:#f97316;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700;width:70px;text-align:right;outline:none"
-              oninput="_ppCellUpdate(this)">
-          </div>
-          <div id="ppbar-${branch}-${m.id}-${ni}" style="margin-top:2px">
-            ${rate !== null
-              ? `<div style="display:flex;align-items:center;gap:5px">
-                   <div style="flex:1;background:#0f172a;border-radius:2px;height:4px;min-width:40px">
-                     <div style="width:${barW}%;height:4px;border-radius:2px;background:${rCol}"></div>
-                   </div>
-                   <span style="font-size:11px;font-weight:800;color:${rCol};white-space:nowrap">${parseFloat(rate).toFixed(1)}%</span>
-                 </div>`
-              : '<span style="font-size:10px;color:#2d3f56">未設目標</span>'}
-          </div>
+    // 權重欄
+    const weightCell = `<td style="${TD}background:${bg};border-right:1px solid #2d3f56;vertical-align:middle;min-width:90px">
+      <div style="display:flex;align-items:center;gap:4px;justify-content:center">
+        <input type="number" value="${savedWeight}" min="0" max="300" step="0.1" placeholder="—"
+          id="ppW-${branch}-${deptKey}-${ni}"
+          style="background:#0f172a;border:1px solid #2d3f56;color:#3b82f6;padding:3px 7px;border-radius:5px;font-size:12px;font-weight:800;width:62px;text-align:right;outline:none"
+          oninput="_ppWeightUpdate('${branch}','${deptKey}',${ni},${JSON.stringify(metrics.map(m=>({id:m.id,bt:bt[m.id]||0,isamt:isAmt(m)?1:0})))},'${esc(name)}')">
+        <span style="font-size:11px;color:#64748b">%</span>
+      </div>
+    </td>`;
+ 
+    // 指標欄（只顯示實績 / 計算後目標 / 達成率，不放輸入框）
+    const metricCells = metrics.map(m => {
+      const actual = (actualsMap[branch]?.[m.id]?.[name]) || 0;
+      const wt     = parseFloat(savedWeight) || 0;
+      const btVal  = bt[m.id] || 0;
+      // 直接目標（若有）優先，否則用權重換算
+      const ptRow  = ptMap[branch]?.[m.id]?.[name] || {};
+      const calcT  = ptRow.target_value > 0 ? parseFloat(ptRow.target_value)
+                   : (wt > 0 && btVal > 0 ? btVal * wt / 100 : null);
+      const rate   = calcT && calcT > 0 ? actual / calcT * 100 : null;
+      const rCol   = rateColor(rate);
+      const barW   = rate !== null ? Math.min(100, rate).toFixed(0) : 0;
+      return `<td id="ppCell-${branch}-${deptKey}-${ni}-${m.id}" style="${TD}background:${bg};border-right:1px solid #1a2535;vertical-align:middle;min-width:110px">
+        <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-end">
+          <span style="font-size:12px;font-weight:800;color:#10b981">${fmtV(actual,m)}</span>
+          <span style="font-size:10px;color:#64748b">目標 ${calcT?fmtV(calcT,m):'未設'}</span>
+          ${rate!==null
+            ? `<div style="display:flex;align-items:center;gap:5px;width:100%">
+                 <div style="flex:1;background:#0f172a;border-radius:2px;height:4px"><div style="width:${barW}%;height:4px;border-radius:2px;background:${rCol}"></div></div>
+                 <span style="font-size:11px;font-weight:800;color:${rCol};white-space:nowrap">${parseFloat(rate).toFixed(1)}%</span>
+               </div>`
+            : '<span style="font-size:10px;color:#2d3f56">—</span>'}
         </div>
       </td>`;
     }).join('');
  
     rows += `<tr>
-      <td style="padding:9px 12px;border-bottom:1px solid rgba(45,63,86,.2);border-right:1px solid #2d3f56;background:${bg};white-space:nowrap;position:sticky;left:0;z-index:1;min-width:110px">
+      <td style="${TD}background:${bg};border-right:1px solid #2d3f56;position:sticky;left:0;z-index:1;min-width:120px">
         <div style="font-weight:700;font-size:13px;color:#e2e8f0">${name}</div>
-        <div style="font-size:10px;color:#64748b;margin-top:1px">${dept}</div>
-        <span style="font-size:10px;padding:1px 5px;border-radius:4px;background:${statCol}22;color:${statCol}">${statLbl}</span>
+        <div style="font-size:10px;color:#64748b;margin-top:1px">${person.job_title||'—'}</div>
+        <span style="font-size:10px;padding:1px 5px;border-radius:4px;background:${statColor}22;color:${statColor}">${person.status}</span>
       </td>
-      ${cells}
-      <td style="padding:6px 8px;border-bottom:1px solid rgba(45,63,86,.2);background:${bg};text-align:center;vertical-align:middle">
-        <button onclick="_ppSavePerson('${branch}','${period}','${safeName(name)}',${ni})"
-          style="background:rgba(59,130,246,.18);color:#60a5fa;border:1px solid rgba(59,130,246,.3);padding:4px 9px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
-          💾
-        </button>
-        <div id="ppmsg-${branch}-${ni}" style="font-size:10px;min-height:14px;margin-top:2px"></div>
+      ${weightCell}
+      ${metricCells}
+      <td style="${TD}background:${bg};text-align:center;vertical-align:middle">
+        <button onclick="_ppSaveRow('${branch}','${deptKey}',${ni},'${esc(name)}',${JSON.stringify(metrics.map(m=>m.id))})"
+          style="background:rgba(59,130,246,.18);color:#60a5fa;border:1px solid rgba(59,130,246,.3);padding:4px 9px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer">💾</button>
+        <div id="ppRowMsg-${branch}-${deptKey}-${ni}" style="font-size:10px;min-height:12px;margin-top:2px"></div>
       </td>
     </tr>`;
   });
  
-  return `<div style="margin-bottom:24px">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
-      <span style="font-size:15px;font-weight:900;color:${col}">${branch}</span>
-      <span style="font-size:12px;color:#64748b;background:#1e293b;border:1px solid #2d3f56;padding:3px 10px;border-radius:6px">${allNames.length} 人</span>
-      <span style="font-size:11px;color:#475569">${rosterPeriod ? '名冊：'+rosterPeriod.slice(0,4)+'年'+parseInt(rosterPeriod.slice(4))+'月' : '（無名冊資料）'}</span>
-      <div id="ppbranchmsg-${branch}" style="font-size:12px;min-height:18px"></div>
-      <div style="margin-left:auto;display:flex;gap:8px">
-        <a href="/settings.html" style="font-size:12px;color:#64748b;text-decoration:none;padding:6px 12px;border:1px solid #2d3f56;border-radius:6px;background:#1e293b;white-space:nowrap">⚙️ 設定目標</a>
-        <button onclick="_ppSaveBranch('${branch}','${period}')"
-          style="background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3);padding:6px 16px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">
-          💾 儲存 ${branch} 全部
-        </button>
-      </div>
+  // 廠別合計列
+  const totalCols = metrics.map(m => {
+    const wInputs = roster.map((_,ni) => document.getElementById(`ppW-${branch}-${deptKey}-${ni}`)).filter(Boolean);
+    return `<td style="${TD}background:#1e293b;text-align:right;border-right:1px solid #1a2535;font-size:11px;color:#475569">—</td>`;
+  }).join('');
+ 
+  return `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px;border:1px solid ${branchCol}33">
+    <div style="display:flex;justify-content:flex-end;padding:8px 10px 6px;background:#0f172a;border-bottom:1px solid #2d3f56;gap:8px;align-items:center">
+      <span style="font-size:11px;color:#475569;flex:1">💡 填入個人權重% → 各指標目標自動按廠別目標×權重分攤</span>
+      <div id="ppdeptmsg-${branch}-${deptKey}" style="font-size:12px;min-height:18px"></div>
+      <button onclick="_ppSaveDept('${branch}','${deptKey}',${JSON.stringify(roster.map(p=>p.emp_name))},${JSON.stringify(metrics.map(m=>m.id))})"
+        style="background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3);padding:5px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">
+        💾 儲存全科
+      </button>
     </div>
-    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:10px;border:1px solid ${col}33">
-      <table style="width:100%;border-collapse:separate;border-spacing:0;font-size:12px">
-        <thead style="position:sticky;top:0;z-index:3">
-          <tr>
-            <th style="text-align:left;padding:10px 12px;background:#0c1524;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;border-right:1px solid #2d3f56;position:sticky;left:0;z-index:4;min-width:110px">人員</th>
-            ${bt_header}
-            <th style="padding:10px 6px;background:#0c1524;border-bottom:1px solid #2d3f56;width:54px"></th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
+    <table style="width:100%;border-collapse:separate;border-spacing:0;font-size:12px">
+      <thead style="position:sticky;top:0;z-index:3">
+        <tr>
+          <th style="${TH}text-align:left;border-right:1px solid #2d3f56;position:sticky;left:0;z-index:4;min-width:120px">人員</th>
+          <th style="${TH}text-align:center;border-right:1px solid #2d3f56;min-width:90px">
+            個人權重<div style="font-size:10px;font-weight:400;color:#475569;margin-top:1px">% × 廠目標</div>
+          </th>
+          ${thMetrics}
+          <th style="${TH}width:52px"></th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
   </div>`;
 }
  
-// 即時更新進度條
-function _ppCellUpdate(input) {
-  const branch = input.dataset.branch;
-  const metricId = input.dataset.metric;
-  const ni = input.dataset.ni;
-  const field = input.dataset.field;
+const TH = 'padding:9px 10px;background:#0c1524;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;';
+const TD = 'padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);vertical-align:middle;';
  
-  const wInput  = document.getElementById(`ppw-${branch}-${metricId}-${ni}`);
-  const tvInput = document.getElementById(`ppt-${branch}-${metricId}-${ni}`);
-  const barEl   = document.getElementById(`ppbar-${branch}-${metricId}-${ni}`);
-  const cEl     = document.getElementById(`ppc-${branch}-${metricId}-${ni}`);
-  if (!wInput || !tvInput || !barEl) return;
- 
-  const bt     = parseFloat(wInput.dataset.bt || 0);
-  const isAmt  = parseInt(wInput.dataset.isamt || 1);
-  const actual = parseFloat(tvInput.dataset.actual || 0);
-  const w      = parseFloat(wInput.value || 0);
-  const tv     = parseFloat(tvInput.value || 0);
- 
-  const calcTarget = tv > 0 ? tv : (w > 0 && bt > 0 ? bt * w / 100 : null);
-  const rate       = calcTarget && calcTarget > 0 ? actual / calcTarget * 100 : null;
-  const rCol       = rate===null?'#475569':rate>=100?'#10b981':rate>=80?'#f59e0b':'#ef4444';
-  const barW       = rate !== null ? Math.min(100, rate).toFixed(0) : 0;
-  const fmtV = v => { const n=parseFloat(v||0); if(!n||isNaN(n))return ''; return isAmt&&n>=1000?Math.round(n/1000).toLocaleString()+'K':n.toLocaleString(); };
- 
-  if (cEl) cEl.textContent = (w > 0 && bt > 0 && tv === 0) ? '→'+fmtV(bt*w/100) : '';
-  barEl.innerHTML = rate !== null
-    ? `<div style="display:flex;align-items:center;gap:5px">
-         <div style="flex:1;background:#0f172a;border-radius:2px;height:4px;min-width:40px">
-           <div style="width:${barW}%;height:4px;border-radius:2px;background:${rCol}"></div>
-         </div>
-         <span style="font-size:11px;font-weight:800;color:${rCol};white-space:nowrap">${parseFloat(rate).toFixed(1)}%</span>
-       </div>`
-    : '<span style="font-size:10px;color:#2d3f56">未設目標</span>';
+// 權重變更 → 即時更新各指標達成率
+function _ppWeightUpdate(branch, deptKey, ni, metaArr, personName) {
+  const wInput = document.getElementById(`ppW-${branch}-${deptKey}-${ni}`);
+  if (!wInput) return;
+  const wt = parseFloat(wInput.value) || 0;
+  const rateColor = r => r===null?'#475569':r>=100?'#10b981':r>=80?'#f59e0b':'#ef4444';
+  metaArr.forEach(({id, bt, isamt}) => {
+    const cell = document.getElementById(`ppCell-${branch}-${deptKey}-${ni}-${id}`);
+    if (!cell) return;
+    const actualEl = cell.querySelector('span');
+    const actualTxt = actualEl ? actualEl.textContent.replace('K','').replace(/,/g,'') : '0';
+    const actualNum = parseFloat(actualTxt) * (actualEl?.textContent.includes('K') ? 1000 : 1) || 0;
+    const calcT = wt > 0 && bt > 0 ? bt * wt / 100 : null;
+    const rate  = calcT && calcT > 0 ? actualNum / calcT * 100 : null;
+    const rCol  = rateColor(rate);
+    const barW  = rate !== null ? Math.min(100, rate).toFixed(0) : 0;
+    const fmtV  = v => { const n=parseFloat(v||0); if(!n)return'—'; return isamt&&n>=1000?Math.round(n/1000).toLocaleString()+'K':n.toLocaleString(); };
+    const targetText = calcT ? fmtV(calcT) : '未設';
+    // 只更新目標和進度條（保留實績）
+    const divs = cell.querySelectorAll('div,span');
+    const targetSpan = cell.querySelector('span:nth-child(2)');
+    if (targetSpan) targetSpan.textContent = '目標 ' + targetText;
+    // 更新進度條
+    let barWrap = cell.querySelector('.ppbar');
+    if (!barWrap) {
+      barWrap = document.createElement('div');
+      barWrap.className = 'ppbar';
+      barWrap.style.cssText = 'display:flex;align-items:center;gap:5px;width:100%';
+      cell.querySelector('div').appendChild(barWrap);
+    }
+    if (rate !== null) {
+      barWrap.innerHTML = `<div style="flex:1;background:#0f172a;border-radius:2px;height:4px"><div style="width:${barW}%;height:4px;border-radius:2px;background:${rCol}"></div></div><span style="font-size:11px;font-weight:800;color:${rCol};white-space:nowrap">${parseFloat(rate).toFixed(1)}%</span>`;
+    } else {
+      barWrap.innerHTML = '<span style="font-size:10px;color:#2d3f56">—</span>';
+    }
+  });
 }
  
-// 儲存單人（fetch 現有資料 → merge → batch save）
-async function _ppSavePerson(branch, period, personName, ni) {
-  const msgEl = document.getElementById(`ppmsg-${branch}-${ni}`);
-  if (msgEl) { msgEl.textContent = '儲存中...'; msgEl.style.color = '#64748b'; }
+// 儲存單人
+async function _ppSaveRow(branch, deptKey, ni, personName, metricIds) {
+  const msgEl = document.getElementById(`ppRowMsg-${branch}-${deptKey}-${ni}`);
+  if (msgEl) { msgEl.textContent='儲存中...'; msgEl.style.color='#64748b'; }
+  const wInput = document.getElementById(`ppW-${branch}-${deptKey}-${ni}`);
+  const weight = wInput ? (parseFloat(wInput.value) || 0 ? parseFloat(wInput.value) / 100 : null) : null;
+  const period = getPeriod();
   try {
-    for (const m of _ppMetrics) {
-      const wInput  = document.getElementById(`ppw-${branch}-${m.id}-${ni}`);
-      const tvInput = document.getElementById(`ppt-${branch}-${m.id}-${ni}`);
-      const weight  = wInput  ? (parseFloat(wInput.value)  || 0 ? parseFloat(wInput.value) / 100 : null) : null;
-      const tv      = tvInput ? (parseFloat(tvInput.value) || 0 ? parseFloat(tvInput.value) : null) : null;
-      if (weight === null && tv === null) continue;
- 
-      // 取現有資料合併
-      const existing = await fetch(`/api/person-targets?metric_id=${m.id}&period=${period}&branch=${branch}`).then(r=>r.json());
+    for (const mid of metricIds) {
+      const existing = await fetch(`/api/person-targets?metric_id=${mid}&period=${period}&branch=${branch}`).then(r=>r.json());
       const entries = existing.map(e => ({
         person_name:  e.person_name,
         weight:       e.person_name === personName ? weight : (e.weight != null ? parseFloat(e.weight) : null),
-        target_value: e.person_name === personName ? tv     : (e.target_value != null ? parseFloat(e.target_value) : null),
-        note: e.note || '',
+        target_value: e.target_value != null ? parseFloat(e.target_value) : null,
+        note: e.note||'',
       }));
-      if (!existing.find(e => e.person_name === personName)) {
-        entries.push({ person_name: personName, weight, target_value: tv, note: '' });
-      }
- 
-      await fetch('/api/person-targets/batch', {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ metric_id: parseInt(m.id), period, branch, entries }),
-      });
+      if (!existing.find(e=>e.person_name===personName)) entries.push({person_name:personName,weight,target_value:null,note:''});
+      await fetch('/api/person-targets/batch',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({metric_id:parseInt(mid),period,branch,entries})});
     }
-    if (msgEl) { msgEl.textContent = '✅'; msgEl.style.color = '#10b981'; setTimeout(()=>{ if(msgEl) msgEl.textContent=''; }, 2000); }
-  } catch(e) {
-    if (msgEl) { msgEl.textContent = '❌'; msgEl.style.color = '#ef4444'; }
-  }
+    if (msgEl) { msgEl.textContent='✅'; msgEl.style.color='#10b981'; setTimeout(()=>{if(msgEl)msgEl.textContent='';},2000); }
+  } catch(e) { if(msgEl){msgEl.textContent='❌';msgEl.style.color='#ef4444';} }
 }
  
-// 儲存整廠（從 DOM 收集 → 每個指標 batch save）
-async function _ppSaveBranch(branch, period) {
-  const msgEl = document.getElementById(`ppbranchmsg-${branch}`);
-  if (msgEl) { msgEl.textContent = '儲存中...'; msgEl.style.color = '#64748b'; }
+// 儲存整科
+async function _ppSaveDept(branch, deptKey, personNames, metricIds) {
+  const msgEl = document.getElementById(`ppdeptmsg-${branch}-${deptKey}`);
+  if (msgEl) { msgEl.textContent='儲存中...'; msgEl.style.color='#64748b'; }
+  const period = getPeriod();
   try {
-    for (const m of _ppMetrics) {
-      const wInputs  = document.querySelectorAll(`input[data-branch="${branch}"][data-metric="${m.id}"][data-field="weight"]`);
-      const tvInputs = document.querySelectorAll(`input[data-branch="${branch}"][data-metric="${m.id}"][data-field="target_value"]`);
- 
-      const peopleMap = {};
-      wInputs.forEach(i  => { const n=i.dataset.name; if(!peopleMap[n]) peopleMap[n]={}; peopleMap[n].weight = parseFloat(i.value) / 100 || null; });
-      tvInputs.forEach(i => { const n=i.dataset.name; if(!peopleMap[n]) peopleMap[n]={}; peopleMap[n].target_value = parseFloat(i.value) || null; });
- 
-      const entries = Object.entries(peopleMap)
-        .filter(([, v]) => v.weight !== null || v.target_value !== null)
-        .map(([person_name, v]) => ({ person_name, weight: v.weight ?? null, target_value: v.target_value ?? null, note: '' }));
- 
+    for (const mid of metricIds) {
+      const entries = personNames.map((name, ni) => {
+        const wInput = document.getElementById(`ppW-${branch}-${deptKey}-${ni}`);
+        const weight = wInput ? (parseFloat(wInput.value)||0 ? parseFloat(wInput.value)/100 : null) : null;
+        return { person_name: name, weight, target_value: null, note: '' };
+      }).filter(e => e.weight !== null);
       if (!entries.length) continue;
-      await fetch('/api/person-targets/batch', {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ metric_id: parseInt(m.id), period, branch, entries }),
-      });
+      await fetch('/api/person-targets/batch',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({metric_id:parseInt(mid),period,branch,entries})});
     }
-    if (msgEl) { msgEl.textContent = `✅ 已儲存`; msgEl.style.color = '#10b981'; setTimeout(()=>{ if(msgEl) msgEl.textContent=''; }, 2500); }
-  } catch(e) {
-    if (msgEl) { msgEl.textContent = `❌ ${e.message}`; msgEl.style.color = '#ef4444'; }
-  }
+    if (msgEl) { msgEl.textContent='✅ 已儲存'; msgEl.style.color='#10b981'; setTimeout(()=>{if(msgEl)msgEl.textContent='';},2500); }
+  } catch(e) { if(msgEl){msgEl.textContent='❌ '+e.message;msgEl.style.color='#ef4444';} }
 }
  
 // ══ Init ══
