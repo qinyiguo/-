@@ -157,6 +157,9 @@
   .mob-sec-btn { display: flex; align-items: center; gap: 5px; padding: 8px 12px; border: none; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; background: transparent; color: #64748b; white-space: nowrap; flex-shrink: 0; transition: all .15s;}
   .mob-sec-btn.active { background: rgba(59,130,246,.15); color: #3b82f6; }
   .mob-sec-btn:hover:not(.active) { color: #e2e8f0; background: #253347; }
+  /* person targets table */
+  .pt-input { background: #0f172a; border: 1px solid #2d3f56; color: #e2e8f0; padding: 5px 8px; border-radius: 5px; font-size: 12px; font-weight: 700; text-align: right; outline: none; }
+  .pt-input:focus { border-color: #3b82f6; }
  /* ════ MOBILE ════ */
 @media (max-width: 768px) {
   .nav { padding: 0 16px; }
@@ -541,6 +544,7 @@
   <button class="mob-sec-btn"        id="mob-menu-tech-wage-config" onclick="showSection('tech-wage-config')">🔧 工資碼</button>
   <button class="mob-sec-btn"        id="mob-menu-revenue-targets"  onclick="showSection('revenue-targets')">📈 營收目標</button>
   <button class="mob-sec-btn"        id="mob-menu-performance"      onclick="showSection('performance')">🛒 精品銷售</button>
+  <button class="mob-sec-btn"        id="mob-menu-person-targets"   onclick="showSection('person-targets')">👤 個人目標</button>
   <button class="mob-sec-btn"        id="mob-menu-password"         onclick="showSection('password')">🔑 密碼</button>
 </div>
 <div class="layout">
@@ -570,6 +574,9 @@
       </div>
       <div class="sidebar-item" onclick="showSection('performance')" id="menu-performance">
         <span class="icon">🛒</span> 零配精品銷售
+      </div>
+      <div class="sidebar-item" onclick="showSection('person-targets')" id="menu-person-targets">
+        <span class="icon">👤</span> 個人業績目標
       </div>
     </div>
     <div class="sidebar-section">
@@ -878,6 +885,75 @@
       </div>
     </div>
 
+    <!-- ── 個人業績目標 ── -->
+    <div class="section-page" id="section-person-targets">
+      <div class="page-title">👤 個人業績目標設定</div>
+      <p class="page-sub">依廠別總目標分配每位 SA 的個人份額，支援「權重%」自動換算，或直接輸入目標值</p>
+
+      <div class="hint">
+        💡 <strong>使用說明</strong>：<br>
+        1. 選擇指標＋期間＋廠別後按「載入」，系統自動列出此廠有 DMS 資料的人員<br>
+        2. 填入<strong>權重 %</strong>（如 30%）→ 系統自動計算個人目標 = 廠別目標 × 30%<br>
+        3. 或直接在<strong>直接輸入目標</strong>欄填入絕對數值（會優先於權重）<br>
+        4. 按「儲存」後，stats.html 的「👤 個人業績」分頁即可看到每人達成率
+      </div>
+
+      <div class="card">
+        <div class="card-title" style="flex-wrap:wrap;gap:8px">
+          選擇指標 ／ 期間 ／ 廠別
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+          <select id="ptMetricSel" class="form-select" style="flex:2;min-width:180px" onchange="onPtChange()">
+            <option value="">選擇指標...</option>
+          </select>
+          <select id="ptPeriodSel" class="form-select" style="min-width:140px" onchange="onPtChange()">
+            <option value="">選擇期間...</option>
+          </select>
+          <select id="ptBranchSel" class="form-select" style="min-width:90px">
+            <option value="AMA">AMA</option>
+            <option value="AMC">AMC</option>
+            <option value="AMD">AMD</option>
+          </select>
+          <button class="btn btn-primary" onclick="loadPersonTargets()">📂 載入</button>
+          <button class="btn btn-danger btn-sm" onclick="deletePersonTargets()">🗑️ 刪除此設定</button>
+        </div>
+
+        <div id="ptGrid" style="display:none">
+          <div id="ptBranchInfo" style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:11px 14px;font-size:12px;color:#94a3b8;line-height:1.8;margin-bottom:14px"></div>
+
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:620px">
+              <thead>
+                <tr>
+                  <th style="text-align:left;padding:9px 12px;background:#0f172a;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;min-width:100px">人員姓名</th>
+                  <th style="text-align:right;padding:9px 12px;background:#0f172a;color:#10b981;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;min-width:90px">本月實績</th>
+                  <th style="text-align:center;padding:9px 12px;background:#0f172a;color:#3b82f6;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;min-width:110px">
+                    權重 (%)
+                    <div style="font-size:10px;font-weight:400;color:#475569">廠別目標×%</div>
+                  </th>
+                  <th style="text-align:center;padding:9px 12px;background:#0f172a;color:#f97316;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;min-width:120px">
+                    直接輸入目標
+                    <div style="font-size:10px;font-weight:400;color:#475569">優先於權重</div>
+                  </th>
+                  <th style="text-align:right;padding:9px 12px;background:#0f172a;color:#8b5cf6;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;min-width:90px">計算後目標</th>
+                  <th style="text-align:center;padding:9px 12px;background:#0f172a;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;min-width:100px">目前達成率</th>
+                  <th style="padding:9px 12px;background:#0f172a;border-bottom:1px solid #2d3f56;width:36px"></th>
+                </tr>
+              </thead>
+              <tbody id="ptTableBody"></tbody>
+              <tfoot id="ptTableFoot"></tfoot>
+            </table>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap">
+            <div id="ptMsg" style="font-size:13px;flex:1;min-height:20px"></div>
+            <button class="btn btn-secondary btn-sm" onclick="addPtPerson()">＋ 手動加入人員</button>
+            <button class="btn btn-primary" onclick="savePersonTargets()">💾 儲存個人目標</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ── 管理員密碼 ── -->
     <div class="section-page" id="section-password">
       <div class="page-title">🔑 管理員密碼</div>
@@ -922,7 +998,7 @@ document.addEventListener('keydown',e=>{
 });
 
 // ══ Sidebar ══
-const sections=['upload','dbstatus','sa-config','working-days','tech-wage-config','revenue-targets','performance','password'];
+const sections=['upload','dbstatus','sa-config','working-days','tech-wage-config','revenue-targets','performance','person-targets','password'];
 function showSection(id){
   sections.forEach(s=>{
     document.getElementById(`section-${s}`).classList.toggle('active',s===id);
@@ -940,6 +1016,7 @@ function showSection(id){
   if(id==='tech-wage-config'){loadTwcConfigs();initTwcAccountChips();}
   if(id==='revenue-targets'){loadRevPeriods();loadRevList();}
   if(id==='performance'){loadPerfMetrics();loadPerfTgtPeriods();initPerfUpYear();}
+  if(id==='person-targets'){initPtSelectors();}
 }
 
 // ══ Upload ══
@@ -994,34 +1071,10 @@ const esc=s=>s.replace(/'/g,"\\'");
 let wdWorkDates=new Set();
 async function loadWdPeriods(){try{const periods=await(await fetch('/api/periods')).json();const sel=document.getElementById('wdPeriod');sel.innerHTML='<option value="">選擇期間...</option>';periods.forEach(p=>{const opt=document.createElement('option');opt.value=p;opt.textContent=`${p.slice(0,4)}年${p.slice(4)}月`;sel.appendChild(opt);});const _cp=`${new Date().getFullYear()}${String(new Date().getMonth()+1).padStart(2,'0')}`;sel.value=periods.includes(_cp)?_cp:(periods.length?periods[0]:'');}catch(e){}}
 async function loadWdList(){const el=document.getElementById('wdExistingList');try{const rows=await(await fetch('/api/working-days')).json();if(!rows.length){el.innerHTML='<div style="color:#64748b;font-size:13px;padding:12px 0">尚未設定任何月份，系統將使用自動偵測工作天數</div>';return;}const byPeriod={};rows.forEach(r=>{if(!byPeriod[r.period])byPeriod[r.period]={};byPeriod[r.period][r.branch]=r;});const periods=Object.keys(byPeriod).sort().reverse();const BRANCHES=['AMA','AMC','AMD'];el.innerHTML=`<div class="wd-existing-list">${periods.map(period=>{const pRows=byPeriod[period];const label=`${period.slice(0,4)}年${period.slice(4)}月`;const allPresent=BRANCHES.every(b=>pRows[b]);const dayCounts=BRANCHES.map(b=>pRows[b]?.work_dates?.length||0);const allSame=allPresent&&dayCounts.every(c=>c===dayCounts[0]);if(allSame){return`<div class="wd-existing-item"><div class="info"><div class="name"><span class="badge" style="background:rgba(16,185,129,.15);color:#10b981">三站同步</span>&nbsp;${label}</div><div class="sub">AMA / AMC / AMD 均為 ${dayCounts[0]} 個營業日</div></div><button class="btn btn-secondary btn-sm" onclick="quickEditWd('ALL','${period}')">編輯（同步）</button><button class="btn btn-danger btn-sm" onclick="quickDeleteWd('ALL','${period}')">刪除三站</button></div>`;}else{return BRANCHES.filter(b=>pRows[b]).map(b=>{const r=pRows[b];const days=r.work_dates?.length||0;return`<div class="wd-existing-item"><div class="info"><div class="name"><span class="badge badge-blue">${b}</span>&nbsp;${label}</div><div class="sub">${days} 個營業日${r.note?' · '+r.note:''}</div></div><button class="btn btn-secondary btn-sm" onclick="quickEditWd('${b}','${period}')">編輯</button><button class="btn btn-danger btn-sm" onclick="quickDeleteWd('${b}','${period}')">刪除</button></div>`;}).join('');}}).join('')}</div>`;}catch(e){el.innerHTML=`<div style="color:#ef4444;font-size:13px">${e.message}</div>`;}}
-
-// ── FIX 3: quickEditWd 捲動目標修正 ──
-function quickEditWd(branch,period){
-  document.getElementById('wdBranch').value=branch;
-  document.getElementById('wdPeriod').value=period;
-  loadWdCalendar();
-  // 捲動到主內容頂端（桌面用 .main，手機用 window）
-  const mainEl=document.querySelector('.main');
-  if(mainEl) mainEl.scrollTop=0;
-  if(window.innerWidth<=768) window.scrollTo({top:0,behavior:'smooth'});
-}
-
+function quickEditWd(branch,period){document.getElementById('wdBranch').value=branch;document.getElementById('wdPeriod').value=period;loadWdCalendar();const mainEl=document.querySelector('.main');if(mainEl) mainEl.scrollTop=0;if(window.innerWidth<=768) window.scrollTo({top:0,behavior:'smooth'});}
 async function quickDeleteWd(branch,period){const targets=branch==='ALL'?['AMA','AMC','AMD']:[branch];const label=branch==='ALL'?'三站':branch;if(!confirm(`確定刪除 ${label} ${period.slice(0,4)}年${period.slice(4)}月 的工作天數設定嗎？\n刪除後將回到自動偵測。`))return;await Promise.all(targets.map(br=>fetch(`/api/working-days?branch=${br}&period=${period}`,{method:'DELETE'})));loadWdList();}
-
-// ── FIX 2: 切換據點時隱藏舊日曆 ──
-function onWdBranchChange(){
-  const isAll=document.getElementById('wdBranch').value==='ALL';
-  // 隱藏日曆，避免顯示舊據點資料
-  document.getElementById('wdCalendarWrap').style.display='none';
-  document.getElementById('btnWdDelete').style.display='none';
-  document.getElementById('wdConfigStatus').textContent=isAll?'設定後將同步寫入 AMA、AMC、AMD':'';
-}
-
-async function loadWdCalendar(){const branch=document.getElementById('wdBranch').value,period=document.getElementById('wdPeriod').value,statusEl=document.getElementById('wdConfigStatus');if(!period){statusEl.textContent='請選擇期間';return;}const year=parseInt(period.slice(0,4)),month=parseInt(period.slice(4))-1;if(branch==='ALL'){try{const data=await(await fetch(`/api/working-days?branch=AMA&period=${period}`)).json();wdWorkDates=new Set(Array.isArray(data.work_dates)?data.work_dates:[]);const[amc,amd]=await Promise.all([(await fetch(`/api/working-days?branch=AMC&period=${period}`)).json(),(await fetch(`/api/working-days?branch=AMD&period=${period}`)).json()]);const amaDays=[...wdWorkDates].sort().join(','),amcDays=[...new Set(amc.work_dates||[])].sort().join(','),amdDays=[...new Set(amd.work_dates||[])].sort().join(',');if(wdWorkDates.size>0){if(amaDays===amcDays&&amaDays===amdDays)statusEl.textContent=`✅ 三站已同步設定 ${wdWorkDates.size} 天`;else statusEl.textContent=`⚠️ 三站設定不同（AMA:${[...wdWorkDates].length}天 AMC:${amc.work_dates?.length||0}天 AMD:${amd.work_dates?.length||0}天）`;}else statusEl.textContent='尚未設定，儲存後三站將套用相同工作天數';document.getElementById('btnWdDelete').style.display='none';}catch(e){wdWorkDates=new Set();}document.getElementById('wdMonthTitle').textContent=`${year}年${month+1}月 — AMA + AMC + AMD（同步）`;}else{try{const data=await(await fetch(`/api/working-days?branch=${branch}&period=${period}`)).json();wdWorkDates=new Set(Array.isArray(data.work_dates)?data.work_dates:[]);
-    // ── FIX 1: 用 updated_at 判斷是否有真實 DB 資料，避免 fallback 物件誤觸發刪除按鈕 ──
-    statusEl.textContent=wdWorkDates.size>0?`✅ 已設定 ${wdWorkDates.size} 天`:'⚠️ 尚未設定（將使用自動偵測）';
-    document.getElementById('btnWdDelete').style.display=data.updated_at?'':'none';
-  }catch(e){wdWorkDates=new Set();}document.getElementById('wdMonthTitle').textContent=`${year}年${month+1}月 — ${branch}`;}document.getElementById('wdCalendarWrap').style.display='';renderWdCalendar(year,month);}
+function onWdBranchChange(){const isAll=document.getElementById('wdBranch').value==='ALL';document.getElementById('wdCalendarWrap').style.display='none';document.getElementById('btnWdDelete').style.display='none';document.getElementById('wdConfigStatus').textContent=isAll?'設定後將同步寫入 AMA、AMC、AMD':'';}
+async function loadWdCalendar(){const branch=document.getElementById('wdBranch').value,period=document.getElementById('wdPeriod').value,statusEl=document.getElementById('wdConfigStatus');if(!period){statusEl.textContent='請選擇期間';return;}const year=parseInt(period.slice(0,4)),month=parseInt(period.slice(4))-1;if(branch==='ALL'){try{const data=await(await fetch(`/api/working-days?branch=AMA&period=${period}`)).json();wdWorkDates=new Set(Array.isArray(data.work_dates)?data.work_dates:[]);const[amc,amd]=await Promise.all([(await fetch(`/api/working-days?branch=AMC&period=${period}`)).json(),(await fetch(`/api/working-days?branch=AMD&period=${period}`)).json()]);const amaDays=[...wdWorkDates].sort().join(','),amcDays=[...new Set(amc.work_dates||[])].sort().join(','),amdDays=[...new Set(amd.work_dates||[])].sort().join(',');if(wdWorkDates.size>0){if(amaDays===amcDays&&amaDays===amdDays)statusEl.textContent=`✅ 三站已同步設定 ${wdWorkDates.size} 天`;else statusEl.textContent=`⚠️ 三站設定不同（AMA:${[...wdWorkDates].length}天 AMC:${amc.work_dates?.length||0}天 AMD:${amd.work_dates?.length||0}天）`;}else statusEl.textContent='尚未設定，儲存後三站將套用相同工作天數';document.getElementById('btnWdDelete').style.display='none';}catch(e){wdWorkDates=new Set();}document.getElementById('wdMonthTitle').textContent=`${year}年${month+1}月 — AMA + AMC + AMD（同步）`;}else{try{const data=await(await fetch(`/api/working-days?branch=${branch}&period=${period}`)).json();wdWorkDates=new Set(Array.isArray(data.work_dates)?data.work_dates:[]);statusEl.textContent=wdWorkDates.size>0?`✅ 已設定 ${wdWorkDates.size} 天`:'⚠️ 尚未設定（將使用自動偵測）';document.getElementById('btnWdDelete').style.display=data.updated_at?'':'none';}catch(e){wdWorkDates=new Set();}document.getElementById('wdMonthTitle').textContent=`${year}年${month+1}月 — ${branch}`;}document.getElementById('wdCalendarWrap').style.display='';renderWdCalendar(year,month);}
 function renderWdCalendar(year,month){const cal=document.getElementById('wdCalendar');const firstDay=new Date(year,month,1).getDay(),daysInMonth=new Date(year,month+1,0).getDate();let html='';for(let i=0;i<firstDay;i++)html+=`<div class="wd-day-cell empty"></div>`;for(let d=1;d<=daysInMonth;d++){const dateStr=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`,dow=(firstDay+d-1)%7,isWork=wdWorkDates.has(dateStr),cls=['wd-day-cell',isWork?'work':'',dow===0?'sun-col':'',dow===6?'sat-col':''].filter(Boolean).join(' ');html+=`<div class="${cls}" data-date="${dateStr}" onclick="toggleWdDay('${dateStr}')">${d}</div>`;}cal.innerHTML=html;updateWdCount();}
 function toggleWdDay(dateStr){if(wdWorkDates.has(dateStr))wdWorkDates.delete(dateStr);else wdWorkDates.add(dateStr);const cell=document.querySelector(`.wd-day-cell[data-date="${dateStr}"]`);if(cell)cell.classList.toggle('work',wdWorkDates.has(dateStr));updateWdCount();}
 function updateWdCount(){document.getElementById('wdWorkCount').textContent=wdWorkDates.size;}
@@ -1066,7 +1119,7 @@ function getPerfTwcMethod(){return document.querySelector('input[name="perf_twc_
 function renderPerfTwcCodeList(){const el=document.getElementById('perfTwcCodeList');if(!el)return;if(!perfTwcCodes.length){el.innerHTML='<div style="color:#64748b;font-size:12px;padding:4px 0 8px">尚未加入代碼</div>';return;}el.innerHTML=perfTwcCodes.map((wc,i)=>`<div class="filter-tag-row"><span class="type-badge" style="background:rgba(59,130,246,.2);color:#60a5fa">${wc.type==='range'?'範圍':'精確'}</span><span style="font-size:13px;font-weight:600;flex:1">${wc.type==='range'?`${wc.from}～${wc.to}`:wc.value}</span><button class="remove-btn" onclick="removePerfTwcCode(${i})">×</button></div>`).join('');}
 function removePerfTwcCode(i){perfTwcCodes.splice(i,1);renderPerfTwcCodeList();}
 function addPerfTwcCode(){const raw=document.getElementById('perfTwcCodeInput').value.trim();if(!raw)return;if(raw.includes('-')){const[from,to]=raw.split('-').map(s=>s.trim());if(from&&to)perfTwcCodes.push({type:'range',from,to});}else{perfTwcCodes.push({type:'exact',value:raw});}document.getElementById('perfTwcCodeInput').value='';renderPerfTwcCodeList();}
-function _buildSubfieldChips(selectedVals){document.getElementById('perfSubfieldChips').innerHTML=PERF_SUBFIELDS.map(sf=>{const on=selectedVals.includes(sf.value);return`<label class="part-type-chip ${on?'checked':''}" onclick="toggleGenericChip(this)" style="min-width:100px"><input type="checkbox" value="${sf.value}" ${on?'checked':''}>${sf.label}</label>`;}).join('');}
+function _buildSubfieldChips(selectedVals){document.getElementById('perfSubfieldChips').innerHTML=PERF_SUBFIELDS.map(sf=>{const on=selectedVals.includes(sf.value);return`<label class="part-type-chip ${on?'checked':''}" onclick="toggleGenericChip(this)"><input type="checkbox" value="${sf.value}" ${on?'checked':''}>${sf.label}</label>`;}).join('');}
 function selectWoMode(val){document.querySelectorAll('input[name="wo_mode"]').forEach(el=>el.checked=el.value===val);['wo_has','wo_exclude','sum'].forEach(v=>document.getElementById(`woModeLabel-${v}`)?.classList.toggle('selected',v===val));}
 function getWoMode(){return document.querySelector('input[name="wo_mode"]:checked')?.value||'wo_has';}
 async function loadPerfMetrics(){try{perfMetrics=await(await fetch('/api/performance-metrics')).json();renderPerfMetricList();updatePerfTgtSelect();}catch(e){document.getElementById('perfMetricList').innerHTML=`<div style="color:#ef4444">${e.message}</div>`;}}
@@ -1139,6 +1192,213 @@ async function loadRevList(){const el=document.getElementById('revList');try{con
 async function deleteRevRow(branch,period){if(!confirm(`確定刪除 ${branch} ${period.slice(0,4)}年${period.slice(4)}月 的目標設定？`))return;await fetch(`/api/revenue-targets?branch=${branch}&period=${period}`,{method:'DELETE'});loadRevList();}
 function downloadRevTemplate(){const header=['期間','據點','有費營收_目標','有費營收_去年','鈑烤營收_目標','鈑烤營收_去年','一般營收_目標','一般營收_去年','延保營收_目標','延保營收_去年'];const now=new Date(),y=now.getFullYear();const defaults={AMA:[36000000,37000000,8000000,7500000,21000000,22000000,800000,750000],AMC:[10000000,11000000,2000000,1800000,5700000,6000000,200000,180000],AMD:[16000000,17000000,2500000,2300000,8800000,9500000,300000,280000]};const rows=[];for(let mo=1;mo<=12;mo++){const period=`${y}${String(mo).padStart(2,'0')}`;['AMA','AMC','AMD'].forEach(br=>{rows.push([period,br,...defaults[br]]);});}const csv=[header,...rows].map(r=>r.join(',')).join('\r\n');const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`營收目標範本_${y}全年.csv`;a.click();URL.revokeObjectURL(url);}
 async function uploadRevFile(input){const file=input.files[0];if(!file)return;const statusEl=document.getElementById('revUploadStatus'),resultEl=document.getElementById('revUploadResult');statusEl.textContent='上傳中...';resultEl.innerHTML='';const formData=new FormData();formData.append('file',file);try{const res=await(await fetch('/api/upload-revenue-targets',{method:'POST',body:formData})).json();if(res.error)throw new Error(res.error);statusEl.textContent='';resultEl.innerHTML=`<div style="background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:8px;padding:12px 16px;font-size:13px;color:#10b981">✅ 成功匯入 <strong>${res.count}</strong> 筆資料</div>`;loadRevList();input.value='';}catch(e){statusEl.textContent='';resultEl.innerHTML=`<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:12px 16px;font-size:13px;color:#ef4444">❌ ${e.message}</div>`;}}
+
+// ══ 個人業績目標 ══
+let _ptMetrics=[], _ptPersons=[], _ptBranchTarget=0;
+
+async function initPtSelectors() {
+  // 避免重複初始化
+  if (document.getElementById('ptMetricSel').options.length > 1) return;
+  try {
+    _ptMetrics = await fetch('/api/performance-metrics').then(r=>r.json());
+    const sel = document.getElementById('ptMetricSel');
+    sel.innerHTML = '<option value="">選擇指標...</option>' +
+      _ptMetrics.map(m=>`<option value="${m.id}">${m.metric_name}</option>`).join('');
+    const periods = await fetch('/api/periods').then(r=>r.json());
+    const pSel = document.getElementById('ptPeriodSel');
+    pSel.innerHTML = '<option value="">選擇期間...</option>' +
+      periods.slice(0,24).map(p=>`<option value="${p}">${p.slice(0,4)}年${parseInt(p.slice(4))}月</option>`).join('');
+    const now = new Date();
+    const cur = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}`;
+    pSel.value = periods.includes(cur) ? cur : (periods[0]||'');
+  } catch(e) {}
+}
+
+function onPtChange() {
+  document.getElementById('ptGrid').style.display = 'none';
+  document.getElementById('ptMsg').textContent = '';
+}
+
+async function loadPersonTargets() {
+  const metricId = document.getElementById('ptMetricSel').value;
+  const period   = document.getElementById('ptPeriodSel').value;
+  const branch   = document.getElementById('ptBranchSel').value;
+  if (!metricId || !period || !branch) { alert('請選擇指標、期間和據點'); return; }
+  try {
+    // 廠別目標
+    const tAll = await fetch(`/api/performance-targets?metric_id=${metricId}&period=${period}`).then(r=>r.json());
+    _ptBranchTarget = parseFloat(tAll.find(t=>t.branch===branch)?.target_value || 0);
+
+    // 取得人員、已設定目標、實績
+    const [persons, existing, stats] = await Promise.all([
+      fetch(`/api/person-targets/persons?metric_id=${metricId}&period=${period}&branch=${branch}`).then(r=>r.json()),
+      fetch(`/api/person-targets?metric_id=${metricId}&period=${period}&branch=${branch}`).then(r=>r.json()),
+      fetch(`/api/stats/person-performance?metric_id=${metricId}&period=${period}&branch=${branch}`).then(r=>r.json()),
+    ]);
+
+    const existingMap={}, actualMap={};
+    existing.forEach(e => { existingMap[e.person_name] = e; });
+    (stats.persons||[]).forEach(p => { actualMap[p.person_name] = p.actual; });
+
+    const allNames = [...new Set([...persons, ...existing.map(e=>e.person_name)])];
+    _ptPersons = allNames.map(name => ({
+      person_name:  name,
+      weight:       existingMap[name]?.weight != null ? (parseFloat(existingMap[name].weight)*100).toFixed(1) : '',
+      target_value: existingMap[name]?.target_value != null ? parseFloat(existingMap[name].target_value) : '',
+      actual:       actualMap[name] || 0,
+      note:         existingMap[name]?.note || '',
+    }));
+
+    renderPtTable();
+    document.getElementById('ptGrid').style.display = '';
+    document.getElementById('ptMsg').textContent = '';
+
+    const metric = _ptMetrics.find(m=>m.id==metricId);
+    const isAmt = !metric || !['count','qty'].includes(metric.stat_field);
+    const fmtBT = isAmt && _ptBranchTarget >= 1000
+      ? Math.round(_ptBranchTarget/1000).toLocaleString()+'K'
+      : _ptBranchTarget.toLocaleString();
+    document.getElementById('ptBranchInfo').innerHTML =
+      `💡 <strong>${branch}</strong> ${period.slice(0,4)}年${parseInt(period.slice(4))}月 廠別總目標：` +
+      `<strong style="color:#3b82f6;font-size:14px">${fmtBT||'未設定'}</strong>｜` +
+      `DMS 人員共 ${persons.length} 位，已設定個人目標 ${existing.length} 筆。` +
+      (persons.length===0?'<br>⚠️ 此期間此廠尚無 DMS 資料，可手動加入人員名稱。':'');
+  } catch(err) { alert('載入失敗：'+err.message); }
+}
+
+function _ptFmt(v, isAmt) {
+  const n = parseFloat(v||0);
+  if (!n || isNaN(n)) return '—';
+  return isAmt && n >= 1000 ? Math.round(n/1000).toLocaleString()+'K' : n.toLocaleString();
+}
+
+function renderPtTable() {
+  const metric = _ptMetrics.find(m=>m.id==document.getElementById('ptMetricSel').value);
+  const isAmt = !metric || !['count','qty'].includes(metric.stat_field);
+  const fmt = v => _ptFmt(v, isAmt);
+  const tbody = document.getElementById('ptTableBody');
+  const tfoot = document.getElementById('ptTableFoot');
+  let totalWeight=0, totalTarget=0, totalActual=0;
+
+  tbody.innerHTML = _ptPersons.map((p, i) => {
+    const w  = parseFloat(p.weight || 0);
+    const tv = parseFloat(p.target_value || 0);
+    const calcTarget = tv > 0 ? tv : (w > 0 && _ptBranchTarget > 0 ? _ptBranchTarget * w / 100 : 0);
+    const rate = calcTarget > 0 ? (p.actual / calcTarget * 100) : null;
+    const rCol = rate===null ? '#475569' : rate>=100?'#10b981':rate>=80?'#f59e0b':'#ef4444';
+    const barW = rate !== null ? Math.min(100, rate).toFixed(0) : 0;
+    totalWeight += w; totalTarget += calcTarget; totalActual += parseFloat(p.actual||0);
+
+    return `<tr style="border-bottom:1px solid rgba(45,63,86,.3)">
+      <td style="padding:9px 12px;font-weight:600;white-space:nowrap">
+        ${p.person_name}
+        <button onclick="removePtRow(${i})" style="margin-left:8px;background:none;border:none;color:#475569;cursor:pointer;font-size:14px;padding:0;line-height:1;vertical-align:middle" title="移除">×</button>
+      </td>
+      <td style="text-align:right;padding:9px 12px;color:#10b981;font-weight:700">${fmt(p.actual)}</td>
+      <td style="padding:9px 12px">
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px">
+          <input type="number" value="${w||''}" min="0" max="300" step="0.1" placeholder="—"
+            class="pt-input" style="color:#3b82f6;width:68px"
+            oninput="_ptPersons[${i}].weight=this.value;renderPtTable()">
+          <span style="font-size:11px;color:#475569">%</span>
+        </div>
+        ${_ptBranchTarget>0&&w>0?`<div style="font-size:10px;color:#3b82f6;margin-top:2px;text-align:right">→ ${fmt(_ptBranchTarget*w/100)}</div>`:''}
+      </td>
+      <td style="padding:9px 12px">
+        <div style="display:flex;justify-content:flex-end">
+          <input type="number" value="${tv||''}" min="0" step="1" placeholder="—"
+            class="pt-input" style="color:#f97316;width:100px"
+            oninput="_ptPersons[${i}].target_value=this.value;renderPtTable()">
+        </div>
+        ${tv>0?'<div style="font-size:10px;color:#f97316;margin-top:2px;text-align:right">✓ 直接套用</div>':''}
+      </td>
+      <td style="text-align:right;padding:9px 12px;color:#8b5cf6;font-weight:800">${fmt(calcTarget)}</td>
+      <td style="padding:9px 12px">
+        ${rate!==null
+          ?`<div style="display:flex;align-items:center;gap:8px">
+              <div style="flex:1;background:#0f172a;border-radius:3px;height:6px;min-width:50px">
+                <div style="width:${barW}%;height:6px;border-radius:3px;background:${rCol}"></div>
+              </div>
+              <span style="font-size:13px;font-weight:800;color:${rCol};white-space:nowrap;min-width:48px;text-align:right">${rate.toFixed(1)}%</span>
+            </div>`
+          :'<span style="color:#334155;font-size:11px">未設定目標</span>'}
+      </td>
+      <td style="padding:9px 12px"></td>
+    </tr>`;
+  }).join('');
+
+  // 合計列
+  const tRate = totalTarget > 0 ? (totalActual/totalTarget*100) : null;
+  const tRCol = tRate===null ? '#475569' : tRate>=100?'#10b981':'#f59e0b';
+  const weightWarn = totalWeight > 100 && totalWeight > 0;
+  tfoot.innerHTML = `<tr style="background:#1e293b;border-top:2px solid #2d3f56">
+    <td style="padding:9px 12px;font-weight:800;color:#94a3b8">合計 ${_ptPersons.length} 人</td>
+    <td style="text-align:right;padding:9px 12px;font-weight:800;color:#10b981">${fmt(totalActual)}</td>
+    <td style="text-align:right;padding:9px 12px;font-weight:800;color:${weightWarn?'#ef4444':'#3b82f6'}">
+      ${totalWeight.toFixed(1)}%${weightWarn?' ⚠️':''}
+    </td>
+    <td></td>
+    <td style="text-align:right;padding:9px 12px;font-weight:800;color:#8b5cf6">${fmt(totalTarget)}</td>
+    <td style="padding:9px 12px">
+      ${tRate!==null?`<span style="font-size:13px;font-weight:800;color:${tRCol}">${tRate.toFixed(1)}%</span>`:'<span style="color:#475569">—</span>'}
+    </td>
+    <td></td>
+  </tr>`;
+}
+
+function removePtRow(i) { _ptPersons.splice(i,1); renderPtTable(); }
+
+function addPtPerson() {
+  const name = prompt('輸入人員姓名：');
+  if (!name || !name.trim()) return;
+  if (_ptPersons.find(p=>p.person_name===name.trim())) { alert('此人員已存在'); return; }
+  _ptPersons.push({ person_name:name.trim(), weight:'', target_value:'', actual:0, note:'' });
+  renderPtTable();
+}
+
+async function savePersonTargets() {
+  const metricId = document.getElementById('ptMetricSel').value;
+  const period   = document.getElementById('ptPeriodSel').value;
+  const branch   = document.getElementById('ptBranchSel').value;
+  const msgEl    = document.getElementById('ptMsg');
+  if (!metricId||!period||!branch) { msgEl.textContent='請先選擇指標、期間和據點'; msgEl.style.color='#ef4444'; return; }
+
+  const entries = _ptPersons.filter(p=>p.person_name).map(p => ({
+    person_name:  p.person_name,
+    weight:       p.weight ? parseFloat(p.weight)/100 : null,
+    target_value: p.target_value ? parseFloat(p.target_value) : null,
+    note:         p.note || '',
+  }));
+
+  const btn = document.querySelector('#section-person-targets .btn-primary:last-of-type');
+  if (btn) { btn.disabled=true; btn.textContent='儲存中...'; }
+  msgEl.textContent='儲存中...'; msgEl.style.color='#64748b';
+  try {
+    const res = await fetch('/api/person-targets/batch', {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ metric_id:parseInt(metricId), period, branch, entries }),
+    }).then(r=>r.json());
+    if (res.error) throw new Error(res.error);
+    msgEl.textContent=`✅ 已儲存 ${entries.length} 筆個人目標`; msgEl.style.color='#10b981';
+  } catch(e) { msgEl.textContent='❌ '+e.message; msgEl.style.color='#ef4444'; }
+  finally { if(btn){btn.disabled=false;btn.textContent='💾 儲存個人目標';} }
+}
+
+async function deletePersonTargets() {
+  const metricId = document.getElementById('ptMetricSel').value;
+  const period   = document.getElementById('ptPeriodSel').value;
+  const branch   = document.getElementById('ptBranchSel').value;
+  if (!metricId||!period||!branch) { alert('請先載入要刪除的設定'); return; }
+  const metric = _ptMetrics.find(m=>m.id==metricId);
+  if (!confirm(`確定刪除 ${branch} ${period.slice(0,4)}年${parseInt(period.slice(4))}月\n「${metric?.metric_name||''}」的所有個人目標設定？`)) return;
+  try {
+    await fetch(`/api/person-targets?metric_id=${metricId}&period=${period}&branch=${branch}`, {method:'DELETE'});
+    _ptPersons=[];
+    document.getElementById('ptGrid').style.display='none';
+    document.getElementById('ptMsg').textContent='';
+    alert('✅ 已刪除');
+  } catch(e) { alert('刪除失敗：'+e.message); }
+}
 
 // ══ 密碼 ══
 const SETTINGS_TOKEN_KEY='volvo_settings_token';
