@@ -1364,51 +1364,124 @@ async function loadDaily(period,branch){
 }
 
 window._toggleDailyAvg=function(branch){const s=window._dailyState;if(!s)return;s.showAvg[branch]=!s.showAvg[branch];const col=s.colors[branch]||'#94a3b8';const btn=document.getElementById(`avgToggle-${branch}`);if(btn){btn.style.background=s.showAvg[branch]?col+'28':'transparent';btn.style.borderWidth=s.showAvg[branch]?'2px':'1.5px';btn.style.fontWeight=s.showAvg[branch]?'800':'600';}window._renderDailyChart();};
+// ══════════════════════════════════════════════════════
+// 替換 stats.html 中的 window._renderDailyChart 函式
+// 找到「window._renderDailyChart=function(){」整段替換
+// ══════════════════════════════════════════════════════
+
 window._renderDailyChart=function(){
   var s=window._dailyState;if(!s)return;
   var el=document.getElementById('dailyChartSvgWrap');if(!el)return;
   var branchList=s.branchList,dateList=s.dateList,colors=s.colors,maxCount=s.maxCount;
-  var barW=s.barW,dayMap=s.dayMap,avgMap=s.avgMap,showAvg=s.showAvg;
+  var dayMap=s.dayMap,avgMap=s.avgMap,showAvg=s.showAvg;
   if(!dateList.length){el.innerHTML='<div style="color:#64748b;font-size:13px;padding:24px">無進廠資料</div>';return;}
   var isLight=document.body.classList.contains('light-theme');
   var axisColor=isLight?'#94a3b8':'#475569';
   var gridColor=isLight?'rgba(0,0,0,0.07)':'rgba(255,255,255,0.05)';
-  var labelColor=isLight?'#64748b':'#94a3b8';
+  var labelColor=isLight?'#475569':'#94a3b8';
   var DOW_CN=['日','一','二','三','四','五','六'];
-  var leftPad=44,chartH=180,xLabelH=32,gap=barW;
-  var svgW=Math.max(400,leftPad+dateList.length*(branchList.length*barW+gap)+20);
+  var isMob=window.innerWidth<=768;
+
+  // ── 動態計算 barW：依容器寬與日期數反算 ──
+  var chartH=isMob?220:320;
+  var xLabelH=38;
+  var leftPad=48;
+  var rightPad=24;
+  var gap=isMob?2:4;
+  var totalDays=dateList.length;
+  var containerW=el.parentElement?el.parentElement.clientWidth:800;
+  containerW=Math.max(containerW,600);
+  var availW=containerW-leftPad-rightPad;
+  var groupW=totalDays>0?Math.floor(availW/totalDays):24;
+  var barW=Math.max(isMob?6:10, Math.floor((groupW-gap)/Math.max(branchList.length,1)));
+  barW=Math.min(barW,36);
+  var actualGroupW=branchList.length*barW+gap;
+  var svgW=Math.max(containerW, leftPad+totalDays*actualGroupW+rightPad);
   var svgH=chartH+xLabelH;
-  var yScale=function(v){return maxCount>0?Math.round(chartH*(1-v/maxCount)*10)/10:chartH;};
-  var svg='<svg width="'+svgW+'" height="'+svgH+'" xmlns="http://www.w3.org/2000/svg" style="display:block">';
-  if(isLight)svg+='<rect width="'+svgW+'" height="'+svgH+'" fill="#f8fafc"/>';
-  for(var ti=0;ti<=4;ti++){
-    var ytv=Math.round(maxCount*ti/4);var yty=yScale(ytv);
-    svg+='<line x1="'+leftPad+'" y1="'+yty+'" x2="'+(svgW-8)+'" y2="'+yty+'" stroke="'+(ti===0?axisColor:gridColor)+'" stroke-width="'+(ti===0?1:0.5)+'"/>';
-    svg+='<text x="'+(leftPad-5)+'" y="'+(yty+4)+'" text-anchor="end" font-size="10" fill="'+labelColor+'">'+ytv+'</text>';
+  var yScale=function(v){return maxCount>0?+(chartH*(1-v/maxCount)).toFixed(1):chartH;};
+
+  var svg='<svg width="'+svgW+'" height="'+svgH+'" xmlns="http://www.w3.org/2000/svg" style="display:block;font-family:-apple-system,Microsoft JhengHei,sans-serif">';
+  if(isLight)svg+='<rect width="'+svgW+'" height="'+svgH+'" fill="#f8fafc" rx="0"/>';
+
+  // ── Y 格線 ──
+  var yTicks=5;
+  for(var ti=0;ti<=yTicks;ti++){
+    var ytv=Math.round(maxCount*ti/yTicks);
+    var yty=yScale(ytv);
+    svg+='<line x1="'+leftPad+'" y1="'+yty+'" x2="'+(svgW-rightPad)+'" y2="'+yty+'" stroke="'+(ti===0?axisColor:gridColor)+'" stroke-width="'+(ti===0?1.5:0.5)+'"/>';
+    svg+='<text x="'+(leftPad-7)+'" y="'+(yty+4)+'" text-anchor="end" font-size="11" font-weight="600" fill="'+labelColor+'">'+ytv+'</text>';
   }
+
+  // ── 柱狀圖 ──
   var cx=leftPad;
   dateList.forEach(function(d){
-    var dow=new Date(d+'T00:00:00').getDay(),dayNum=parseInt(d.slice(8));
+    var dow=new Date(d+'T00:00:00').getDay();
+    var dayNum=parseInt(d.slice(8));
     var midX=cx+branchList.length*barW/2;
+    var isWeekend=(dow===0||dow===6);
+
+    // 週末淡底色
+    if(isWeekend){
+      svg+='<rect x="'+cx+'" y="0" width="'+(branchList.length*barW)+'" height="'+chartH+'" fill="'+(isLight?'rgba(0,0,0,0.025)':'rgba(255,255,255,0.025)')+'" />';
+    }
+
     branchList.forEach(function(br,bi){
       var cnt=(dayMap[d]&&dayMap[d][br])?parseInt(dayMap[d][br]):0;
-      var col=colors[br]||'#94a3b8',barH=cnt>0?Math.max(2,chartH*cnt/maxCount):0;
-      var bx=cx+bi*barW,by=chartH-barH;
-      svg+='<rect x="'+bx+'" y="'+by+'" width="'+(barW-1)+'" height="'+barH+'" fill="'+col+'" opacity="0.85" rx="1"/>';
-      if(cnt>0&&barW>=14)svg+='<text x="'+(bx+barW/2-0.5)+'" y="'+(by-3)+'" text-anchor="middle" font-size="9" fill="'+col+'">'+cnt+'</text>';
+      var col=colors[br]||'#94a3b8';
+      var barH=cnt>0?Math.max(4,chartH*cnt/maxCount):0;
+      var bx=cx+bi*barW;
+      var by=chartH-barH;
+      var rw=Math.max(1,barW-1);
+
+      // bar 本體（漸層）
+      var gid='grad_'+bi+'_'+d.replace(/-/g,'');
+      svg+='<defs><linearGradient id="'+gid+'" x1="0" y1="0" x2="0" y2="1">'
+        +'<stop offset="0%" stop-color="'+col+'" stop-opacity="1"/>'
+        +'<stop offset="100%" stop-color="'+col+'" stop-opacity="0.65"/>'
+        +'</linearGradient></defs>';
+      svg+='<rect x="'+bx+'" y="'+by+'" width="'+rw+'" height="'+barH
+        +'" fill="url(#'+gid+')" rx="2" ry="2"/>';
+
+      // 數值標籤
+      if(cnt>0){
+        var fontSize=(barW>=18)?11:(barW>=12)?10:9;
+        var textX=bx+rw/2;
+        if(barH>22){
+          // 數字放在 bar 內頂部（白字）
+          svg+='<text x="'+textX+'" y="'+(by+14)+'" text-anchor="middle"'
+            +' font-size="'+fontSize+'" font-weight="700" fill="#fff" opacity="0.95">'+cnt+'</text>';
+        } else {
+          // 數字放在 bar 上方（品牌色）
+          svg+='<text x="'+textX+'" y="'+(by-3)+'" text-anchor="middle"'
+            +' font-size="'+fontSize+'" font-weight="700" fill="'+col+'">'+cnt+'</text>';
+        }
+      }
     });
-    var dowColor=dow===0?'#ef4444':dow===6?(isLight?'#3b82f6':'#60a5fa'):labelColor;
-    svg+='<text x="'+midX+'" y="'+(chartH+14)+'" text-anchor="middle" font-size="10" fill="'+dowColor+'">'+dayNum+'</text>';
-    svg+='<text x="'+midX+'" y="'+(chartH+26)+'" text-anchor="middle" font-size="9" fill="'+dowColor+'">'+DOW_CN[dow]+'</text>';
-    cx+=branchList.length*barW+gap;
+
+    // X 軸：日期 + 星期
+    var dowColor=dow===0?'#ef4444':dow===6?(isLight?'#2563eb':'#60a5fa'):labelColor;
+    var dowBold=isWeekend?'700':'500';
+    svg+='<text x="'+midX+'" y="'+(chartH+16)+'" text-anchor="middle" font-size="11" font-weight="'+dowBold+'" fill="'+dowColor+'">'+dayNum+'</text>';
+    svg+='<text x="'+midX+'" y="'+(chartH+30)+'" text-anchor="middle" font-size="10" font-weight="'+dowBold+'" fill="'+dowColor+'">'+DOW_CN[dow]+'</text>';
+    cx+=actualGroupW;
   });
+
+  // ── 日均線 ──
   branchList.forEach(function(br){
     if(!showAvg[br])return;
-    var col=colors[br]||'#94a3b8',avg=avgMap[br]||0;if(!avg)return;
+    var col=colors[br]||'#94a3b8';
+    var avg=avgMap[br]||0;if(!avg)return;
     var y=yScale(avg);
-    svg+='<line x1="'+leftPad+'" y1="'+y+'" x2="'+(svgW-8)+'" y2="'+y+'" stroke="'+col+'" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.9"/>';
-    svg+='<text x="'+(svgW-6)+'" y="'+(y-3)+'" font-size="9" fill="'+col+'" text-anchor="end">'+br+'日均'+avg.toFixed(1)+'</text>';
+    // 底部陰影線（增加可讀性）
+    svg+='<line x1="'+leftPad+'" y1="'+(y+1)+'" x2="'+(svgW-rightPad)+'" y2="'+(y+1)+'" stroke="rgba(0,0,0,0.15)" stroke-width="2" stroke-dasharray="6,3"/>';
+    svg+='<line x1="'+leftPad+'" y1="'+y+'" x2="'+(svgW-rightPad)+'" y2="'+y+'" stroke="'+col+'" stroke-width="2" stroke-dasharray="6,3" opacity="0.95"/>';
+    // 標籤背景
+    var labelText=br+'日均'+avg.toFixed(1);
+    var lx=svgW-rightPad-4;
+    svg+='<rect x="'+(lx-labelText.length*6.5-6)+'" y="'+(y-12)+'" width="'+(labelText.length*6.5+12)+'" height="16" fill="'+(isLight?'rgba(241,245,249,0.9)':'rgba(15,23,42,0.85)')+'" rx="4"/>';
+    svg+='<text x="'+lx+'" y="'+(y-2)+'" font-size="10" font-weight="700" fill="'+col+'" text-anchor="end">'+labelText+'</text>';
   });
+
   svg+='</svg>';
   el.innerHTML=svg;
 };
