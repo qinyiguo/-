@@ -178,6 +178,25 @@
     .perf-cell { padding: 12px 12px; }
     .achieve-chip { padding: 6px 10px; gap: 6px; }
   }
+
+ body.light-theme { background:#f1f5f9; color:#1e293b; }
+body.light-theme .nav { background:#fff; border-color:#e2e8f0; }
+body.light-theme .nav-brand { color:#1e293b; }
+body.light-theme .nav-link { color:#64748b; }
+body.light-theme .nav-link.active { color:#3b82f6; }
+body.light-theme .sticky-header { background:#f1f5f9; }
+body.light-theme .filter-bar { background:#fff; border-color:#e2e8f0; }
+body.light-theme .branch-select { background:#fff; border-color:#e2e8f0; color:#1e293b; }
+body.light-theme .card { background:#fff; border-color:#e2e8f0; }
+body.light-theme .period-btn { background:#fff; border-color:#e2e8f0; color:#1e293b; }
+body.light-theme .period-dropdown { background:#fff; border-color:#e2e8f0; }
+body.light-theme .tab-btn { background:transparent; color:#64748b; }
+body.light-theme .tab-btn.active { background:#3b82f6; color:#fff; }
+body.light-theme .perf-block { border-color:#e2e8f0; }
+body.light-theme .perf-block-header { background:#f8fafc; }
+body.light-theme .perf-cell { border-color:#e2e8f0; }
+.theme-toggle-btn { margin-left:8px; padding:5px 10px; border-radius:7px; border:1px solid rgba(255,255,255,.15); background:transparent; cursor:pointer; font-size:15px; align-self:center; }
+body.light-theme .theme-toggle-btn { border-color:#e2e8f0; }
 </style>
 </head>
 <body>
@@ -190,6 +209,7 @@
     <a href="/query.html" class="nav-link">🔍 資料查詢</a>
     <a href="/bonus.html" class="nav-link">💰 獎金表</a>
     <a href="/settings.html" class="nav-link">⚙️ 設定</a>
+   <button id="themeToggleBtn" class="theme-toggle-btn" onclick="toggleTheme()" title="切換主題">☀️</button>
   </nav>
   <div class="header-body">
     <div class="filter-bar">
@@ -856,6 +876,10 @@ async function loadPerformance(period,branch){
 }
 
 (async()=>{ await loadPeriods(); await doLoad(); })();
+ function initTheme(){const s=localStorage.getItem('volvo_theme')||'dark';applyTheme(s,false);}
+function applyTheme(t,re){if(t==='light')document.body.classList.add('light-theme');else document.body.classList.remove('light-theme');const b=document.getElementById('themeToggleBtn');if(b)b.textContent=t==='light'?'🌙':'☀️';localStorage.setItem('volvo_theme',t);}
+function toggleTheme(){applyTheme(document.body.classList.contains('light-theme')?'dark':'light',true);}
+initTheme();
 </script>
 </body>
 </html>
