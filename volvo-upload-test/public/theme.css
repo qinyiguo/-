@@ -113,6 +113,7 @@ body.light-theme .tab.active     { background: #3b82f6 !important; color: #fffff
 body.light-theme .tab-btn        { color: #64748b !important; }
 body.light-theme .tab-btn.active { background: #3b82f6 !important; color: #ffffff !important; }
 body.light-theme .tab-bar        { background: #f1f5f9 !important; border-color: #e2e8f0 !important; }
+body.light-theme .tab-bar-wrap   { background: #f1f5f9 !important; border-color: #e2e8f0 !important; }
 body.light-theme .tabs-wrap .tabs { background: #f8fafc !important; border: 1px solid #e2e8f0; border-radius: 8px; }
 
 /* ── 期間選擇器 ── */
