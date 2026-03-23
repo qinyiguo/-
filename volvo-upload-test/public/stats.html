@@ -1888,12 +1888,16 @@ async function loadPersonPerfDashboard() {
         ? 'padding:7px 16px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:#3b82f6;color:#fff;white-space:nowrap'
         : 'padding:7px 16px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;white-space:nowrap';
 
-      html += `<div style="margin-bottom:28px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+html += `<div style="margin-bottom:28px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
           <span style="font-size:16px;font-weight:900;color:${col}">${br}</span>
           <span style="font-size:11px;color:#64748b;background:#1e293b;border:1px solid #2d3f56;padding:2px 10px;border-radius:6px">
             ${period.slice(0,4)}年${parseInt(period.slice(4))}月
           </span>
+          <button onclick="exportPersonPerfExcel('${br}')"
+            style="margin-left:auto;background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.35);padding:5px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">
+            ⬇️ ${br} Excel
+          </button>
         </div>
         <div style="display:flex;gap:2px;background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:3px;width:fit-content;margin-bottom:10px">
           <button id="pptab-${br}-repair"  onclick="_ppSwitchDept('${br}','repair')"  style="${tabStyle(true)}">🔧 維修服務科 (${roster維修.length}人)</button>
@@ -2261,7 +2265,7 @@ async function _ppSaveDept(dKey){
 }
 
  // ══ 個人業績 Excel 匯出 ══
-async function exportPersonPerfExcel() {
+async function exportPersonPerfExcel(targetBranch) {
   if (!Object.keys(_ppDeptData).length) {
     alert('請先查詢個人業績資料');
     return;
@@ -2271,7 +2275,7 @@ async function exportPersonPerfExcel() {
 
   const period  = getPeriod();
   const branch  = document.getElementById('selBranch').value;
-  const BRANCHES = branch ? [branch] : ['AMA', 'AMC', 'AMD'];
+  const BRANCHES = targetBranch ? [targetBranch] : (branch ? [branch] : ['AMA', 'AMC', 'AMD']);;
   const DEPT_MAP = [
     { suffix: 'repair',  label: '維修服務科' },
     { suffix: 'claims',  label: '承保理賠科' },
@@ -2381,8 +2385,7 @@ async function exportPersonPerfExcel() {
   if (!wb.SheetNames.length) { alert('無資料可匯出'); return; }
 
   const today    = new Date().toLocaleDateString('zh-TW', { year:'numeric', month:'2-digit', day:'2-digit' }).replace(/\//g,'');
-  const fileName = `個人業績_${period}_${branch || '全廠'}_${today}.xlsx`;
-  XLS.writeFile(wb, fileName);
+  const fileName = `個人業績_${period}_${targetBranch || branch || '全廠'}_${today}.xlsx`;  XLS.writeFile(wb, fileName);
 }
  
 // ══ Init ══
