@@ -461,6 +461,10 @@
             <option value="">選擇指標...</option>
           </select>
           <button class="btn btn-primary btn-sm" onclick="doLoadPersonPerf()">查詢</button>
+          <button class="btn btn-sm" onclick="exportPersonPerfExcel()"
+           style="background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.35);white-space:nowrap">
+  ⬇️ 匯出 Excel
+</button>
           <a href="/settings.html" style="font-size:12px;color:#64748b;text-decoration:none;padding:5px 10px;border:1px solid #2d3f56;border-radius:5px;background:#1e293b;white-space:nowrap">&#x2699;&#xFE0F; 設定目標</a>
         </span>
       </div>
@@ -2256,6 +2260,130 @@ async function _ppSaveDept(dKey){
   }catch(e){if(msgEl){msgEl.textContent='❌ '+e.message;msgEl.style.color='#ef4444';}console.error('_ppSaveDept',e);}
 }
 
+ // ══ 個人業績 Excel 匯出 ══
+async function exportPersonPerfExcel() {
+  if (!Object.keys(_ppDeptData).length) {
+    alert('請先查詢個人業績資料');
+    return;
+  }
+  const XLS = window.XLSX;
+  if (!XLS) { alert('Excel 函式庫尚未載入，請稍後再試'); return; }
+
+  const period  = getPeriod();
+  const branch  = document.getElementById('selBranch').value;
+  const BRANCHES = branch ? [branch] : ['AMA', 'AMC', 'AMD'];
+  const DEPT_MAP = [
+    { suffix: 'repair',  label: '維修服務科' },
+    { suffix: 'claims',  label: '承保理賠科' },
+    { suffix: 'service', label: '客戶服務科' },
+  ];
+
+  const wb = XLS.utils.book_new();
+
+  for (const br of BRANCHES) {
+    const wsData = [];
+    let hasData  = false;
+
+    for (const { suffix, label: deptLabel } of DEPT_MAP) {
+      const dKey = `${br}-${suffix}`;
+      const d    = _ppDeptData[dKey];
+      if (!d || !d.roster.length || !d.metrics.length) continue;
+
+      hasData = true;
+
+      // ── 表頭（第一個 dept 才加一次）──
+      if (!wsData.length) {
+        const hdr = ['廠別', '科別', '姓名', '職務', '狀態', '相對權重'];
+        d.metrics.forEach(m => {
+          hdr.push(`${m.metric_name}_實績`);
+          hdr.push(`${m.metric_name}_目標`);
+          hdr.push(`${m.metric_name}_達成率(%)`);
+        });
+        wsData.push(hdr);
+      }
+
+      // ── 廠別目標 & 科別配比 ──
+      const bt        = d.branchTargets[br] || {};
+      const allocRaw  = (() => {
+        try { return localStorage.getItem(_ppAllocKey(br, suffix, period)); } catch(e) { return null; }
+      })();
+      const allocRatio = allocRaw ? parseFloat(allocRaw) / 100 : 1;
+
+      // ── 計算總權重 ──
+      const savedW = name => {
+        for (const m of d.metrics) {
+          const pt = d.ptMap[name]?.[m.id];
+          if (pt?.weight != null) return parseFloat(pt.weight);
+        }
+        return 0;
+      };
+      const deptTotalW = d.roster.reduce((s, p) => s + (savedW(p.emp_name) || 0), 0);
+
+      // ── 實際業績查詢 ──
+      const getActual = (name, mid) => {
+        const map = d.saActuals[mid] || {};
+        if (map[name] !== undefined) return map[name];
+        for (const [k, v] of Object.entries(map)) {
+          if (k.includes(name) || name.includes(k)) return v;
+        }
+        return 0;
+      };
+
+      // ── 各人員資料列 ──
+      d.roster.forEach(person => {
+        const name = person.emp_name;
+        const w    = savedW(name);
+        const row  = [br, deptLabel, name, person.job_title || '—', person.status, w || ''];
+
+        d.metrics.forEach(m => {
+          const actual = getActual(name, m.id);
+          const btVal  = bt[m.id] || 0;
+          const calcT  = (w > 0 && deptTotalW > 0 && btVal > 0)
+            ? btVal * allocRatio * w / deptTotalW
+            : null;
+          const rate   = (calcT && calcT > 0)
+            ? (actual / calcT * 100).toFixed(1)
+            : '';
+
+          row.push(Math.round(parseFloat(actual) || 0));
+          row.push(calcT ? Math.round(calcT) : '');
+          row.push(rate);
+        });
+        wsData.push(row);
+      });
+
+      // ── 科別合計列 ──
+      const totalRow = [br, deptLabel, '合計', '', '', ''];
+      d.metrics.forEach(m => {
+        const total = d.roster.reduce((s, p) => s + (getActual(p.emp_name, m.id) || 0), 0);
+        totalRow.push(Math.round(total));
+        totalRow.push('');
+        totalRow.push('');
+      });
+      wsData.push(totalRow);
+      wsData.push([]); // 空行分隔
+    }
+
+    if (!hasData || wsData.length <= 1) continue;
+
+    const ws = XLS.utils.aoa_to_sheet(wsData);
+
+    // ── 欄寬設定 ──
+    const firstMetrics = Object.values(_ppDeptData).find(d => d.branch === br && d.metrics.length)?.metrics || [];
+    const fixedCols = [{ wch: 7 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 8 }, { wch: 8 }];
+    const metricCols = firstMetrics.flatMap(() => [{ wch: 12 }, { wch: 12 }, { wch: 12 }]);
+    ws['!cols'] = [...fixedCols, ...metricCols];
+
+    // ── 合計列背景（簡易格式）──
+    XLS.utils.book_append_sheet(wb, ws, br);
+  }
+
+  if (!wb.SheetNames.length) { alert('無資料可匯出'); return; }
+
+  const today    = new Date().toLocaleDateString('zh-TW', { year:'numeric', month:'2-digit', day:'2-digit' }).replace(/\//g,'');
+  const fileName = `個人業績_${period}_${branch || '全廠'}_${today}.xlsx`;
+  XLS.writeFile(wb, fileName);
+}
  
 // ══ Init ══
 document.addEventListener('DOMContentLoaded',async()=>{
@@ -2286,5 +2414,6 @@ document.addEventListener('DOMContentLoaded',async()=>{
     </div>
   </div>
 </div>
+ <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </body>
 </html>
