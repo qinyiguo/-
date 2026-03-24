@@ -357,3 +357,12 @@ body.light-theme .dept-chip                 { background: #f8fafc !important; bo
 /* ── 主題切換按鈕 ── */
 body.light-theme .theme-toggle-btn          { border-color: #e2e8f0 !important; color: #475569 !important; }
 body.light-theme .theme-toggle-btn:hover    { background: #f1f5f9 !important; }
+
+body.light-theme [style*="background:#1a1200"],
+body.light-theme [style*="background: #1a1200"] { background: #fffdf0 !important; }
+
+body.light-theme [style*="background:#0d1b2e"],
+body.light-theme [style*="background: #0d1b2e"] { background: #f0f6ff !important; }
+
+body.light-theme [style*="background:#0a1020"],
+body.light-theme [style*="background: #0a1020"] { background: #f8fafc !important; }
