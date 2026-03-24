@@ -16,7 +16,7 @@ const initDatabase = async () => {
     await client.query(`
       CREATE TABLE IF NOT EXISTS repair_income (
         id SERIAL PRIMARY KEY, period VARCHAR(6), branch VARCHAR(10),
-        work_order VARCHAR(30), settle_date DATE, customer VARCHAR(100), plate_no VARCHAR(20),
+        work_order VARCHAR(30), settle_date DATE, clear_date DATE, customer VARCHAR(100), plate_no VARCHAR(20),
         account_type_code VARCHAR(10), account_type VARCHAR(30),
         parts_income NUMERIC(12,2) DEFAULT 0, accessories_income NUMERIC(12,2) DEFAULT 0,
         boutique_income NUMERIC(12,2) DEFAULT 0, engine_wage NUMERIC(12,2) DEFAULT 0,
@@ -78,6 +78,7 @@ const initDatabase = async () => {
     await client.query(`ALTER TABLE tech_performance ALTER COLUMN account_type TYPE VARCHAR(100)`);
     await client.query(`ALTER TABLE tech_performance ALTER COLUMN work_code TYPE VARCHAR(50)`);
     await client.query(`ALTER TABLE tech_performance ALTER COLUMN work_order TYPE VARCHAR(50)`);
+    await client.query(`ALTER TABLE repair_income ADD COLUMN IF NOT EXISTS clear_date DATE`);
 
     const bqCheck = await client.query(
       `SELECT column_name FROM information_schema.columns
