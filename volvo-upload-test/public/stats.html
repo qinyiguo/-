@@ -891,6 +891,10 @@ function switchTab(tab){
   document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.toggle('active',tabs[i]===tab);});
    if (tab === 'person-perf') loadPersonPerfDashboard();
   tabs.forEach(t=>{document.getElementById(`tab-${t}`).style.display=t===tab?'':'none';});
+  if (tab === 'daily' && window._dailyState) {
+    setTimeout(function(){ window._renderDailyChart(); }, 30);
+  }
+}
 }
 
 async function loadPeriods(){
@@ -1276,6 +1280,11 @@ window._toggleDailyAvg=function(branch){const s=window._dailyState;if(!s)return;
 window._renderDailyChart=function(){
   var s=window._dailyState;if(!s)return;
   var el=document.getElementById('dailyChartSvgWrap');if(!el)return;
+  var containerW = el.parentElement ? el.parentElement.clientWidth : 0;
+  if (containerW < 200) {
+    setTimeout(function(){ window._renderDailyChart(); }, 80);
+    return;
+  }
   var branchList=s.branchList,dateList=s.dateList,colors=s.colors,maxCount=s.maxCount;
   var dayMap=s.dayMap,avgMap=s.avgMap,showAvg=s.showAvg;
   if(!dateList.length){el.innerHTML='<div style="color:#64748b;font-size:13px;padding:24px">無進廠資料</div>';return;}
