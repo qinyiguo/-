@@ -2315,6 +2315,106 @@ let _ppSaConfigs = [];
 let _ppDeptData  = {};
 let _ppDragSrc   = null;
 
+ // ── 科別設定 localStorage ──
+const _ppDeptCfgKey = (b, dk) => `pp-dept-cfg-${b}-${dk}`;
+function _ppGetDeptConfig(b, dk) {
+  try { const r = localStorage.getItem(_ppDeptCfgKey(b,dk)); return r ? JSON.parse(r) : null; } catch(e) { return null; }
+}
+function _ppSaveDeptConfig(b, dk, cfg) {
+  try { localStorage.setItem(_ppDeptCfgKey(b,dk), JSON.stringify(cfg)); } catch(e) {}
+}
+
+let _ppConfigEditKey = null;
+
+function openPPDeptConfig(dKey) {
+  _ppConfigEditKey = dKey;
+  const d = _ppDeptData[dKey]; if (!d) return;
+  const cfg = _ppGetDeptConfig(d.branch, d.deptKey) || { rev_type:'paid', metric_ids:null };
+  const DEPT_LABEL = { repair:'維修服務科', claims:'承保理賠科', service:'客戶服務科' };
+  document.getElementById('ppDeptConfigTitle').textContent = `⚙️ ${d.branch} ${DEPT_LABEL[d.deptKey]||d.deptKey}`;
+
+  const REV_OPTS = [
+    { v:'paid',     l:'🔶 有費營收' },
+    { v:'general',  l:'💙 一般營收' },
+    { v:'bodywork', l:'🔨 鈑烤營收' },
+    { v:'extended', l:'🛡️ 延保營收' },
+  ];
+
+  const revHtml = `<div style="margin-bottom:18px">
+    <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:8px">📊 營業區：營收類型</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      ${REV_OPTS.map(o => {
+        const active = cfg.rev_type === o.v;
+        return `<label id="ppRLbl-${o.v}" onclick="selectPPRevType('${o.v}')"
+          style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:8px 14px;border-radius:8px;
+                 background:${active?'rgba(59,130,246,.15)':'#1e293b'};
+                 border:1.5px solid ${active?'#3b82f6':'#2d3f56'}">
+          <input type="radio" name="ppRevType" value="${o.v}" ${active?'checked':''} style="accent-color:#3b82f6;width:14px;height:14px;pointer-events:none">
+          <span id="ppRTxt-${o.v}" style="font-size:13px;font-weight:700;color:${active?'#3b82f6':'#94a3b8'}">${o.l}</span>
+        </label>`;
+      }).join('')}
+    </div>
+  </div>`;
+
+  const metricHtml = `<div>
+    <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:8px">📋 品項區：顯示項目</div>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <button onclick="ppSelectAllMetrics(true)" style="padding:3px 10px;background:#253347;color:#cbd5e1;border:1px solid #2d3f56;border-radius:5px;font-size:11px;cursor:pointer">全選</button>
+      <button onclick="ppSelectAllMetrics(false)" style="padding:3px 10px;background:#253347;color:#cbd5e1;border:1px solid #2d3f56;border-radius:5px;font-size:11px;cursor:pointer">全清</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;max-height:240px;overflow-y:auto">
+      ${_ppSaConfigs.length ? _ppSaConfigs.map(c => {
+        const checked = cfg.metric_ids === null || cfg.metric_ids.includes(Number(c.id));
+        return `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;
+                              border-radius:6px;background:#0f172a;border:1px solid #2d3f56">
+          <input type="checkbox" id="ppMChk-${c.id}" value="${c.id}" ${checked?'checked':''}
+            style="accent-color:#3b82f6;width:14px;height:14px">
+          <span style="font-size:13px;font-weight:600;color:#e2e8f0">${c.config_name}</span>
+        </label>`;
+      }).join('') : '<div style="color:#475569;font-size:12px">尚無指標銷售設定</div>'}
+    </div>
+  </div>`;
+
+  document.getElementById('ppDeptConfigBody').innerHTML = revHtml + metricHtml;
+  document.getElementById('ppDeptConfigModal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function selectPPRevType(val) {
+  ['paid','general','bodywork','extended'].forEach(v => {
+    const lbl = document.getElementById(`ppRLbl-${v}`);
+    const txt = document.getElementById(`ppRTxt-${v}`);
+    const radio = document.querySelector(`input[name="ppRevType"][value="${v}"]`);
+    if (!lbl) return;
+    const on = v === val;
+    lbl.style.background   = on ? 'rgba(59,130,246,.15)' : '#1e293b';
+    lbl.style.borderColor  = on ? '#3b82f6' : '#2d3f56';
+    if (txt)   txt.style.color = on ? '#3b82f6' : '#94a3b8';
+    if (radio) radio.checked   = on;
+  });
+}
+
+function ppSelectAllMetrics(checked) {
+  document.querySelectorAll('[id^="ppMChk-"]').forEach(cb => cb.checked = checked);
+}
+
+function savePPDeptConfig() {
+  if (!_ppConfigEditKey) return;
+  const d = _ppDeptData[_ppConfigEditKey]; if (!d) return;
+  const rev_type   = document.querySelector('input[name="ppRevType"]:checked')?.value || 'paid';
+  const metric_ids = [...document.querySelectorAll('[id^="ppMChk-"]:checked')].map(cb => parseInt(cb.value));
+  _ppSaveDeptConfig(d.branch, d.deptKey, { rev_type, metric_ids });
+  closePPDeptConfig();
+  const viewEl = document.getElementById(`ppview-${d.branch}-${d.deptKey}`);
+  if (viewEl) viewEl.innerHTML = _ppBuildTable(_ppConfigEditKey);
+}
+
+function closePPDeptConfig() {
+  document.getElementById('ppDeptConfigModal').style.display = 'none';
+  document.body.style.overflow = '';
+  _ppConfigEditKey = null;
+}
+ 
 // 順序 key: "pp-order-{branch}-{deptKey}"
 function _ppOrderKey(branch, deptKey) { return `pp-order-${branch}-${deptKey}`; }
 
@@ -2494,7 +2594,23 @@ async function loadPersonPerfDashboard() {
         });
       }));
 
-      branchData[br] = { roster維修, roster客服, roster承保, saActuals, ptMap };
+      // ── 新增：進廠台數 + 各類型營收 + 營收目標 ──
+    const [saCarCount, revMaps, revTargetRows] = await Promise.all([
+      fetch(`/api/stats/sa-car-count?period=${period}&branch=${br}`).then(r=>r.json()).catch(()=>({})),
+      Promise.all(['paid','bodywork','general','extended'].map(rt =>
+        fetch(`/api/stats/sa-paid-revenue?period=${period}&branch=${br}&rev_type=${rt}`).then(r=>r.json()).catch(()=>({}))
+      )),
+      fetch(`/api/revenue-targets?period=${period}&branch=${br}`).then(r=>r.json()).catch(()=>[]),
+    ]);
+    const saRevAllMaps = { paid:revMaps[0], bodywork:revMaps[1], general:revMaps[2], extended:revMaps[3] };
+    const revTargetMap = {};
+    (Array.isArray(revTargetRows)?revTargetRows:[]).forEach(t => {
+      revTargetMap.paid     = parseFloat(t.paid_target     || 0);
+      revTargetMap.bodywork = parseFloat(t.bodywork_target || 0);
+      revTargetMap.general  = parseFloat(t.general_target  || 0);
+      revTargetMap.extended = parseFloat(t.extended_target || 0);
+    });
+    branchData[br] = { roster維修, roster客服, roster承保, saActuals, ptMap, saCarCount, saRevAllMaps, revTargetMap };
     }));
 
     let html = '';
@@ -2509,9 +2625,10 @@ async function loadPersonPerfDashboard() {
       const keyR = `${br}-repair`;
       const keyS = `${br}-service`;
       const keyC = `${br}-claims`;
-      _ppDeptData[keyR] = { branch:br, deptKey:'repair',  roster:[...roster維修], metrics:metrics維修, saActuals, ptMap, branchTargets, metricIds:metrics維修.map(m=>m.id) };
-      _ppDeptData[keyS] = { branch:br, deptKey:'service', roster:[...roster客服], metrics:metrics客服, saActuals, ptMap, branchTargets, metricIds:metrics客服.map(m=>m.id) };
-      _ppDeptData[keyC] = { branch:br, deptKey:'claims',  roster:[...roster承保], metrics:metrics承保, saActuals, ptMap, branchTargets, metricIds:metrics承保.map(m=>m.id) };
+      const _sharedExtra = { saCarCount: branchData[br].saCarCount, saRevAllMaps: branchData[br].saRevAllMaps, revTargetMap: branchData[br].revTargetMap };
+          _ppDeptData[keyR] = { branch:br, deptKey:'repair',  roster:[...roster維修], metrics:metrics維修, saActuals, ptMap, branchTargets, metricIds:metrics維修.map(m=>m.id), ..._sharedExtra };
+          _ppDeptData[keyS] = { branch:br, deptKey:'service', roster:[...roster客服], metrics:metrics客服, saActuals, ptMap, branchTargets, metricIds:metrics客服.map(m=>m.id), ..._sharedExtra };
+          _ppDeptData[keyC] = { branch:br, deptKey:'claims',  roster:[...roster承保], metrics:metrics承保, saActuals, ptMap, branchTargets, metricIds:metrics承保.map(m=>m.id), ..._sharedExtra };
 
       const tabStyle = (active) => active
         ? 'padding:7px 16px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:#3b82f6;color:#fff;white-space:nowrap'
@@ -2599,178 +2716,228 @@ function _ppSwitchDept(branch, dept) {
 function _ppBuildTable(dKey) {
   const d = _ppDeptData[dKey];
   if (!d) return '';
-  const { branch, deptKey, roster, metrics, saActuals, ptMap, branchTargets } = d;
-  const TH = 'padding:9px 10px;background:#0c1524;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;';
-  const TD = 'padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);vertical-align:middle;';
-  if (!roster.length)  return '<div style="color:#64748b;font-size:13px;padding:12px 0">此科別無在職人員</div>';
-  if (!metrics.length) return '<div style="color:#64748b;font-size:13px;padding:12px 0">此科別無對應指標</div>';
+  const { branch, deptKey, roster, metrics, saActuals, ptMap, branchTargets,
+          saCarCount, saRevAllMaps, revTargetMap } = d;
 
-  const bt        = branchTargets[branch] || {};
-  const isAmt     = m => !['count','qty'].includes(m.stat_field);
-  const rateColor = r => r===null?'#475569':r>=100?'#10b981':r>=80?'#f59e0b':'#ef4444';
-  const fmtV = (v,m) => { const n=Math.round(parseFloat(v||0)); if(!n||isNaN(n))return'—'; return isAmt(m)&&n>=1000?Math.round(n/1000).toLocaleString()+'K':n.toLocaleString(); };
-  const fmtT = (v,m) => { const n=parseFloat(v||0); if(!n||isNaN(n))return'未設'; const c=Math.ceil(n); return isAmt(m)&&c>=1000?Math.ceil(c/1000).toLocaleString()+'K':c.toLocaleString(); };
-  const esc  = s => String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  if (!roster.length) return '<div style="color:#64748b;font-size:13px;padding:12px 0">此科別無在職人員</div>';
 
-  const getSavedW = name => {
-    for (const m of metrics) { const pt=ptMap[name]?.[m.id]; if(pt?.weight!=null)return pt.weight; }
-    return '';
-  };
-  const deptTotalW = roster.reduce((sum,p)=>{ const w=parseFloat(getSavedW(p.emp_name)||0); return sum+(isNaN(w)?0:w); },0);
-  const _period = getPeriod();
+  // ── Dept config ──
+  const cfg            = _ppGetDeptConfig(branch, deptKey) || { rev_type:'paid', metric_ids:null };
+  const revType        = cfg.rev_type || 'paid';
+  const selMetricIds   = cfg.metric_ids; // null = 全部
+  const visMetrics     = metrics.filter(m => selMetricIds === null || selMetricIds.includes(Number(m.id)));
+
+  // ── Helpers ──
+  const bt             = branchTargets[branch] || {};
+  const isAmt          = m => !['count','qty'].includes(m.stat_field);
+  const rateColor      = r => r===null?'#475569':r>=100?'#10b981':r>=80?'#f59e0b':'#ef4444';
+  const fmtV           = (v,m) => { const n=Math.round(parseFloat(v||0)); if(!n||isNaN(n))return'—'; return isAmt(m)&&n>=1000?Math.round(n/1000).toLocaleString()+'K':n.toLocaleString(); };
+  const fmtT           = (v,m) => { const n=parseFloat(v||0); if(!n||isNaN(n))return'未設'; const c=Math.ceil(n); return isAmt(m)&&c>=1000?Math.ceil(c/1000).toLocaleString()+'K':c.toLocaleString(); };
+  const fmtRev         = v => { const n=Math.round(parseFloat(v||0)); return n>=1000?Math.round(n/1000).toLocaleString()+'K':n>0?n.toLocaleString():'—'; };
+  const esc            = s => String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  const getSavedW      = name => { for(const m of metrics){const pt=ptMap[name]?.[m.id];if(pt?.weight!=null)return pt.weight;} return ''; };
+  const deptTotalW     = roster.reduce((s,p)=>{ const w=parseFloat(getSavedW(p.emp_name)||0); return s+(isNaN(w)?0:w); },0);
+  const _period        = getPeriod();
   const deptAlloc      = _ppGetAlloc(branch, deptKey, _period);
-  const deptAllocRatio = (deptAlloc != null) ? deptAlloc / 100 : 1;
-  const getActual  = (name,mid) => {
-    const map=saActuals[mid]||{};
-    if(map[name]!==undefined)return map[name];
-    for(const[k,v]of Object.entries(map))if(k.includes(name)||name.includes(k))return v;
-    return 0;
-  };
+  const deptAllocRatio = deptAlloc!=null ? deptAlloc/100 : 1;
+  const getActual      = (name,mid) => { const map=saActuals[mid]||{}; if(map[name]!==undefined)return map[name]; for(const[k,v]of Object.entries(map))if(k.includes(name)||name.includes(k))return v; return 0; };
 
-  const thMetrics = metrics.map(m => {
-    const cfg = _ppFindSaConfig(m.metric_name, _ppSaConfigs);
-    const tip  = cfg && cfg.config_name !== m.metric_name ? ` title="對應設定：${cfg.config_name}"` : '';
-    return `<th style="${TH}text-align:right;min-width:110px;border-right:1px solid #1e3050"${tip}>
-      <div style="color:#8b5cf6;font-weight:800">${m.metric_name}</div>
-      <div style="color:#475569;font-size:10px;font-weight:400;margin-top:1px">廠目標 ${fmtT(bt[m.id],m)}</div>
+  const revMap          = (saRevAllMaps&&saRevAllMaps[revType]) || {};
+  const branchRevTarget = (revTargetMap&&revTargetMap[revType]) || 0;
+  const REV_LABEL       = { paid:'🔶 有費營收', general:'💙 一般營收', bodywork:'🔨 鈑烤營收', extended:'🛡️ 延保營收' };
+
+  const LABEL_W = 175;
+  const TH = `background:#0c1524;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;`;
+  const TD = `border-bottom:1px solid rgba(45,63,86,.2);vertical-align:middle;`;
+
+  // ════ 表頭：人員欄 ════
+  let thead = `<thead><tr>
+    <th style="padding:10px 12px;${TH}position:sticky;left:0;z-index:4;min-width:${LABEL_W}px;border-right:2px solid #374151;">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="color:#94a3b8">品項 / 人員</span>
+        <button onclick="event.stopPropagation();openPPDeptConfig('${esc(dKey)}')"
+          style="padding:2px 8px;background:rgba(139,92,246,.15);color:#a78bfa;border:1px solid rgba(139,92,246,.3);
+                 border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;flex-shrink:0">⚙️ 設定</button>
+      </div>
     </th>`;
-  }).join('');
+  roster.forEach(p => {
+    const sCol = p.status==='在職'?'#10b981':p.status==='留職停薪'?'#f59e0b':'#ef4444';
+    thead += `<th style="padding:9px 8px;${TH}text-align:center;min-width:110px;border-right:1px solid #1e3050;">
+      <div style="font-weight:800;font-size:12px;color:#e2e8f0">${p.emp_name}</div>
+      <div style="font-size:10px;color:#64748b;margin-top:1px">${p.job_title||'—'}</div>
+      <span style="display:inline-block;margin-top:2px;font-size:10px;padding:1px 5px;border-radius:4px;background:${sCol}22;color:${sCol}">${p.status}</span>
+    </th>`;
+  });
+  thead += `<th style="padding:9px 8px;${TH}text-align:right;min-width:70px;border-left:2px solid #374151;">合計</th></tr>`;
 
-  let rows = '';
-  roster.forEach((person,ni) => {
-    const name   = person.emp_name;
-    const bg     = ni%2===0?'#111827':'#0e1a29';
-    const sCol   = person.status==='在職'?'#10b981':person.status==='留職停薪'?'#f59e0b':'#ef4444';
-    const savedW = getSavedW(name);
+  // 權重列
+  thead += `<tr>
+    <th style="padding:7px 12px;${TH}position:sticky;left:0;z-index:4;background:#0a1020;border-right:2px solid #374151;color:#3b82f6;">
+      相對權重
+      <div style="font-size:10px;font-weight:400;color:#475569;margin-top:1px">
+        合計 ${deptTotalW%1===0?deptTotalW:deptTotalW.toFixed(1)}
+        ${deptAlloc!=null?` ｜占比 <strong style="color:#f59e0b">${deptAlloc}%</strong>`:''}
+      </div>
+    </th>`;
+  roster.forEach((p,ni) => {
+    const savedW = getSavedW(p.emp_name);
     const myW    = parseFloat(savedW)||0;
     const pct    = myW>0&&deptTotalW>0?(myW/deptTotalW*100).toFixed(1)+'%':'—';
-
-    const metricCells = metrics.map(m => {
-      const actual=getActual(name,m.id), btVal=bt[m.id]||0;
-      const calcT = myW>0&&deptTotalW>0&&btVal>0?btVal*deptAllocRatio*myW/deptTotalW:null;
-      const rate  = calcT&&calcT>0?actual/calcT*100:null;
-      const rCol  = rateColor(rate), barW=rate!==null?Math.min(100,rate).toFixed(0):0;
-      return `<td style="${TD}background:${bg};border-right:1px solid #1a2535;min-width:110px">
-        <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-end">
-          <span style="font-size:13px;font-weight:800;color:${actual>0?'#10b981':'#475569'}">${fmtV(actual,m)}</span>
-          <span style="font-size:10px;color:#64748b">目標 ${fmtT(calcT,m)}</span>
-          ${rate!==null?`<div style="display:flex;align-items:center;gap:5px;width:100%;margin-top:1px">
-            <div style="flex:1;background:#0f172a;border-radius:2px;height:4px">
-              <div style="width:${barW}%;height:4px;border-radius:2px;background:${rCol}"></div>
-            </div>
-            <span style="font-size:11px;font-weight:800;color:${rCol};white-space:nowrap">${rate.toFixed(1)}%</span>
-          </div>`:'<span style="font-size:10px;color:#334155">—</span>'}
-        </div>
-      </td>`;
-    }).join('');
-
-    rows += `<tr draggable="true"
-      ondragstart="_ppDragStart(event,'${esc(dKey)}',${ni})"
-      ondragover="_ppDragOver(event)"
-      ondrop="_ppDrop(event,'${esc(dKey)}',${ni})"
-      ondragend="_ppDragEnd(event)" style="cursor:default">
-      <td style="${TD}background:${bg};border-right:1px solid #2d3f56;position:sticky;left:0;z-index:1;min-width:130px">
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="color:#2d4a6b;font-size:16px;cursor:grab;flex-shrink:0" title="拖曳排序">⠿</span>
-          <div>
-            <div style="font-weight:700;font-size:13px;color:#e2e8f0">${name}</div>
-            <div style="font-size:10px;color:#64748b;margin-top:1px">${person.job_title||'—'}</div>
-            <span style="font-size:10px;padding:1px 5px;border-radius:4px;background:${sCol}22;color:${sCol}">${person.status}</span>
-          </div>
-        </div>
-      </td>
-      <td style="${TD}background:${bg};border-right:1px solid #2d3f56;text-align:center;min-width:90px">
-        <div style="display:flex;align-items:center;gap:3px;justify-content:center">
-          <input type="number" value="${savedW}" min="0" step="0.1" placeholder="—"
-            id="ppW-${branch}-${deptKey}-${ni}"
-            title="相對權重 — 個人目標=廠目標×個人÷科別總和"
-            style="background:#0f172a;border:1px solid #2d3f56;color:#3b82f6;padding:3px 7px;border-radius:5px;font-size:13px;font-weight:800;width:62px;text-align:right;outline:none"
-            onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#2d3f56'">
-        </div>
-        <div style="font-size:10px;color:#475569;margin-top:2px">${pct}</div>
-      </td>
-      ${metricCells}
-      <td style="${TD}background:${bg};text-align:center">
-        <button onclick="_ppSaveRow('${esc(dKey)}',${ni},'${esc(name)}')"
-          style="background:rgba(59,130,246,.18);color:#60a5fa;border:1px solid rgba(59,130,246,.3);padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer">💾</button>
-        <div id="ppRowMsg-${dKey}-${ni}" style="font-size:10px;min-height:12px;margin-top:2px;white-space:nowrap"></div>
-      </td>
-    </tr>`;
+    thead += `<th style="padding:6px 8px;${TH}text-align:center;background:#0a1020;border-right:1px solid #1e3050;">
+      <input type="number" value="${savedW}" min="0" step="0.1" placeholder="—"
+        id="ppW-${branch}-${deptKey}-${ni}"
+        style="background:#0f172a;border:1px solid #2d3f56;color:#3b82f6;padding:3px 6px;
+               border-radius:5px;font-size:12px;font-weight:800;width:54px;text-align:right;outline:none"
+        onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#2d3f56'">
+      <div style="font-size:10px;color:#475569;margin-top:2px">${pct}</div>
+    </th>`;
   });
+  thead += `<th style="padding:6px 8px;${TH}background:#0a1020;border-left:2px solid #374151;"></th></tr></thead>`;
 
-  const totalCells = metrics.map(m => {
-    const total=roster.reduce((sum,p)=>sum+getActual(p.emp_name,m.id),0);
-    return `<td style="${TD}background:#1e293b;border-right:1px solid #1a2535;text-align:right">
-      <span style="font-size:12px;font-weight:800;color:${total>0?'#10b981':'#475569'}">${fmtV(total,m)}</span>
+  // ════ tbody ════
+  let tbody = '<tbody>';
+
+  // ── 營業區 header ──
+  tbody += `<tr><td colspan="${roster.length+2}"
+    style="padding:4px 12px;background:rgba(249,115,22,.12);border-bottom:1px solid rgba(249,115,22,.35);">
+    <span style="font-size:10px;font-weight:900;color:#f97316;letter-spacing:.06em">📊 營業區</span>
+  </td></tr>`;
+
+  // 進廠台數
+  const carTotal = roster.reduce((s,p)=>s+((saCarCount&&saCarCount[p.emp_name])||0),0);
+  tbody += `<tr style="background:rgba(59,130,246,.03)">
+    <td style="padding:10px 12px;${TD}position:sticky;left:0;z-index:2;background:#0d1b2e;border-right:2px solid #374151;min-width:${LABEL_W}px;">
+      <div style="font-weight:800;font-size:13px;color:#3b82f6">🚗 進廠台數</div>
+      <div style="font-size:10px;color:#475569;margin-top:2px">目標：暫無</div>
     </td>`;
-  }).join('');
+  roster.forEach(p => {
+    const cnt = (saCarCount&&saCarCount[p.emp_name])||0;
+    tbody += `<td style="padding:10px 8px;${TD}text-align:center;border-right:1px solid #1a2535;">
+      <div style="font-size:18px;font-weight:900;color:${cnt>0?'#3b82f6':'#475569'}">${cnt>0?cnt:'—'}</div>
+    </td>`;
+  });
+  tbody += `<td style="padding:10px 8px;${TD}text-align:right;border-left:2px solid #374151;font-weight:900;color:#3b82f6;">${carTotal>0?carTotal:'—'}</td></tr>`;
 
-  return `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px;border:1px solid rgba(100,116,139,.25)">
-    <div style="display:flex;align-items:center;padding:8px 12px;background:#0c1524;border-bottom:1px solid #2d3f56;gap:8px;flex-wrap:wrap">
-      <span style="font-size:11px;color:#475569;flex:1">
-        💡 <strong style="color:#3b82f6">相對權重</strong>：個人目標 = 廠目標 × <strong style="color:#f59e0b">科別占比%</strong> × 個人÷科別總 &nbsp;｜&nbsp; ⠿ 拖曳排序
-      </span>
-      <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
-        <span style="font-size:11px;color:#64748b;white-space:nowrap">科別占比</span>
-        <input type="number" min="1" max="100" step="1"
-          id="ppAlloc-${dKey}"
-          value="${deptAlloc != null ? deptAlloc : ''}"
-          placeholder="—"
-          title="此科別分配到的廠別目標比例 %"
-          style="background:#0f172a;border:1px solid #2d3f56;color:#f59e0b;padding:3px 6px;border-radius:5px;font-size:13px;font-weight:800;width:54px;text-align:right;outline:none"
-          onchange="_ppOnAllocChange('${esc(dKey)}')"
-          onfocus="this.style.borderColor='#f59e0b'" onblur="this.style.borderColor='#2d3f56'">
-        <span style="font-size:11px;color:#64748b">%</span>
-      </div>
-      <div id="ppdeptmsg-${dKey}" style="font-size:12px;min-height:18px"></div>
-      <button onclick="_ppSaveDept('${esc(dKey)}')"
-        style="background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3);padding:5px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">
-        💾 儲存全科
-      </button>
-    </div>
-    <table style="width:100%;border-collapse:separate;border-spacing:0;font-size:12px">
-      <thead style="position:sticky;top:0;z-index:3">
-        <tr>
-          <th style="${TH}text-align:left;border-right:1px solid #2d3f56;position:sticky;left:0;z-index:4;min-width:130px">人員</th>
-          <th style="${TH}text-align:center;border-right:1px solid #2d3f56;min-width:90px">
-            <div style="color:#3b82f6">相對權重</div>
-            <div style="font-size:10px;font-weight:400;color:#475569;margin-top:1px">目標=廠目標×我÷總</div>
-            <div style="font-size:10px;color:#64748b;border-top:1px solid #1e3050;padding-top:3px;margin-top:3px">
-              合計 <strong style="color:#3b82f6">${deptTotalW%1===0?deptTotalW:deptTotalW.toFixed(1)}</strong>
+  // 營收列
+  const revTotal = roster.reduce((s,p)=>s+(revMap[p.emp_name]||0),0);
+  tbody += `<tr style="background:rgba(249,115,22,.04)">
+    <td style="padding:10px 12px;${TD}position:sticky;left:0;z-index:2;background:#1a1200;border-right:2px solid #374151;min-width:${LABEL_W}px;">
+      <div style="font-weight:800;font-size:13px;color:#f97316">${REV_LABEL[revType]||'有費營收'}</div>
+      <div style="font-size:10px;color:#475569;margin-top:2px">廠目標 ${fmtRev(branchRevTarget)}</div>
+    </td>`;
+  roster.forEach(p => {
+    const name   = p.emp_name;
+    const actual = revMap[name]||0;
+    const myW    = parseFloat(getSavedW(name))||0;
+    const calcT  = myW>0&&deptTotalW>0&&branchRevTarget>0 ? branchRevTarget*deptAllocRatio*myW/deptTotalW : null;
+    const rate   = calcT&&calcT>0 ? actual/calcT*100 : null;
+    const rCol   = rateColor(rate);
+    const barW   = rate!==null ? Math.min(100,rate).toFixed(0) : 0;
+    tbody += `<td style="padding:10px 8px;${TD}text-align:center;border-right:1px solid #1a2535;background:rgba(249,115,22,.02);">
+      <div style="font-size:15px;font-weight:900;color:${actual>0?'#f97316':'#475569'}">${fmtRev(actual)}</div>
+      <div style="font-size:10px;color:#64748b;margin-top:1px">目標 ${calcT?fmtRev(calcT):'—'}</div>
+      ${rate!==null
+        ?`<div style="display:flex;align-items:center;gap:4px;margin-top:3px">
+            <div style="flex:1;background:#0f172a;border-radius:2px;height:3px">
+              <div style="width:${barW}%;height:3px;border-radius:2px;background:${rCol}"></div>
             </div>
-            ${deptAlloc!=null?`<div style="font-size:10px;color:#f59e0b;margin-top:1px">占比 <strong>${deptAlloc}%</strong></div>`:'<div style="font-size:10px;color:#475569;margin-top:1px">占比 未設</div>'}
-          </th>
-          ${thMetrics}
-          <th style="${TH}width:54px"></th>
-        </tr>
-      </thead>
-      <tbody id="pptbody-${dKey}">
-        ${rows}
-        <tr>
-          <td colspan="2" style="${TD}font-weight:800;color:#64748b;border-right:1px solid #2d3f56;font-size:12px;background:#1e293b">全科合計實績</td>
-          ${totalCells}
-          <td style="${TD}background:#1e293b"></td>
-        </tr>
-      </tbody>
-    </table>
+            <span style="font-size:10px;font-weight:800;color:${rCol};min-width:36px;text-align:right">${rate.toFixed(1)}%</span>
+          </div>`
+        :'<div style="font-size:10px;color:#334155;margin-top:3px">—</div>'}
+    </td>`;
+  });
+  tbody += `<td style="padding:10px 8px;${TD}text-align:right;border-left:2px solid #374151;font-weight:900;color:#f97316;">${fmtRev(revTotal)}</td></tr>`;
+
+  // ── 品項區 ──
+  if (visMetrics.length > 0) {
+    tbody += `<tr><td colspan="${roster.length+2}"
+      style="padding:4px 12px;background:rgba(139,92,246,.12);border-bottom:1px solid rgba(139,92,246,.35);">
+      <span style="font-size:10px;font-weight:900;color:#8b5cf6;letter-spacing:.06em">📋 品項區</span>
+    </td></tr>`;
+
+    visMetrics.forEach(m => {
+      const btVal = bt[m.id]||0;
+      let rowTotal = 0;
+      const cells = roster.map(p => {
+        const name   = p.emp_name;
+        const actual = getActual(name,m.id);
+        rowTotal += actual;
+        const myW  = parseFloat(getSavedW(name))||0;
+        const calcT= myW>0&&deptTotalW>0&&btVal>0 ? btVal*deptAllocRatio*myW/deptTotalW : null;
+        const rate = calcT&&calcT>0 ? actual/calcT*100 : null;
+        const rCol = rateColor(rate);
+        const barW = rate!==null ? Math.min(100,rate).toFixed(0) : 0;
+        return `<td style="padding:8px 8px;${TD}text-align:center;border-right:1px solid #1a2535;">
+          <div style="font-size:13px;font-weight:800;color:${actual>0?'#10b981':'#475569'}">${fmtV(actual,m)}</div>
+          <div style="font-size:10px;color:#64748b;margin-top:1px">目標 ${fmtT(calcT,m)}</div>
+          ${rate!==null
+            ?`<div style="display:flex;align-items:center;gap:4px;margin-top:3px">
+                <div style="flex:1;background:#0f172a;border-radius:2px;height:3px">
+                  <div style="width:${barW}%;height:3px;border-radius:2px;background:${rCol}"></div>
+                </div>
+                <span style="font-size:10px;font-weight:800;color:${rCol};min-width:34px;text-align:right">${rate.toFixed(1)}%</span>
+              </div>`
+            :'<div style="font-size:10px;color:#334155;margin-top:3px">—</div>'}
+        </td>`;
+      }).join('');
+      tbody += `<tr>
+        <td style="padding:8px 12px;${TD}position:sticky;left:0;z-index:2;background:#111827;border-right:2px solid #374151;min-width:${LABEL_W}px;">
+          <div style="font-weight:700;font-size:12px;color:#8b5cf6">${m.metric_name}</div>
+          <div style="font-size:10px;color:#475569;margin-top:2px">廠目標 ${fmtT(btVal,m)}</div>
+        </td>${cells}
+        <td style="padding:8px 8px;${TD}text-align:right;border-left:2px solid #374151;
+                   font-weight:800;color:${rowTotal>0?'#10b981':'#475569'};">${fmtV(rowTotal,m)}</td>
+      </tr>`;
+    });
+  } else if (metrics.length > 0) {
+    tbody += `<tr><td colspan="${roster.length+2}" style="padding:12px;text-align:center;color:#475569;font-size:12px">
+      品項區已全部隱藏，點擊「⚙️ 設定」勾選要顯示的品項
+    </td></tr>`;
+  }
+
+  // ── 底部工具列 ──
+  tbody += `<tr style="background:#0c1524">
+    <td colspan="${roster.length+2}" style="padding:8px 12px;border-top:1px solid #2d3f56;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button onclick="_ppSaveDept('${esc(dKey)}')"
+          style="background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3);
+                 padding:5px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">💾 儲存全科</button>
+        <div id="ppdeptmsg-${dKey}" style="font-size:12px;min-height:18px"></div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:5px">
+          <span style="font-size:11px;color:#64748b">科別占比</span>
+          <input type="number" min="1" max="100" step="1" id="ppAlloc-${dKey}"
+            value="${deptAlloc!=null?deptAlloc:''}" placeholder="—"
+            style="background:#0f172a;border:1px solid #2d3f56;color:#f59e0b;padding:3px 6px;
+                   border-radius:5px;font-size:12px;font-weight:800;width:52px;text-align:right;outline:none"
+            onchange="_ppOnAllocChange('${esc(dKey)}')"
+            onfocus="this.style.borderColor='#f59e0b'" onblur="this.style.borderColor='#2d3f56'">
+          <span style="font-size:11px;color:#64748b">%</span>
+        </div>
+      </div>
+    </td>
+  </tr>`;
+
+  // 個人儲存列
+  tbody += `<tr style="background:#090f1a">
+    <td style="padding:6px 12px;${TD}position:sticky;left:0;z-index:2;background:#090f1a;border-right:2px solid #374151;font-size:10px;color:#374151;">各人儲存</td>`;
+  roster.forEach((p,ni) => {
+    tbody += `<td style="padding:6px 8px;${TD}text-align:center;border-right:1px solid #1a2535;background:#090f1a;">
+      <button onclick="_ppSaveRow('${esc(dKey)}',${ni},'${esc(p.emp_name)}')"
+        style="background:rgba(59,130,246,.15);color:#60a5fa;border:1px solid rgba(59,130,246,.25);
+               padding:3px 8px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer">💾</button>
+      <div id="ppRowMsg-${dKey}-${ni}" style="font-size:9px;min-height:10px;margin-top:1px;white-space:nowrap"></div>
+    </td>`;
+  });
+  tbody += `<td style="padding:6px 8px;${TD}background:#090f1a;border-left:2px solid #374151;"></td></tr></tbody>`;
+
+  return `<div style="border-radius:8px;border:1px solid rgba(100,116,139,.25);overflow:hidden">
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <table style="width:100%;border-collapse:separate;border-spacing:0;font-size:12px">
+        ${thead}${tbody}
+      </table>
+    </div>
   </div>`;
 }
-
-// ── 科別占比變更 ──
-function _ppOnAllocChange(dKey) {
-  const d = _ppDeptData[dKey]; if (!d) return;
-  const inp = document.getElementById('ppAlloc-'+dKey); if (!inp) return;
-  const val = parseFloat(inp.value);
-  const per = getPeriod();
-  if (!isNaN(val) && val >= 1 && val <= 100) {
-    _ppSaveAlloc(d.branch, d.deptKey, per, val);
-  } else {
-    try { localStorage.removeItem(_ppAllocKey(d.branch, d.deptKey, per)); } catch(e) {}
-  }
-  const viewEl = document.getElementById('ppview-'+d.branch+'-'+d.deptKey);
-  if (viewEl) viewEl.innerHTML = _ppBuildTable(dKey);
-}
-
 // ── 拖曳（拖完立即存 localStorage）──
 function _ppDragStart(e,dKey,ni){_ppDragSrc={dKey,ni};e.dataTransfer.effectAllowed='move';setTimeout(()=>{if(e.currentTarget)e.currentTarget.style.opacity='0.4';},0);}
 function _ppDragOver(e){e.preventDefault();e.dataTransfer.dropEffect='move';e.currentTarget.style.background='rgba(59,130,246,0.08)';}
