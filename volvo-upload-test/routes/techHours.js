@@ -597,18 +597,20 @@ router.get('/stats/tech-turnover', async (req, res) => {
 
       // ── 引電台次（排除鈑烤、自費鈑烤）──
       //   distinct (plate_no, settle_date) = 每天每輛車算 1 台次
-      const visitsRes = await pool.query(`
-        SELECT COUNT(*) AS total_visits FROM (
-          SELECT DISTINCT plate_no, settle_date
-          FROM repair_income
-          WHERE period=$1 AND branch=$2
-            AND COALESCE(plate_no,'') != ''
-            AND settle_date IS NOT NULL
-            AND account_type NOT ILIKE '%保險%'
-            AND COALESCE(bodywork_income,0) = 0
-            AND COALESCE(paint_income,0) = 0
-        ) sub
-      `, [period, br]);
+      // 新的
+const visitsRes = await pool.query(`
+  SELECT COUNT(*) AS total_visits FROM (
+    SELECT DISTINCT plate_no, clear_date
+    FROM repair_income
+    WHERE period=$1 AND branch=$2
+      AND COALESCE(plate_no,'') != ''
+      AND clear_date IS NOT NULL
+      AND TO_CHAR(clear_date,'YYYYMM') = $1
+      AND account_type NOT ILIKE '%保險%'
+      AND COALESCE(bodywork_income,0) = 0
+      AND COALESCE(paint_income,0) = 0
+  ) sub
+`, [period, br]);
       const totalVisits = parseInt(visitsRes.rows[0]?.total_visits || 0);
 
       // ── 每日台數 ──
