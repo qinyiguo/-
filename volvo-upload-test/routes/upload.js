@@ -118,7 +118,7 @@ router.post('/upload', uploader.array('files', 8), async (req, res) => {
           if (!branch || !period) throw new Error('維修收入需要據點和期間');
           await client.query('DELETE FROM repair_income WHERE period=$1 AND branch=$2', [period, branch]);
           rowCount = await batchInsert(client, 'repair_income', [
-            'period', 'branch', 'work_order', 'settle_date', 'customer', 'plate_no',
+            'period', 'branch', 'work_order', 'settle_date', 'clear_date', 'customer', 'plate_no',
             'account_type_code', 'account_type',
             'parts_income', 'accessories_income', 'boutique_income', 'engine_wage',
             'bodywork_income', 'paint_income', 'carwash_income', 'outsource_income',
