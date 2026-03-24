@@ -2341,9 +2341,23 @@ function openPPDeptConfig(dKey) {
     { v:'extended', l:'🛡️ 延保營收' },
   ];
 
-  const revHtml = `<div style="margin-bottom:18px">
-    <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:8px">📊 營業區：營收類型</div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px">
+    const showCarCount = cfg.show_car_count !== false;
+      const showRevenue  = cfg.show_revenue  !== false;
+      const revHtml = `<div style="margin-bottom:18px">
+        <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:8px">📊 營業區：顯示項目</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:7px 12px;
+                        border-radius:7px;background:#0f172a;border:1px solid #2d3f56">
+            <input type="checkbox" id="ppChkCarCount" ${showCarCount?'checked':''} style="accent-color:#3b82f6;width:14px;height:14px">
+            <span style="font-size:13px;font-weight:600;color:#e2e8f0">🚗 進廠台數</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:7px 12px;
+                        border-radius:7px;background:#0f172a;border:1px solid #2d3f56">
+            <input type="checkbox" id="ppChkRevenue" ${showRevenue?'checked':''} style="accent-color:#f97316;width:14px;height:14px">
+            <span style="font-size:13px;font-weight:600;color:#e2e8f0">💰 營收</span>
+          </label>
+        </div>
+        <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px">營收類型</div>
       ${REV_OPTS.map(o => {
         const active = cfg.rev_type === o.v;
         return `<label id="ppRLbl-${o.v}" onclick="selectPPRevType('${o.v}')"
@@ -2402,10 +2416,13 @@ function ppSelectAllMetrics(checked) {
 function savePPDeptConfig() {
   if (!_ppConfigEditKey) return;
   const d = _ppDeptData[_ppConfigEditKey]; if (!d) return;
-  const rev_type   = document.querySelector('input[name="ppRevType"]:checked')?.value || 'paid';
-  const metric_ids = [...document.querySelectorAll('[id^="ppMChk-"]:checked')].map(cb => parseInt(cb.value));
-  _ppSaveDeptConfig(d.branch, d.deptKey, { rev_type, metric_ids });
+  const rev_type      = document.querySelector('input[name="ppRevType"]:checked')?.value || 'paid';
+  const metric_ids    = [...document.querySelectorAll('[id^="ppMChk-"]:checked')].map(cb => parseInt(cb.value));
+  const show_car_count = document.getElementById('ppChkCarCount')?.checked !== false;
+  const show_revenue   = document.getElementById('ppChkRevenue')?.checked !== false;
+  _ppSaveDeptConfig(d.branch, d.deptKey, { rev_type, metric_ids, show_car_count, show_revenue });
   closePPDeptConfig();
+  _ppSwitchDept(d.branch, d.deptKey);
   const viewEl = document.getElementById(`ppview-${d.branch}-${d.deptKey}`);
   if (viewEl) viewEl.innerHTML = _ppBuildTable(_ppConfigEditKey);
 }
@@ -2726,6 +2743,8 @@ function _ppBuildTable(dKey) {
   const cfg            = _ppGetDeptConfig(branch, deptKey) || { rev_type:'paid', metric_ids:null };
   const revType        = cfg.rev_type || 'paid';
   const selMetricIds   = cfg.metric_ids; // null = 全部
+  const showCarCount   = cfg.show_car_count !== false;
+  const showRevenue    = cfg.show_revenue   !== false;
   const visMetrics     = metrics.filter(m => selMetricIds === null || selMetricIds.includes(Number(m.id)));
 
   // ── Helpers ──
@@ -2813,13 +2832,15 @@ function _ppBuildTable(dKey) {
   // ════ tbody ════
   let tbody = '<tbody>';
 
-  // ── 營業區 header ──
+  
+ // ── 營業區 header ──
   tbody += `<tr><td colspan="${roster.length+2}"
     style="padding:4px 12px;background:rgba(249,115,22,.12);border-bottom:1px solid rgba(249,115,22,.35);">
     <span style="font-size:10px;font-weight:900;color:#f97316;letter-spacing:.06em">📊 營業區</span>
   </td></tr>`;
 
-  // 進廠台數
+ if (showCarCount) { 
+ // 進廠台數
   const carTotal = roster.reduce((s,p)=>s+((saCarCount&&saCarCount[p.emp_name])||0),0);
   tbody += `<tr style="background:rgba(59,130,246,.03)">
     <td style="padding:10px 12px;${TD}position:sticky;left:0;z-index:2;background:#0d1b2e;border-right:2px solid #374151;min-width:${LABEL_W}px;">
@@ -2833,7 +2854,9 @@ function _ppBuildTable(dKey) {
     </td>`;
   });
   tbody += `<td style="padding:10px 8px;${TD}text-align:right;border-left:2px solid #374151;font-weight:900;color:#3b82f6;">${carTotal>0?carTotal:'—'}</td></tr>`;
-
+  }
+ 
+ if (showCarCount) {
   // 營收列
   const revTotal = roster.reduce((s,p)=>s+(revMap[p.emp_name]||0),0);
   tbody += `<tr style="background:rgba(249,115,22,.04)">
@@ -2863,7 +2886,7 @@ function _ppBuildTable(dKey) {
     </td>`;
   });
   tbody += `<td style="padding:10px 8px;${TD}text-align:right;border-left:2px solid #374151;font-weight:900;color:#f97316;">${fmtRev(revTotal)}</td></tr>`;
-
+ }
   // ── 品項區 ──
   if (visMetrics.length > 0) {
     tbody += `<tr><td colspan="${roster.length+2}"
