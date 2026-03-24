@@ -2415,12 +2415,13 @@ function ppSelectAllMetrics(checked) {
 function savePPDeptConfig() {
   if (!_ppConfigEditKey) return;
   const d = _ppDeptData[_ppConfigEditKey]; if (!d) return;
-  const rev_type       = document.querySelector('input[name="ppRevType"]:checked')?.value || 'paid';
+  const revTypesRaw    = [...document.querySelectorAll('input[name="ppRevTypeCheck"]:checked')].map(cb => cb.value);
+  const rev_types_shown = revTypesRaw.length === 0 ? null : revTypesRaw;
   const metric_ids_raw = [...document.querySelectorAll('[id^="ppMChk-"]:checked')].map(cb => parseInt(cb.value));
   const metric_ids     = metric_ids_raw.length === 0 ? null : metric_ids_raw;
   const show_car_count = document.getElementById('ppChkCarCount')?.checked !== false;
   const show_revenue   = document.getElementById('ppChkRevenue')?.checked !== false;
-  _ppSaveDeptConfig(d.branch, d.deptKey, { rev_type, metric_ids, show_car_count, show_revenue });
+  _ppSaveDeptConfig(d.branch, d.deptKey, { rev_types_shown, metric_ids, show_car_count, show_revenue });
   const savedKey = _ppConfigEditKey;
   closePPDeptConfig();
   _ppSwitchDept(d.branch, d.deptKey);
@@ -2742,36 +2743,23 @@ function _ppBuildTable(dKey) {
 
   // ── Dept config ──
   const cfg            = _ppGetDeptConfig(branch, deptKey) || { rev_type:'paid', metric_ids:null };
-  const revType        = cfg.rev_type || 'paid';
-  const selMetricIds   = cfg.metric_ids; // null = 全部
-  const showCarCount   = cfg.show_car_count !== false;
-  const showRevenue    = cfg.show_revenue   !== false;
-  const visMetrics = metrics.filter(m => !selMetricIds || selMetricIds.length === 0 || selMetricIds.includes(Number(m.id))); 
-
-  // ── Helpers ──
-  const bt             = branchTargets[branch] || {};
-  const isAmt          = m => !['count','qty'].includes(m.stat_field);
-  const rateColor      = r => r===null?'#475569':r>=100?'#10b981':r>=80?'#f59e0b':'#ef4444';
-  const fmtV           = (v,m) => { const n=Math.round(parseFloat(v||0)); if(!n||isNaN(n))return'—'; return isAmt(m)&&n>=1000?Math.round(n/1000).toLocaleString()+'K':n.toLocaleString(); };
-  const fmtT           = (v,m) => { const n=parseFloat(v||0); if(!n||isNaN(n))return'未設'; const c=Math.ceil(n); return isAmt(m)&&c>=1000?Math.ceil(c/1000).toLocaleString()+'K':c.toLocaleString(); };
-  const fmtRev         = v => { const n=Math.round(parseFloat(v||0)); return n>=1000?Math.round(n/1000).toLocaleString()+'K':n>0?n.toLocaleString():'—'; };
-  const esc            = s => String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-  const getSavedW      = name => { for(const m of metrics){const pt=ptMap[name]?.[m.id];if(pt?.weight!=null)return pt.weight;} return ''; };
-  const deptTotalW     = roster.reduce((s,p)=>{ const w=parseFloat(getSavedW(p.emp_name)||0); return s+(isNaN(w)?0:w); },0);
-  const _period        = getPeriod();
-  const deptAlloc      = _ppGetAlloc(branch, deptKey, _period);
-  const deptAllocRatio = deptAlloc!=null ? deptAlloc/100 : 1;
-  const getActual      = (name,mid) => { const map=saActuals[mid]||{}; if(map[name]!==undefined)return map[name]; for(const[k,v]of Object.entries(map))if(k.includes(name)||name.includes(k))return v; return 0; };
-
-  const revMap          = (saRevAllMaps&&saRevAllMaps[revType]) || {};
-   // 建立模糊比對的 revMap wrapper
-    const getRevActual = name => {
-      if (revMap[name] !== undefined) return revMap[name];
-      for (const [k,v] of Object.entries(revMap)) {
-        if (k.includes(name) || name.includes(k)) return v;
-      }
-      return 0;
-    };
+  const revTypesShown  = cfg.rev_types_shown || ['paid','general','bodywork','extended'];
+  const REV_LABEL = { paid:'🔶 有費營收', general:'💙 一般營收', bodywork:'🔨 鈑烤營收', extended:'🛡️ 延保營收' };
+  const REV_COLOR = { paid:'#f97316', general:'#3b82f6', bodywork:'#8b5cf6', extended:'#10b981' };
+  // 計算各 rev type 的重新分攤係數
+  const DEPT_SUFFIXES = ['repair','claims','service'];
+  const revEffAlloc = {};
+  revTypesShown.forEach(rt => {
+    let sumShowing = 0;
+    DEPT_SUFFIXES.forEach(dk => {
+      const oCfg   = _ppGetDeptConfig(branch, dk) || {};
+      const oShown = oCfg.rev_types_shown || ['paid','general','bodywork','extended'];
+      if (!oShown.includes(rt)) return;
+      const oAllocRaw = _ppGetAlloc(branch, dk, getPeriod());
+      sumShowing += oAllocRaw != null ? oAllocRaw/100 : 1;
+    });
+    revEffAlloc[rt] = sumShowing > 0 ? deptAllocRatio / sumShowing : deptAllocRatio;
+  });
   const branchRevTarget = (revTargetMap&&revTargetMap[revType]) || 0;
   const REV_LABEL       = { paid:'🔶 有費營收', general:'💙 一般營收', bodywork:'🔨 鈑烤營收', extended:'🛡️ 延保營收' };
 
