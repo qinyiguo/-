@@ -2816,11 +2816,11 @@ const fmtV = (v, m) => {
 };
 const fmtT = (v, m) => v ? fmtV(v, m) : '—';
 const LABEL_W = 175;
-const TH = `background:#0c1524;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;position:sticky;top:0;z-index:3;`;
+const TH = `background:#0c1524;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;`;
 const TD = `border-bottom:1px solid rgba(45,63,86,.2);vertical-align:middle;`;
 
   // ════ 表頭：人員欄 ════
-  let thead = `<thead><tr>
+  let thead = `<thead style="position:sticky;top:0;z-index:5;"><tr>
     <th style="padding:10px 12px;${TH}position:sticky;top:0;left:0;z-index:6;min-width:${LABEL_W}px;border-right:2px solid #374151;">
       <div style="display:flex;align-items:center;gap:6px">
         <span style="color:#94a3b8">品項 / 人員</span>
@@ -3020,7 +3020,7 @@ if (showCarCount || showRevenue) {
   tbody += `<td style="padding:6px 8px;${TD}background:#090f1a;border-left:2px solid #374151;"></td></tr></tbody>`;
 
   return `<div style="border-radius:8px;border:1px solid rgba(100,116,139,.25);overflow:hidden">
-    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+    <div style="overflow-x:auto;overflow-y:auto;max-height:72vh;-webkit-overflow-scrolling:touch">
       <table style="width:100%;border-collapse:separate;border-spacing:0;font-size:12px">
         ${thead}${tbody}
       </table>
