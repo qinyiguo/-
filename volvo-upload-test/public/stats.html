@@ -2342,8 +2342,9 @@ function openPPDeptConfig(dKey) {
   ];
 
     const showCarCount = cfg.show_car_count !== false;
-      const showRevenue  = cfg.show_revenue  !== false;
-      const revHtml = `<div style="margin-bottom:18px">
+    const showRevenue  = cfg.show_revenue  !== false;
+    const revTypesShown = cfg.rev_types_shown || ['paid','general','bodywork','extended'];
+    const revHtml = `<div style="margin-bottom:18px">
         <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:8px">📊 營業區：顯示項目</div>
         <div style="display:flex;gap:8px;margin-bottom:10px">
           <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:7px 12px;
@@ -2358,16 +2359,15 @@ function openPPDeptConfig(dKey) {
           </label>
         </div>
         <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:8px">營收類型</div>
-      ${REV_OPTS.map(o => {
-        const active = cfg.rev_type === o.v;
-        return `<label id="ppRLbl-${o.v}" onclick="selectPPRevType('${o.v}')"
-          style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:8px 14px;border-radius:8px;
-                 background:${active?'rgba(59,130,246,.15)':'#1e293b'};
-                 border:1.5px solid ${active?'#3b82f6':'#2d3f56'}">
-          <input type="radio" name="ppRevType" value="${o.v}" ${active?'checked':''} style="accent-color:#3b82f6;width:14px;height:14px;pointer-events:none">
-          <span id="ppRTxt-${o.v}" style="font-size:13px;font-weight:700;color:${active?'#3b82f6':'#94a3b8'}">${o.l}</span>
-        </label>`;
-      }).join('')}
+     ${REV_OPTS.map(o => {
+         const on = revTypesShown.includes(o.v);
+         return `<label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:8px 14px;border-radius:8px;margin-bottom:4px;
+                  background:${on?'rgba(59,130,246,.08)':'#1e293b'};border:1.5px solid ${on?o.col:'#2d3f56'}">
+           <input type="checkbox" name="ppRevTypeCheck" value="${o.v}" ${on?'checked':''}
+                  style="accent-color:${o.col};width:14px;height:14px">
+           <span style="font-size:13px;font-weight:700;color:${on?o.col:'#94a3b8'}">${o.l}</span>
+         </label>`;
+     }).join('')}
     </div>
   </div>`;
 
@@ -2741,53 +2741,82 @@ function _ppBuildTable(dKey) {
 
   if (!roster.length) return '<div style="color:#64748b;font-size:13px;padding:12px 0">此科別無在職人員</div>';
 
-  // ── Dept config ──
-  const cfg            = _ppGetDeptConfig(branch, deptKey) || { rev_type:'paid', metric_ids:null };
-  const revType        = cfg.rev_type || 'paid';
-  const showCarCount   = cfg.show_car_count !== false;
-  const showRevenue    = cfg.show_revenue   !== false;
-  const REV_LABEL      = { paid:'🔶 有費營收', general:'💙 一般營收', bodywork:'🔨 鈑烤營收', extended:'🛡️ 延保營收' };
-  const REV_COLOR      = { paid:'#f97316', general:'#3b82f6', bodywork:'#8b5cf6', extended:'#10b981' };
-  const allocRaw       = _ppGetAlloc(branch, deptKey, getPeriod());
-  const deptAlloc      = allocRaw != null ? allocRaw : null;
-  const deptAllocRatio = allocRaw != null ? allocRaw / 100 : 1;
-  const revMap         = (saRevAllMaps && saRevAllMaps[revType]) || {};
-  const branchRevTarget = (revTargetMap && revTargetMap[revType]) || 0;
-  const bt             = branchTargets[branch] || {};
-  const visMetrics     = cfg.metric_ids === null
-    ? metrics
-    : metrics.filter(m => (cfg.metric_ids||[]).includes(Number(m.id)));
-  const getSavedW = name => {
-    for (const m of metrics) {
-      const pt = ptMap[name]?.[m.id];
-      if (pt?.weight != null) return parseFloat(pt.weight);
-    }
-    return 0;
-  };
-  const deptTotalW = roster.reduce((s, p) => s + (getSavedW(p.emp_name) || 0), 0);
-  const getActual  = (name, mid) => {
-    const map = saActuals[mid] || {};
-    if (map[name] !== undefined) return map[name];
-    for (const [k, v] of Object.entries(map)) {
-      if (k.includes(name) || name.includes(k)) return v;
-    }
-    return 0;
-  };
-  const fmtRev = v => {
-    const n = parseFloat(v || 0);
-    return n >= 1000 ? Math.round(n/1000).toLocaleString()+'K' : Math.round(n).toLocaleString();
-  };
-  const rateColor = rate => rate===null?'#475569':rate>=100?'#10b981':rate>=80?'#f59e0b':'#ef4444';
-  const fmtV = (v, m) => {
-    const n = parseFloat(v||0); if (!n) return '—';
-    const isAmt = !m || !['count','qty'].includes(m.stat_field);
-    return isAmt && n >= 1000 ? Math.round(n/1000).toLocaleString()+'K' : n.toLocaleString(undefined,{maximumFractionDigits:1});
-  };
-  const fmtT = (v, m) => v ? fmtV(v, m) : '—';
+// ── Dept config ──
+const cfg             = _ppGetDeptConfig(branch, deptKey) || { rev_types_shown: null, metric_ids: null };
+const revTypesShown   = cfg.rev_types_shown || ['paid','general','bodywork','extended'];
+const showCarCount    = cfg.show_car_count !== false;
+const showRevenue     = cfg.show_revenue   !== false;
+const REV_LABEL       = { paid:'🔶 有費營收', general:'💙 一般營收', bodywork:'🔨 鈑烤營收', extended:'🛡️ 延保營收' };
+const REV_COLOR       = { paid:'#f97316', general:'#3b82f6', bodywork:'#8b5cf6', extended:'#10b981' };
+const allocRaw        = _ppGetAlloc(branch, deptKey, getPeriod());
+const deptAllocRatio  = allocRaw != null ? allocRaw / 100 : 1;
+const bt              = branchTargets[branch] || {};
+const visMetrics      = !cfg.metric_ids || cfg.metric_ids.length === 0
+  ? metrics
+  : metrics.filter(m => cfg.metric_ids.includes(Number(m.id)));
+const getSavedW = name => {
+  for (const m of metrics) {
+    const pt = ptMap[name]?.[m.id];
+    if (pt?.weight != null) return parseFloat(pt.weight);
+  }
+  return 0;
+};
+const deptTotalW = roster.reduce((s, p) => s + (getSavedW(p.emp_name) || 0), 0);
+const getActual  = (name, mid) => {
+  const map = saActuals[mid] || {};
+  if (map[name] !== undefined) return map[name];
+  for (const [k, v] of Object.entries(map)) {
+    if (k.includes(name) || name.includes(k)) return v;
+  }
+  return 0;
+};
 
-  const LABEL_W = 175;
-  const TH = `background:#0c1524;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;`;
-  const TD = `border-bottom:1px solid rgba(45,63,86,.2);vertical-align:middle;`;
+// 模糊比對 SA 名稱（處理 DMS「姓名-代碼」格式）
+const getRevActual = (mapRef, name) => {
+  if (!mapRef) return 0;
+  if (mapRef[name] !== undefined) return mapRef[name];
+  for (const [k, v] of Object.entries(mapRef)) {
+    if (k.includes(name) || name.includes(k)) return v;
+  }
+  const nBase = name.split('-')[0].trim();
+  for (const [k, v] of Object.entries(mapRef)) {
+    const kBase = k.split('-')[0].trim();
+    if (kBase === nBase) return v;
+    if (kBase.length >= 2 && name.includes(kBase)) return v;
+    if (nBase.length >= 2 && k.includes(nBase)) return v;
+  }
+  return 0;
+};
+
+// 計算各營收類型的重新分攤係數（不看的科別，目標分給其他科）
+const DEPT_SUFFIXES = ['repair','claims','service'];
+const revEffAlloc = {};
+revTypesShown.forEach(rt => {
+  let sumShowing = 0;
+  DEPT_SUFFIXES.forEach(dk => {
+    const oCfg   = _ppGetDeptConfig(branch, dk) || {};
+    const oShown = oCfg.rev_types_shown || ['paid','general','bodywork','extended'];
+    if (!oShown.includes(rt)) return;
+    const oRaw = _ppGetAlloc(branch, dk, getPeriod());
+    sumShowing += oRaw != null ? oRaw / 100 : 1;
+  });
+  revEffAlloc[rt] = sumShowing > 0 ? deptAllocRatio / sumShowing : deptAllocRatio;
+});
+
+const fmtRev = v => {
+  const n = parseFloat(v || 0);
+  return n >= 1000 ? Math.round(n/1000).toLocaleString()+'K' : Math.round(n).toLocaleString();
+};
+const rateColor = rate => rate===null?'#475569':rate>=100?'#10b981':rate>=80?'#f59e0b':'#ef4444';
+const fmtV = (v, m) => {
+  const n = parseFloat(v||0); if (!n) return '—';
+  const isAmt = !m || !['count','qty'].includes(m.stat_field);
+  return isAmt && n >= 1000 ? Math.round(n/1000).toLocaleString()+'K' : n.toLocaleString(undefined,{maximumFractionDigits:1});
+};
+const fmtT = (v, m) => v ? fmtV(v, m) : '—';
+const LABEL_W = 175;
+const TH = `background:#0c1524;color:#64748b;font-size:11px;font-weight:700;border-bottom:1px solid #2d3f56;`;
+const TD = `border-bottom:1px solid rgba(45,63,86,.2);vertical-align:middle;`;
 
   // ════ 表頭：人員欄 ════
   let thead = `<thead><tr>
@@ -2872,7 +2901,40 @@ if (showCarCount || showRevenue) {
   
  
   // 營收列
-  const revTotal = roster.reduce((s,p)=>s+(revMap[p.emp_name]||0),0);
+ if (showRevenue) {
+  revTypesShown.forEach(rt => {
+    const rMap      = (saRevAllMaps && saRevAllMaps[rt]) || {};
+    const brTarget  = (revTargetMap && revTargetMap[rt]) || 0;
+    const effAlloc  = revEffAlloc[rt] || deptAllocRatio;
+    const rColor    = REV_COLOR[rt]   || '#f97316';
+    const rLabel    = REV_LABEL[rt]   || rt;
+    const revTotal  = roster.reduce((s, p) => s + getRevActual(rMap, p.emp_name), 0);
+    tbody += `<tr style="background:rgba(249,115,22,.04)">
+      <td style="padding:10px 12px;${TD}position:sticky;left:0;z-index:2;background:#1a1200;border-right:2px solid #374151;min-width:${LABEL_W}px;">
+        <div style="font-weight:800;font-size:13px;color:${rColor}">${rLabel}</div>
+        <div style="font-size:10px;color:#475569;margin-top:2px">廠目標 ${fmtRev(brTarget)}${effAlloc<0.999?` ｜ 分攤${Math.round(effAlloc*100)}%`:''}</div>
+      </td>`;
+    roster.forEach(p => {
+      const actual = getRevActual(rMap, p.emp_name);
+      const myW    = parseFloat(getSavedW(p.emp_name)) || 0;
+      const calcT  = myW > 0 && deptTotalW > 0 && brTarget > 0 ? brTarget * effAlloc * myW / deptTotalW : null;
+      const rate   = calcT && calcT > 0 ? actual / calcT * 100 : null;
+      const rCol   = rateColor(rate);
+      const barW   = rate !== null ? Math.min(100, rate).toFixed(0) : 0;
+      tbody += `<td style="padding:10px 8px;${TD}text-align:center;border-right:1px solid #1a2535;background:rgba(249,115,22,.02);">
+        <div style="font-size:15px;font-weight:900;color:${actual>0?rColor:'#475569'}">${fmtRev(actual)}</div>
+        <div style="font-size:10px;color:#64748b;margin-top:1px">目標 ${calcT?fmtRev(calcT):'—'}</div>
+        ${rate!==null?`<div style="display:flex;align-items:center;gap:4px;margin-top:3px">
+          <div style="flex:1;background:#0f172a;border-radius:2px;height:3px">
+            <div style="width:${barW}%;height:3px;border-radius:2px;background:${rCol}"></div>
+          </div>
+          <span style="font-size:10px;font-weight:800;color:${rCol};min-width:36px;text-align:right">${rate.toFixed(1)}%</span>
+        </div>`:'<div style="font-size:10px;color:#334155;margin-top:3px">—</div>'}
+      </td>`;
+    });
+    tbody += `<td style="padding:10px 8px;${TD}text-align:right;border-left:2px solid #374151;font-weight:900;color:${rColor};">${fmtRev(revTotal)}</td></tr>`;
+  });
+}
   tbody += `<tr style="background:rgba(249,115,22,.04)">
     <td style="padding:10px 12px;${TD}position:sticky;left:0;z-index:2;background:#1a1200;border-right:2px solid #374151;min-width:${LABEL_W}px;">
       <div style="font-weight:800;font-size:13px;color:#f97316">${REV_LABEL[revType]||'有費營收'}</div>
