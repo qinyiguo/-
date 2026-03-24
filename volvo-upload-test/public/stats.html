@@ -2377,16 +2377,15 @@ function openPPDeptConfig(dKey) {
       <button onclick="ppSelectAllMetrics(true)" style="padding:3px 10px;background:#253347;color:#cbd5e1;border:1px solid #2d3f56;border-radius:5px;font-size:11px;cursor:pointer">全選</button>
       <button onclick="ppSelectAllMetrics(false)" style="padding:3px 10px;background:#253347;color:#cbd5e1;border:1px solid #2d3f56;border-radius:5px;font-size:11px;cursor:pointer">全清</button>
     </div>
-    <div style="display:flex;flex-direction:column;gap:4px;max-height:240px;overflow-y:auto">
-      ${_ppSaConfigs.length ? _ppSaConfigs.map(c => {
-        const checked = cfg.metric_ids === null || cfg.metric_ids.includes(Number(c.id));
-        return `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;
-                              border-radius:6px;background:#0f172a;border:1px solid #2d3f56">
-          <input type="checkbox" id="ppMChk-${c.id}" value="${c.id}" ${checked?'checked':''}
-            style="accent-color:#3b82f6;width:14px;height:14px">
-          <span style="font-size:13px;font-weight:600;color:#e2e8f0">${c.config_name}</span>
-        </label>`;
-      }).join('') : '<div style="color:#475569;font-size:12px">尚無指標銷售設定</div>'}
+    ${d.metrics && d.metrics.length ? d.metrics.map(c => {
+    const checked = cfg.metric_ids === null || cfg.metric_ids.includes(Number(c.id));
+    return `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;
+                          border-radius:6px;background:#0f172a;border:1px solid #2d3f56">
+      <input type="checkbox" id="ppMChk-${c.id}" value="${c.id}" ${checked?'checked':''}
+        style="accent-color:#3b82f6;width:14px;height:14px">
+      <span style="font-size:13px;font-weight:600;color:#e2e8f0">${c.metric_name}</span>
+    </label>`;
+}).join('') : '<div style="color:#475569;font-size:12px">尚無指標</div>'}
     </div>
   </div>`;
 
