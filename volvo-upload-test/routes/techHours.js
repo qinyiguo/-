@@ -538,16 +538,19 @@ router.put('/tech-capacity-config', async (req, res) => {
 });
 
 // ══════════════════════════════════════════════
-// GET /api/stats/tech-turnover  引電技師施工周轉率
+// GET /api/stats/tech-turnover
 //
-// 引電台次 = repair_income 中，排除鈑烤（bodywork/paint > 0）
-//            和保險鈑烤（account_type ILIKE '%保險%'）的
-//            distinct (plate_no, settle_date) 筆數
+// 【引電】各廠獨立計算
+//   台次 = business_query distinct(plate_no, open_time::date)
+//          排除 PDI / 鈑噴 / 事故保險
+//   技師 = 各廠 staff_roster 引擎科，不含領班
 //
-// 技師人數 = staff_roster 引擎科，排除領班
-//
-// 周轉率 = 總台次 / 技師人數 / 工作天數  (台/人/天)
+// 【鈑烤】集團合計（AMC/AMD 鈑烤集中 AMA 施工）
+//   台次 = 全集團 repair_type IN ('鈑噴','事故保險')
+//   技師 = 鈑烤廠 (factory='鈑烤') 鈑金科 + 烤漆科，含領班
+//   工作天 = 使用 AMA 的工作天
 // ══════════════════════════════════════════════
+
 router.get('/stats/tech-turnover', async (req, res) => {
   const { period, branch } = req.query;
   if (!period) return res.status(400).json({ error: 'period 為必填' });
@@ -557,6 +560,7 @@ router.get('/stats/tech-turnover', async (req, res) => {
     );
     const rosterPeriod = rosterRes.rows[0]?.period || null;
     const BRANCHES = branch && STD_BRANCHES.has(branch) ? [branch] : ['AMA','AMC','AMD'];
+
     // 取工位設定
     const bayConfigRes = await pool.query(`SELECT value FROM app_settings WHERE key='service_bays'`);
     const bayConfig = bayConfigRes.rows[0] ? JSON.parse(bayConfigRes.rows[0].value) : {};
@@ -580,40 +584,36 @@ router.get('/stats/tech-turnover', async (req, res) => {
         workingDays = parseInt(r.rows[0]?.cnt || 0);
       }
 
-      // ── 已過工作天（當月才需要，歷史月份 = 全月）──
-const nowTW = new Date(Date.now() + 8 * 60 * 60 * 1000);
-const todayStr = nowTW.toISOString().slice(0, 10);
-const currentPeriod = `${nowTW.getFullYear()}${String(nowTW.getMonth()+1).padStart(2,'0')}`;
-const isCurrentMonth = period === currentPeriod;
+      // ── 已過工作天 ──
+      const nowTW = new Date(Date.now() + 8 * 60 * 60 * 1000);
+      const todayStr = nowTW.toISOString().slice(0, 10);
+      const currentPeriod = `${nowTW.getFullYear()}${String(nowTW.getMonth()+1).padStart(2,'0')}`;
+      const isCurrentMonth = period === currentPeriod;
+      let elapsedDays = workingDays;
 
-let elapsedDays = workingDays; // 歷史月份直接用全月
-
-if (isCurrentMonth) {
-  const wdRow = await pool.query(
-    `SELECT work_dates FROM working_days_config WHERE branch=$1 AND period=$2`,
-    [br, period]
-  );
-  const configured = wdRow.rows[0]?.work_dates || null;
-
-  if (configured && configured.length > 0) {
-    // 手動設定曆：算今天之前（含）有幾個工作日
-    elapsedDays = configured.filter(d => d <= todayStr).length;
-  } else {
-    // 自動：算本月月初到今天的平日數
-    const y  = parseInt(period.slice(0, 4));
-    const mo = parseInt(period.slice(4)) - 1;
-    const monthStart = new Date(Date.UTC(y, mo, 1));
-    const todayUTC   = new Date(todayStr + 'T00:00:00Z');
-    let cnt = 0;
-    const d = new Date(monthStart);
-    while (d <= todayUTC) {
-      const dow = d.getUTCDay();
-      if (dow !== 0 && dow !== 6) cnt++;
-      d.setUTCDate(d.getUTCDate() + 1);
-    }
-    elapsedDays = cnt;
-  }
-}
+      if (isCurrentMonth) {
+        const wdRow = await pool.query(
+          `SELECT work_dates FROM working_days_config WHERE branch=$1 AND period=$2`,
+          [br, period]
+        );
+        const configured = wdRow.rows[0]?.work_dates || null;
+        if (configured && configured.length > 0) {
+          elapsedDays = configured.filter(d => d <= todayStr).length;
+        } else {
+          const y = parseInt(period.slice(0, 4));
+          const mo = parseInt(period.slice(4)) - 1;
+          const monthStart = new Date(Date.UTC(y, mo, 1));
+          const todayUTC = new Date(todayStr + 'T00:00:00Z');
+          let cnt = 0;
+          const d = new Date(monthStart);
+          while (d <= todayUTC) {
+            const dow = d.getUTCDay();
+            if (dow !== 0 && dow !== 6) cnt++;
+            d.setUTCDate(d.getUTCDate() + 1);
+          }
+          elapsedDays = cnt;
+        }
+      }
 
       // ── 引電技師人數（不含領班）──
       let techNames = [];
@@ -633,96 +633,128 @@ if (isCurrentMonth) {
       }
       const techCount = techNames.length;
 
-      // ── 引電台次（排除鈑烤、自費鈑烤）──
-      //   distinct (plate_no, settle_date) = 每天每輛車算 1 台次
-      // 新的
-const visitsRes = await pool.query(`
-  SELECT COUNT(*) AS total_visits FROM (
-    SELECT DISTINCT plate_no, open_time::date
-    FROM business_query
-    WHERE period=$1 AND branch=$2
-      AND COALESCE(plate_no,'') != ''
-      AND open_time IS NOT NULL
-      AND COALESCE(repair_type,'') NOT IN ('PDI','鈑噴','事故保險')
-  ) sub
-`, [period, br]);
+      // ── 引電台次（排除 PDI、鈑噴、事故保險）──
+      const visitsRes = await pool.query(`
+        SELECT COUNT(*) AS total_visits FROM (
+          SELECT DISTINCT plate_no, open_time::date
+          FROM business_query
+          WHERE period=$1 AND branch=$2
+            AND COALESCE(plate_no,'') != ''
+            AND open_time IS NOT NULL
+            AND COALESCE(repair_type,'') NOT IN ('PDI','鈑噴','事故保險')
+        ) sub
+      `, [period, br]);
       const totalVisits = parseInt(visitsRes.rows[0]?.total_visits || 0);
 
-      // ── 每日台數 ──
-const dailyRes = await pool.query(`
-  SELECT open_time::date AS work_date, COUNT(DISTINCT plate_no) AS vehicle_count
-  FROM business_query
-  WHERE period=$1 AND branch=$2
-    AND open_time IS NOT NULL
-    AND COALESCE(plate_no,'') != ''
-    AND COALESCE(repair_type,'') NOT IN ('PDI','鈑噴','事故保險')
-  GROUP BY open_time::date ORDER BY open_time::date
-`, [period, br]);
+      // ── 每日引電台數 ──
+      const dailyRes = await pool.query(`
+        SELECT open_time::date AS work_date, COUNT(DISTINCT plate_no) AS vehicle_count
+        FROM business_query
+        WHERE period=$1 AND branch=$2
+          AND open_time IS NOT NULL
+          AND COALESCE(plate_no,'') != ''
+          AND COALESCE(repair_type,'') NOT IN ('PDI','鈑噴','事故保險')
+        GROUP BY open_time::date ORDER BY open_time::date
+      `, [period, br]);
 
-      const dailyAvg = elapsedDays > 0
-        ? Math.round(totalVisits / elapsedDays * 10) / 10
-        : 0;
+      const dailyAvg = elapsedDays > 0 ? Math.round(totalVisits / elapsedDays * 10) / 10 : 0;
       const turnoverRate = (techCount > 0 && elapsedDays > 0)
-        ? Math.round(totalVisits / techCount / elapsedDays * 100) / 100
-        : null;
+        ? Math.round(totalVisits / techCount / elapsedDays * 100) / 100 : null;
 
-// 工位承接率計算
-const brBays = bayConfig[br] || {};
-const engineBays   = parseInt(brBays.engine   || 0);
-const bodyworkBays = parseInt(brBays.bodywork  || 0);
-const paintBays    = parseInt(brBays.paint     || 0);
-const totalBays    = engineBays + bodyworkBays + paintBays;
+      // 引擎工位承接率
+      const brBays = bayConfig[br] || {};
+      const engineBays = parseInt(brBays.engine || 0);
+      const engineBayRate = (engineBays > 0 && elapsedDays > 0)
+        ? Math.round(totalVisits / engineBays / elapsedDays * 100) / 100 : null;
 
-// 鈑烤台次（保險鈑烤 + 自費鈑烤）
-const bwVisitsRes = await pool.query(`
-  SELECT COUNT(*) AS cnt FROM (
-    SELECT DISTINCT plate_no, open_time::date
-    FROM business_query
-    WHERE period=$1 AND branch=$2
-      AND COALESCE(plate_no,'') != ''
-      AND open_time IS NOT NULL
-      AND repair_type IN ('鈑噴','事故保險')
-  ) sub
-`, [period, br]);
-      
-const bwVisits = parseInt(bwVisitsRes.rows[0]?.cnt || 0);
-
-const engineBayRate  = (engineBays   > 0 && elapsedDays > 0)
-  ? Math.round(totalVisits / engineBays   / elapsedDays * 100) / 100 : null;
-const bwBayRate = ((bodyworkBays + paintBays) > 0 && elapsedDays > 0)
-  ? Math.round(bwVisits / (bodyworkBays + paintBays) / elapsedDays * 100) / 100 : null;
-const totalBayRate   = (totalBays    > 0 && elapsedDays > 0)
-  ? Math.round((totalVisits + bwVisits) / totalBays / elapsedDays * 100) / 100 : null;
-
-result[br] = {
-  branch: br,
-  working_days:    workingDays,
-  elapsed_days:    elapsedDays,
-  tech_count:      techCount,
-  tech_names:      techNames,
-  total_visits:    totalVisits,
-  bw_visits:       bwVisits,
-  daily_avg:       dailyAvg,
-  turnover_rate:   turnoverRate,
-  daily:           dailyRes.rows,
-  bays: {
-    engine:   engineBays,
-    bodywork: bodyworkBays,
-    paint:    paintBays,
-    total:    totalBays,
-  },
-  bay_rates: {
-    engine:   engineBayRate,
-    bodywork: bwBayRate,
-    total:    totalBayRate,
-  },
-};
+      result[br] = {
+        branch: br,
+        working_days: workingDays,
+        elapsed_days: elapsedDays,
+        tech_count: techCount,
+        tech_names: techNames,
+        total_visits: totalVisits,
+        daily_avg: dailyAvg,
+        turnover_rate: turnoverRate,
+        daily: dailyRes.rows,
+        bays: { engine: engineBays },
+        bay_rates: { engine: engineBayRate },
+      };
     }
 
-    res.json({ branches: result, rosterPeriod, period });
+    // ══ 集團鈑烤周轉率 ══
+    // 台次：全集團 鈑噴 + 事故保險（AMC/AMD 鈑烤均在 AMA 施工）
+    const bwGlobalRes = await pool.query(`
+      SELECT COUNT(*) AS cnt FROM (
+        SELECT DISTINCT plate_no, open_time::date
+        FROM business_query
+        WHERE period=$1
+          AND COALESCE(plate_no,'') != ''
+          AND open_time IS NOT NULL
+          AND repair_type IN ('鈑噴','事故保險')
+      ) sub
+    `, [period]);
+    const bwTotalVisits = parseInt(bwGlobalRes.rows[0]?.cnt || 0);
+
+    // 每日鈑烤台數（集團合計）
+    const bwDailyRes = await pool.query(`
+      SELECT open_time::date AS work_date, COUNT(DISTINCT plate_no) AS vehicle_count
+      FROM business_query
+      WHERE period=$1
+        AND open_time IS NOT NULL
+        AND COALESCE(plate_no,'') != ''
+        AND repair_type IN ('鈑噴','事故保險')
+      GROUP BY open_time::date ORDER BY open_time::date
+    `, [period]);
+
+    // 鈑烤廠技師（維修部鈑金科 + 烤漆科，含領班）
+    let bwTechNames = [];
+    if (rosterPeriod) {
+      const pStart = `${period.slice(0,4)}-${period.slice(4,6)}-01`;
+      const r = await pool.query(`
+        SELECT emp_name, job_title, dept_name, status FROM staff_roster
+        WHERE period=$1 AND factory='鈑烤'
+          AND (dept_name ILIKE '%鈑金%' OR dept_name ILIKE '%烤漆%')
+          AND COALESCE(job_category,'') NOT ILIKE '%計時%'
+          AND (status='在職' OR status='留職停薪'
+               OR (status='離職' AND resign_date IS NOT NULL AND resign_date >= $2::date))
+        ORDER BY dept_name, emp_name
+      `, [rosterPeriod, pStart]);
+      bwTechNames = r.rows;
+    }
+    const bwTechCount = bwTechNames.length;
+
+    // 工作天 / 已過天：以 AMA 為準（鈑烤施工地點）
+    const bwRef = result['AMA'] || Object.values(result)[0] || {};
+    const bwElapsedDays = bwRef.elapsed_days || 0;
+    const bwWorkingDays = bwRef.working_days || 0;
+
+    // 工位：取 AMA 設定的鈑烤+烤漆工位
+    const amaBaysCfg = bayConfig['AMA'] || {};
+    const bwBays = parseInt(amaBaysCfg.bodywork || 0) + parseInt(amaBaysCfg.paint || 0);
+
+    const bwDailyAvg = bwElapsedDays > 0 ? Math.round(bwTotalVisits / bwElapsedDays * 10) / 10 : 0;
+    const bwTurnoverRate = (bwTechCount > 0 && bwElapsedDays > 0)
+      ? Math.round(bwTotalVisits / bwTechCount / bwElapsedDays * 100) / 100 : null;
+    const bwBayRate = (bwBays > 0 && bwElapsedDays > 0)
+      ? Math.round(bwTotalVisits / bwBays / bwElapsedDays * 100) / 100 : null;
+
+    const bodywork = {
+      total_visits: bwTotalVisits,
+      tech_count:   bwTechCount,
+      tech_names:   bwTechNames,
+      daily_avg:    bwDailyAvg,
+      working_days: bwWorkingDays,
+      elapsed_days: bwElapsedDays,
+      turnover_rate: bwTurnoverRate,
+      daily:        bwDailyRes.rows,
+      bays:         bwBays,
+      bay_rate:     bwBayRate,
+    };
+
+    res.json({ branches: result, bodywork, rosterPeriod, period });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
-
 // ── 工位設定 ──
 router.get('/tech-bay-config', async (req, res) => {
   try {
