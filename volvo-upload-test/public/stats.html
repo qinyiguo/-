@@ -1840,6 +1840,13 @@ document.addEventListener('keydown', e => {
 });
 
  // ══ 引電技師施工周轉率 ══
+// ══════════════════════════════════════════════
+// 替換 stats.html 中的兩個函式：
+//   1. async function loadTechTurnover(period, branch)
+//   2. function _renderTurnoverChart(...)  — 只需更新呼叫，內容不變
+//   3. 新增 function _renderBwChart(daily, dateList)
+// ══════════════════════════════════════════════
+
 async function loadTechTurnover(period, branch) {
   const el = document.getElementById('techTurnoverContent');
   if (!el) return;
@@ -1850,34 +1857,32 @@ async function loadTechTurnover(period, branch) {
     if (branch) params.set('branch', branch);
     const data = await fetch(`/api/stats/tech-turnover?${params}`).then(r => r.json());
     if (data.error) throw new Error(data.error);
- 
-    const { branches: bd, rosterPeriod } = data;
+
+    const { branches: bd, bodywork: bw, rosterPeriod } = data;
     const branchColors = { AMA:'#3b82f6', AMC:'#10b981', AMD:'#f59e0b' };
     const BRANCHES = branch ? [branch] : ['AMA','AMC','AMD'];
- 
+    const DOW_CN = ['日','一','二','三','四','五','六'];
+
     let html = '';
- 
-    // ── 無名冊警告 ──
-    if (!rosterPeriod) {
-      html += `<div style="background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:10px 14px;font-size:12px;color:#94a3b8;line-height:1.8;margin-bottom:14px">
-  🔄 <strong>引電技師施工周轉率</strong>：只計算引電台次（排除 PDI、鈑噴、事故保險）。<br>
-  周轉率 = 總引電台次 ÷ 技師人數 ÷ 工作天數（<strong>台 / 人 / 天</strong>）。<br>
-  🏭 <strong>工位承接率</strong>：台次 ÷ 工位數 ÷ 工作天數（<strong>台 / 工位 / 天</strong>），工位數請至設定頁設定。<br>
-  技師人數來自人員名冊（引擎維護科，不含領班）；台次以 <code>distinct(plate_no, open_time::date)</code> 計算。
+
+    // ── 說明 ──
+    html += `<div style="background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:10px 14px;font-size:12px;color:#94a3b8;line-height:1.8;margin-bottom:14px">
+  🔄 <strong>引電施工周轉率</strong>：只計算引電台次（排除 PDI、鈑噴、事故保險）。周轉率 = 引電台次 ÷ 技師人數（不含領班）÷ 工作天數（台/人/天）。<br>
+  🔨 <strong>鈑烤施工周轉率</strong>：AMC / AMD 鈑烤集中在 AMA 施工，台次為 <strong>全集團合計</strong>（鈑噴 ＋ 事故保險）。技師人數為鈑烤廠維修部鈑金科 ＋ 烤漆科（<strong>含領班</strong>）。工作天以 AMA 為準。
 </div>`;
-    }
- 
-    // ── 各廠 KPI 卡片 ──
-    html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:20px">`;
+
+    // ── 引電 KPI 卡片（各廠）──
+    html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-bottom:20px">`;
+
     for (const br of BRANCHES) {
       const b   = bd[br] || {};
       const col = branchColors[br] || '#94a3b8';
       const tr  = b.turnover_rate;
-      // 周轉率顏色：≥4 綠、≥3 黃、< 3 紅（可依實際調整）
       const trCol = tr === null ? '#64748b' : tr >= 4 ? '#10b981' : tr >= 3 ? '#f59e0b' : '#ef4444';
+
       html += `<div class="card" style="border-color:${col}55">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-          <span style="font-size:16px;font-weight:900;color:${col}">${br}</span>
+          <span style="font-size:16px;font-weight:900;color:${col}">${br} 引電</span>
           <span style="font-size:11px;color:#64748b;background:#0f172a;padding:2px 8px;border-radius:5px">工作天 ${b.working_days||0} 天</span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
@@ -1902,8 +1907,20 @@ async function loadTechTurnover(period, branch) {
             <div style="font-size:10px;color:#475569">台 / 人 / 天</div>
           </div>
         </div>
+        ${b.bay_rates?.engine != null ? `
+        <div style="border-top:1px solid ${col}33;padding-top:10px;margin-top:4px">
+          <div style="font-size:11px;color:#64748b;font-weight:700;margin-bottom:6px">🏭 引擎工位承接率</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:#475569">${b.bays?.engine||0} 工位</span>
+            <span style="font-size:20px;font-weight:900;color:${b.bay_rates.engine>=1?'#10b981':b.bay_rates.engine>=0.7?'#f59e0b':'#ef4444'}">${b.bay_rates.engine}</span>
+            <span style="font-size:10px;color:#475569">台 / 工位 / 天</span>
+          </div>
+          <div style="display:flex;gap:10px;font-size:10px;color:#475569;margin-top:5px">
+            <span>🟢 ≥1.0 飽和</span><span>🟡 0.7~1.0 正常</span><span>🔴 &lt;0.7 偏低</span>
+          </div>
+        </div>` : ''}
         ${b.tech_names && b.tech_names.length ? `
-        <details style="border-top:1px solid #2d3f56;padding-top:10px;margin-top:4px">
+        <details style="border-top:1px solid #2d3f56;padding-top:10px;margin-top:8px">
           <summary style="font-size:11px;color:#64748b;cursor:pointer;user-select:none">計算人員 ${b.tech_count} 人 ▸</summary>
           <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">
             ${b.tech_names.map(t => {
@@ -1916,62 +1933,92 @@ async function loadTechTurnover(period, branch) {
             }).join('')}
           </div>
         </details>` : ''}
-      ${(() => {
-          const bays     = b.bays      || {};
-          const bayRates = b.bay_rates || {};
-          if (!bays.total) return '';
-          const rateColor = v => v === null ? '#64748b' : v >= 1.0 ? '#10b981' : v >= 0.7 ? '#f59e0b' : '#ef4444';
-          return `
-            <div style="border-top:1px solid ${col}33;margin-top:12px;padding-top:12px">
-              <div style="font-size:11px;color:#64748b;font-weight:700;margin-bottom:8px">🏭 工位承接率（台/工位/天）</div>
-              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px">
-                ${bays.engine > 0 ? `
-                <div style="background:#0f172a;border:1px solid #8b5cf655;border-radius:7px;padding:9px;text-align:center">
-                  <div style="font-size:10px;color:#64748b;margin-bottom:2px">🔧 引擎</div>
-                  <div style="font-size:11px;color:#475569;margin-bottom:4px">${bays.engine} 工位</div>
-                  <div style="font-size:20px;font-weight:900;color:${rateColor(bayRates.engine)}">${bayRates.engine ?? '—'}</div>
-                </div>` : '<div></div>'}
-                ${(bays.bodywork + bays.paint) > 0 ? `
-                <div style="background:#0f172a;border:1px solid #f9731655;border-radius:7px;padding:9px;text-align:center">
-                  <div style="font-size:10px;color:#64748b;margin-bottom:2px">🔨 鈑烤</div>
-                  <div style="font-size:11px;color:#475569;margin-bottom:4px">${bays.bodywork + bays.paint} 工位</div>
-                  <div style="font-size:20px;font-weight:900;color:${rateColor(bayRates.bodywork)}">${bayRates.bodywork ?? '—'}</div>
-                </div>` : '<div></div>'}
-                ${bays.total > 0 ? `
-                <div style="background:#0f172a;border:1px solid ${col}55;border-radius:7px;padding:9px;text-align:center">
-                  <div style="font-size:10px;color:#64748b;margin-bottom:2px">🏭 全廠</div>
-                  <div style="font-size:11px;color:#475569;margin-bottom:4px">${bays.total} 工位</div>
-                  <div style="font-size:20px;font-weight:900;color:${rateColor(bayRates.total)}">${bayRates.total ?? '—'}</div>
-                </div>` : '<div></div>'}
-              </div>
-              <div style="display:flex;gap:10px;font-size:10px;color:#475569">
-                <span>🟢 ≥1.0 飽和</span>
-                <span>🟡 0.7~1.0 正常</span>
-                <span>🔴 &lt;0.7 偏低</span>
-              </div>
-            </div>`;
-        })()}
       </div>`;
     }
-    html += `</div>`;
- 
-    // ── 集團每日台數圖表 ──
-    html += `<div class="card"><div class="card-title">📅 每日引電台數 <span class="card-title-note">排除保險鈑烤、自費鈑烤（鈑金/烤漆收入 > 0 的工單）</span></div>`;
-    html += `<div id="turnoverDailyChart" style="overflow-x:auto;margin-bottom:16px"></div>`;
- 
-    // ── 每日明細表 ──
+
+    // ── 集團鈑烤 KPI 卡片 ──
+    if (bw) {
+      const bwTr    = bw.turnover_rate;
+      const bwTrCol = bwTr === null ? '#64748b' : bwTr >= 2 ? '#10b981' : bwTr >= 1.5 ? '#f59e0b' : '#ef4444';
+      html += `<div class="card" style="border-color:#f97316aa">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div>
+            <span style="font-size:16px;font-weight:900;color:#f97316">🔨 集團鈑烤</span>
+            <span style="font-size:11px;color:#64748b;margin-left:8px">AMA + AMC + AMD 合計</span>
+          </div>
+          <span style="font-size:11px;color:#64748b;background:#0f172a;padding:2px 8px;border-radius:5px">工作天 ${bw.working_days||0} 天</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+          <div style="background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:10px;color:#64748b;margin-bottom:3px">鈑烤技師（鈑金＋烤漆，含領班）</div>
+            <div style="font-size:24px;font-weight:900;color:#f97316">${bw.tech_count||0}</div>
+            <div style="font-size:10px;color:#475569">人</div>
+          </div>
+          <div style="background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:10px;color:#64748b;margin-bottom:3px">鈑烤台次（集團）</div>
+            <div style="font-size:24px;font-weight:900;color:#e2e8f0">${(bw.total_visits||0).toLocaleString()}</div>
+            <div style="font-size:10px;color:#475569">台次</div>
+          </div>
+          <div style="background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:10px;color:#64748b;margin-bottom:3px">日均鈑烤台數</div>
+            <div style="font-size:24px;font-weight:900;color:#f97316">${bw.daily_avg||'—'}</div>
+            <div style="font-size:10px;color:#475569">台 / 天</div>
+          </div>
+          <div style="background:#0f172a;border:1px solid ${bwTrCol}55;border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:10px;color:#64748b;margin-bottom:3px">施工周轉率</div>
+            <div style="font-size:28px;font-weight:900;color:${bwTrCol}">${bwTr !== null ? bwTr : '—'}</div>
+            <div style="font-size:10px;color:#475569">台 / 人 / 天</div>
+          </div>
+        </div>
+        ${bw.bay_rate != null && bw.bays > 0 ? `
+        <div style="border-top:1px solid #f9731633;padding-top:10px;margin-top:4px">
+          <div style="font-size:11px;color:#64748b;font-weight:700;margin-bottom:6px">🏭 鈑烤工位承接率（AMA 工位設定）</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;color:#475569">${bw.bays} 工位</span>
+            <span style="font-size:20px;font-weight:900;color:${bw.bay_rate>=1?'#10b981':bw.bay_rate>=0.7?'#f59e0b':'#ef4444'}">${bw.bay_rate}</span>
+            <span style="font-size:10px;color:#475569">台 / 工位 / 天</span>
+          </div>
+          <div style="display:flex;gap:10px;font-size:10px;color:#475569;margin-top:5px">
+            <span>🟢 ≥1.0 飽和</span><span>🟡 0.7~1.0 正常</span><span>🔴 &lt;0.7 偏低</span>
+          </div>
+        </div>` : ''}
+        ${bw.tech_names && bw.tech_names.length ? `
+        <details style="border-top:1px solid #2d3f56;padding-top:10px;margin-top:8px">
+          <summary style="font-size:11px;color:#64748b;cursor:pointer;user-select:none">計算人員 ${bw.tech_count} 人 ▸</summary>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px">
+            ${bw.tech_names.map(t => {
+              const sCol = t.status==='在職'?'#10b981':t.status==='留職停薪'?'#f59e0b':'#ef4444';
+              return `<span style="background:#1e293b;border:1px solid #2d3f56;border-radius:5px;padding:2px 8px;font-size:11px">
+                <span style="color:#e2e8f0">${t.emp_name}</span>
+                <span style="color:#475569;margin-left:3px">${t.job_title}</span>
+                <span style="color:${t.dept_name?.includes('鈑金')?'#f97316':'#06b6d4'};margin-left:3px;font-size:10px">${t.dept_name}</span>
+                <span style="color:${sCol};margin-left:3px;font-size:10px">${t.status}</span>
+              </span>`;
+            }).join('')}
+          </div>
+        </details>` : ''}
+      </div>`;
+    }
+
+    html += `</div>`;  // end KPI grid
+
+    // ── 引電每日台數圖表 ──
+    html += `<div class="card">
+      <div class="card-title">📅 每日引電台數 <span class="card-title-note">排除 PDI、鈑噴、事故保險</span></div>
+      <div id="turnoverDailyChart" style="overflow-x:auto;margin-bottom:16px"></div>`;
+
+    // 引電每日明細表
     const allDates = new Set();
     BRANCHES.forEach(br => { (bd[br]?.daily||[]).forEach(d => { if(d.work_date) allDates.add(String(d.work_date).slice(0,10)); }); });
     const sortedDates = [...allDates].sort();
-    const DOW_CN = ['日','一','二','三','四','五','六'];
- 
+
     html += `<div class="table-wrap"><table>
       <thead><tr>
         <th>日期</th>
         ${BRANCHES.map(br=>`<th class="num" style="color:${branchColors[br]||'#94a3b8'}">${br}</th>`).join('')}
         <th class="num">合計</th>
       </tr></thead><tbody>`;
- 
+
     sortedDates.forEach(date => {
       const dow = new Date(date + 'T00:00:00').getDay();
       const isWknd = dow===0||dow===6;
@@ -1990,7 +2037,7 @@ async function loadTechTurnover(period, branch) {
       });
       html += `<td class="num" style="color:#94a3b8;font-weight:700">${rowTotal>0?rowTotal:'—'}</td></tr>`;
     });
- 
+
     // 合計行
     html += `<tr style="background:rgba(59,130,246,.06)"><td style="font-weight:800;color:#94a3b8">合計 ／ 日均 ／ 周轉率</td>`;
     BRANCHES.forEach(br => {
@@ -2002,80 +2049,128 @@ async function loadTechTurnover(period, branch) {
     });
     const grandTotal = BRANCHES.reduce((s,br)=>(bd[br]?.total_visits||0)+s,0);
     html += `<td class="num" style="color:#94a3b8;font-weight:800">${grandTotal}</td></tr>`;
- 
-    html += `</tbody></table></div></div>`;
- 
+    html += `</tbody></table></div></div>`;  // end 引電 card
+
+    // ── 鈑烤每日台數圖表 ──
+    if (bw && bw.daily && bw.daily.length) {
+      const bwDates = [...new Set(bw.daily.map(d => String(d.work_date).slice(0,10)))].sort();
+      html += `<div class="card" style="margin-top:14px">
+        <div class="card-title">🔨 每日鈑烤台數（集團合計）<span class="card-title-note">鈑噴 ＋ 事故保險</span></div>
+        <div id="turnoverBwChart" style="overflow-x:auto;margin-bottom:16px"></div>`;
+
+      html += `<div class="table-wrap"><table>
+        <thead><tr>
+          <th>日期</th>
+          <th class="num" style="color:#f97316">集團鈑烤台次</th>
+        </tr></thead><tbody>`;
+
+      bwDates.forEach(date => {
+        const dow = new Date(date + 'T00:00:00').getDay();
+        const isWknd = dow===0||dow===6;
+        const dayRow = bw.daily.find(d => String(d.work_date).slice(0,10)===date);
+        const cnt = dayRow ? parseInt(dayRow.vehicle_count||0) : 0;
+        html += `<tr style="${isWknd?'background:rgba(255,255,255,.025)':''}">
+          <td style="white-space:nowrap">
+            <span style="${isWknd?'color:#94a3b8':''}">${date}</span>
+            <span style="font-size:10px;color:${dow===0?'#ef4444':dow===6?'#60a5fa':'#475569'};margin-left:4px">${DOW_CN[dow]}</span>
+          </td>
+          <td class="num" style="color:#f97316;font-weight:${cnt>0?700:400}">${cnt>0?cnt:'—'}</td>
+        </tr>`;
+      });
+
+      const bwTr2 = bw.turnover_rate;
+      const bwTrC = bwTr2===null?'#64748b':bwTr2>=2?'#10b981':bwTr2>=1.5?'#f59e0b':'#ef4444';
+      html += `<tr style="background:rgba(249,115,22,.06)">
+        <td style="font-weight:800;color:#f97316">合計 ／ 日均 ／ 周轉率</td>
+        <td class="num">
+          <span style="color:#f97316;font-weight:800">${bw.total_visits||0}</span>
+          <span style="color:#64748b"> / ${bw.daily_avg||0} / </span>
+          <span style="color:${bwTrC};font-weight:800">${bwTr2!==null?bwTr2+'台/人/天':'—'}</span>
+        </td>
+      </tr>`;
+      html += `</tbody></table></div></div>`;  // end 鈑烤 card
+    }
+
     el.innerHTML = html;
- 
-    // ── 繪製 SVG 日柱狀圖 ──
+
+    // ── 繪製圖表 ──
     _renderTurnoverChart(BRANCHES, bd, sortedDates, branchColors);
- 
+    if (bw && bw.daily && bw.daily.length) {
+      const bwDates = [...new Set(bw.daily.map(d => String(d.work_date).slice(0,10)))].sort();
+      _renderBwChart(bw.daily, bwDates);
+    }
+
   } catch(err) {
     el.innerHTML = `<div style="color:#ef4444;padding:16px">❌ ${err.message}</div>`;
   }
 }
- 
-function _renderTurnoverChart(BRANCHES, bd, dateList, branchColors) {
-  const wrap = document.getElementById('turnoverDailyChart');
+
+// ── 鈑烤每日台數柱狀圖（集團合計，橘色）──
+function _renderBwChart(daily, dateList) {
+  const wrap = document.getElementById('turnoverBwChart');
   if (!wrap || !dateList.length) return;
   const isLight = document.body.classList.contains('light-theme');
-  const DOW_CN = ['日','一','二','三','四','五','六'];
-  const maxVal = Math.max(...BRANCHES.flatMap(br => (bd[br]?.daily||[]).map(d=>parseInt(d.vehicle_count||0))), 1);
-  const isMob  = window.innerWidth <= 768;
-  const chartH = isMob ? 180 : 260;
-  const topPad = 20, xLH = 36, leftP = 50, rightP = 24;
-  const gap     = 4;
-  const groupW  = Math.max(16, Math.floor((Math.min(wrap.clientWidth||600, 900) - leftP - rightP) / Math.max(dateList.length,1)));
-  const barW    = Math.max(6, Math.floor((groupW - gap) / Math.max(BRANCHES.length,1)));
-  const svgW    = Math.max(wrap.clientWidth||600, leftP + dateList.length * (BRANCHES.length * barW + gap) + rightP);
+  const DOW_CN  = ['日','一','二','三','四','五','六'];
+  const col     = '#f97316';
+  const maxVal  = Math.max(...daily.map(d => parseInt(d.vehicle_count||0)), 1);
+  const isMob   = window.innerWidth <= 768;
+  const chartH  = isMob ? 140 : 200;
+  const topPad  = 20, xLH = 36, leftP = 50, rightP = 24;
+  const gap     = 6;
+  const groupW  = Math.max(20, Math.floor((Math.min(wrap.clientWidth||600, 900) - leftP - rightP) / Math.max(dateList.length,1)));
+  const barW    = Math.max(8, Math.min(36, groupW - gap));
+  const svgW    = Math.max(wrap.clientWidth||600, leftP + dateList.length * (barW + gap) + rightP);
   const svgH    = topPad + chartH + xLH;
   const yScale  = v => maxVal > 0 ? topPad + chartH * (1 - v/maxVal) : topPad + chartH;
   const axCol   = isLight ? '#94a3b8' : '#475569';
   const gridCol = isLight ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)';
+  const lblCol  = isLight ? '#475569' : '#94a3b8';
+
   let svg = `<svg width="${svgW}" height="${svgH}" xmlns="http://www.w3.org/2000/svg" style="display:block">`;
-  // Y grid
-  for (let i=0;i<=4;i++) {
-    const ytv = Math.round(maxVal*i/4), yy = yScale(ytv);
+
+  // Y 格線
+  for (let i = 0; i <= 4; i++) {
+    const ytv = Math.round(maxVal * i / 4), yy = yScale(ytv);
     svg += `<line x1="${leftP}" y1="${yy}" x2="${svgW-rightP}" y2="${yy}" stroke="${i===0?axCol:gridCol}" stroke-width="${i===0?1.5:0.5}"/>`;
     svg += `<text x="${leftP-6}" y="${yy+4}" text-anchor="end" font-size="10" fill="${axCol}">${ytv}</text>`;
   }
-  // Bars
+
   let cx = leftP;
   dateList.forEach(date => {
-    const dow = new Date(date+'T00:00:00').getDay();
+    const dow    = new Date(date + 'T00:00:00').getDay();
     const dayNum = parseInt(date.slice(8));
-    const midX = cx + BRANCHES.length * barW / 2;
-    if (dow===0||dow===6) {
-      svg += `<rect x="${cx}" y="${topPad}" width="${BRANCHES.length*barW}" height="${chartH}" fill="${isLight?'rgba(0,0,0,0.025)':'rgba(255,255,255,0.025)'}"/>`;
-    }
-    BRANCHES.forEach((br, bi) => {
-      const dayRow = (bd[br]?.daily||[]).find(d=>String(d.work_date).slice(0,10)===date);
-      const cnt = dayRow ? parseInt(dayRow.vehicle_count||0) : 0;
-      const col = branchColors[br]||'#94a3b8';
-      const barH = cnt > 0 ? Math.max(3, chartH * cnt / maxVal) : 0;
-      const bx = cx + bi * barW;
-      const by = topPad + chartH - barH;
-      if (barH > 0) {
-        const gid = `tg_${bi}_${date.replace(/-/g,'')}`;
-        svg += `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${col}" stop-opacity="1"/><stop offset="100%" stop-color="${col}" stop-opacity="0.6"/></linearGradient></defs>`;
-        svg += `<rect x="${bx}" y="${by}" width="${Math.max(1,barW-1)}" height="${barH}" fill="url(#${gid})" rx="2"/>`;
-        if (barH > 18) {
-          svg += `<text x="${bx+barW/2}" y="${by+13}" text-anchor="middle" font-size="10" font-weight="700" fill="rgba(255,255,255,0.9)">${cnt}</text>`;
-        }
+    const midX   = cx + barW / 2;
+    if (dow===0||dow===6) svg += `<rect x="${cx}" y="${topPad}" width="${barW}" height="${chartH}" fill="${isLight?'rgba(0,0,0,0.025)':'rgba(255,255,255,0.025)'}"/>`;
+
+    const dayRow = daily.find(d => String(d.work_date).slice(0,10)===date);
+    const cnt    = dayRow ? parseInt(dayRow.vehicle_count||0) : 0;
+    if (cnt > 0) {
+      const barH = Math.max(3, chartH * cnt / maxVal);
+      const by   = topPad + chartH - barH;
+      const gid  = `bwg_${date.replace(/-/g,'')}`;
+      svg += `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${col}" stop-opacity="1"/>
+        <stop offset="100%" stop-color="${col}" stop-opacity="0.6"/>
+      </linearGradient></defs>`;
+      svg += `<rect x="${cx}" y="${by}" width="${barW}" height="${barH}" fill="url(#${gid})" rx="2"/>`;
+      if (barH > 18) {
+        svg += `<text x="${midX}" y="${by+13}" text-anchor="middle" font-size="10" font-weight="700" fill="rgba(255,255,255,0.9)">${cnt}</text>`;
+      } else {
+        const labelY = Math.max(topPad + 12, by - 3);
+        svg += `<text x="${midX}" y="${labelY}" text-anchor="middle" font-size="10" font-weight="700" fill="${col}">${cnt}</text>`;
       }
-    });
-    const dowC = dow===0?'#ef4444':dow===6?'#60a5fa':(isLight?'#64748b':'#94a3b8');
+    }
+
+    const dowC = dow===0?'#ef4444':dow===6?'#60a5fa':lblCol;
     svg += `<text x="${midX}" y="${topPad+chartH+14}" text-anchor="middle" font-size="10" font-weight="${dow===0||dow===6?700:400}" fill="${dowC}">${dayNum}</text>`;
     svg += `<text x="${midX}" y="${topPad+chartH+26}" text-anchor="middle" font-size="9" fill="${dowC}">${DOW_CN[dow]}</text>`;
-    cx += BRANCHES.length * barW + gap;
+    cx += barW + gap;
   });
-  // Legend
-  const legY = svgH - 2;
-  BRANCHES.forEach((br, i) => {
-    const col = branchColors[br]||'#94a3b8';
-    const lx = leftP + i * 60;
-    svg += `<rect x="${lx}" y="${legY-9}" width="10" height="9" fill="${col}" rx="2"/><text x="${lx+13}" y="${legY}" font-size="10" fill="${col}" font-weight="700">${br}</text>`;
-  });
+
+  // 圖例
+  svg += `<rect x="${leftP}" y="${svgH-10}" width="10" height="9" fill="${col}" rx="2"/>`;
+  svg += `<text x="${leftP+14}" y="${svgH-2}" font-size="10" font-weight="700" fill="${col}">集團鈑烤</text>`;
+
   svg += `</svg>`;
   wrap.innerHTML = svg;
 }
