@@ -2417,7 +2417,8 @@ function savePPDeptConfig() {
   if (!_ppConfigEditKey) return;
   const d = _ppDeptData[_ppConfigEditKey]; if (!d) return;
   const rev_type      = document.querySelector('input[name="ppRevType"]:checked')?.value || 'paid';
-  const metric_ids    = [...document.querySelectorAll('[id^="ppMChk-"]:checked')].map(cb => parseInt(cb.value));
+  const metric_ids_raw = [...document.querySelectorAll('[id^="ppMChk-"]:checked')].map(cb => parseInt(cb.value));
+  const metric_ids = metric_ids_raw.length === 0 ? null : metric_ids_raw;
   const show_car_count = document.getElementById('ppChkCarCount')?.checked !== false;
   const show_revenue   = document.getElementById('ppChkRevenue')?.checked !== false;
   _ppSaveDeptConfig(d.branch, d.deptKey, { rev_type, metric_ids, show_car_count, show_revenue });
@@ -2745,7 +2746,7 @@ function _ppBuildTable(dKey) {
   const selMetricIds   = cfg.metric_ids; // null = 全部
   const showCarCount   = cfg.show_car_count !== false;
   const showRevenue    = cfg.show_revenue   !== false;
-  const visMetrics     = metrics.filter(m => selMetricIds === null || selMetricIds.includes(Number(m.id)));
+  const visMetrics = metrics.filter(m => !selMetricIds || selMetricIds.length === 0 || selMetricIds.includes(Number(m.id))); 
 
   // ── Helpers ──
   const bt             = branchTargets[branch] || {};
