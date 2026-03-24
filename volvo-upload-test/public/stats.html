@@ -2750,6 +2750,7 @@ const REV_LABEL       = { paid:'🔶 有費營收', general:'💙 一般營收',
 const REV_COLOR       = { paid:'#f97316', general:'#3b82f6', bodywork:'#8b5cf6', extended:'#10b981' };
 const allocRaw        = _ppGetAlloc(branch, deptKey, getPeriod());
 const deptAllocRatio  = allocRaw != null ? allocRaw / 100 : 1;
+const deptAlloc       = allocRaw;
 const bt              = branchTargets[branch] || {};
 const visMetrics      = !cfg.metric_ids || cfg.metric_ids.length === 0
   ? metrics
