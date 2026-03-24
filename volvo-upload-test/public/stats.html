@@ -20,7 +20,41 @@
   .filter-bar label { font-size: 12px; color: #64748b; font-weight: 600; }
   .filter-bar select { background: #0f172a; border: 1px solid #2d3f56; color: #e2e8f0; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
   .tabs-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-  .tabs-wrap::-webkit-scrollbar { display: none; }
+   .tabs-wrap::-webkit-scrollbar { display: none; }
+   .tabs-group-wrap {
+     display: flex;
+     flex-direction: column;
+     gap: 4px;
+   }
+   .tabs {
+     display: flex;
+     gap: 2px;
+     background: #1e293b;
+     border-radius: 8px;
+     padding: 3px;
+     width: fit-content;
+   }
+   .tabs-row-label {
+     font-size: 10px;
+     font-weight: 700;
+     color: #374151;
+     letter-spacing: .05em;
+     padding: 0 4px 2px;
+     white-space: nowrap;
+   }
+   .tab {
+     padding: 7px 13px;
+     border: none;
+     background: transparent;
+     color: #64748b;
+     font-size: 12px;
+     font-weight: 600;
+     cursor: pointer;
+     border-radius: 6px;
+     white-space: nowrap;
+   }
+   .tab:hover { color: #e2e8f0; background: #253347; }
+   .tab.active { background: #3b82f6; color: #fff; }
   .tabs { display: flex; gap: 2px; background: #1e293b; border-radius: 8px; padding: 3px; width: max-content; min-width: 100%; }
   .tab { padding: 8px 16px; border: none; background: transparent; color: #64748b; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px; white-space: nowrap; }
   .tab:hover { color: #e2e8f0; background: #253347; }
@@ -226,22 +260,27 @@
       <button class="btn btn-primary" onclick="loadAll()">查詢</button>
       <span id="lastUpdate" style="margin-left:auto;font-size:11px;color:#64748b;white-space:nowrap"></span>
     </div>
-    <div class="tabs-wrap">
-      <div class="tabs">
-        <button class="tab active" onclick="switchTab('repair')">&#x1F527; 維修收入</button>
-        <button class="tab" onclick="switchTab('tech')">&#x1F697; 單車銷售額</button>
-        <button class="tab" onclick="switchTab('person-perf')">&#x1F464; 個人業績</button>
-        <button class="tab" onclick="switchTab('parts')">&#x1F529; 零件銷售</button>
-        <button class="tab" onclick="switchTab('boutique')">&#x1F48E; 精品配件</button>
-        <button class="tab" onclick="switchTab('sa-sales')">&#x1F4CB; 指標銷售</button>
-        <button class="tab" onclick="switchTab('trend')">&#x1F4C8; 月份趨勢</button>
-        <button class="tab" onclick="switchTab('daily')">&#x1F4C5; 每日進廠</button>
-        <button class="tab" onclick="switchTab('wip')">&#x1F527; WIP 未結工單</button>
-        <button class="tab" onclick="switchTab('tech-hours')">&#x23F1;&#xFE0F; 技師工時</button>
+<div class="tabs-wrap">
+  <div class="tabs-group-wrap">
+    <div>
+      <div class="tabs-row-label">💰 收入 / 銷售</div>
+      <div class="tabs" id="tabsRow1">
+        <button class="tab active" onclick="switchTab('repair')">🔧 維修收入</button>
+        <button class="tab" onclick="switchTab('tech')">🚗 單車銷售額</button>
+        <button class="tab" onclick="switchTab('person-perf')">👤 個人業績</button>
+        <button class="tab" onclick="switchTab('parts')">🔩 零件銷售</button>
+        <button class="tab" onclick="switchTab('boutique')">💎 精品配件</button>
+        <button class="tab" onclick="switchTab('sa-sales')">📋 指標銷售</button>
+      </div>
+    </div>
+    <div>
+      <div class="tabs-row-label">📊 分析 / 管理</div>
+      <div class="tabs" id="tabsRow2">
+        <button class="tab" onclick="switchTab('trend')">📈 月份趨勢</button>
+        <button class="tab" onclick="switchTab('daily')">📅 每日進廠</button>
+        <button class="tab" onclick="switchTab('wip')">🔧 WIP未結工單</button>
+        <button class="tab" onclick="switchTab('tech-hours')">⏱️ 技師工時</button>
         <button class="tab" onclick="switchTab('tech-turnover')">🔄 施工周轉率</button>
-        
-
-
       </div>
     </div>
   </div>
@@ -902,7 +941,11 @@ const GROUP_META={
 function switchTab(tab){
   currentTab=tab;
   const tabs=['repair','tech','person-perf','parts','boutique','sa-sales','trend','daily','wip','tech-hours','tech-turnover'];
-  document.querySelectorAll('.tab').forEach((t,i)=>{t.classList.toggle('active',tabs[i]===tab);});
+  document.querySelectorAll('.tab').forEach(t=>{
+    const onclick = t.getAttribute('onclick') || '';
+    const match = onclick.match(/'([^']+)'/);
+    if (match) t.classList.toggle('active', match[1] === tab);
+   }); 
    if (tab === 'person-perf') loadPersonPerfDashboard();
   if (tab === 'tech-turnover') loadTechTurnover(getPeriod(), document.getElementById('selBranch').value);
   tabs.forEach(t=>{document.getElementById(`tab-${t}`).style.display=t===tab?'':'none';});
