@@ -2335,10 +2335,10 @@ function openPPDeptConfig(dKey) {
   document.getElementById('ppDeptConfigTitle').textContent = `⚙️ ${d.branch} ${DEPT_LABEL[d.deptKey]||d.deptKey}`;
 
   const REV_OPTS = [
-    { v:'paid',     l:'🔶 有費營收' },
-    { v:'general',  l:'💙 一般營收' },
-    { v:'bodywork', l:'🔨 鈑烤營收' },
-    { v:'extended', l:'🛡️ 延保營收' },
+      { v:'paid',     l:'🔶 有費營收',  col:'#f97316' },
+      { v:'general',  l:'💙 一般營收',  col:'#3b82f6' },
+      { v:'bodywork', l:'🔨 鈑烤營收', col:'#8b5cf6' },
+      { v:'extended', l:'🛡️ 延保營收', col:'#10b981' },
   ];
 
     const showCarCount = cfg.show_car_count !== false;
