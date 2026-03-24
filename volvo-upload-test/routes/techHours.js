@@ -557,6 +557,9 @@ router.get('/stats/tech-turnover', async (req, res) => {
     );
     const rosterPeriod = rosterRes.rows[0]?.period || null;
     const BRANCHES = branch && STD_BRANCHES.has(branch) ? [branch] : ['AMA','AMC','AMD'];
+    // 取工位設定
+    const bayConfigRes = await pool.query(`SELECT value FROM app_settings WHERE key='service_bays'`);
+    const bayConfig = bayConfigRes.rows[0] ? JSON.parse(bayConfigRes.rows[0].value) : {};
     const result = {};
 
     for (const br of BRANCHES) {
@@ -669,20 +672,79 @@ const dailyRes = await pool.query(`
         ? Math.round(totalVisits / techCount / elapsedDays * 100) / 100
         : null;
 
-      result[br] = {
-        branch: br,
-        working_days: workingDays,
-        elapsed_days: elapsedDays,
-        tech_count: techCount,
-        tech_names: techNames,
-        total_visits: totalVisits,
-        daily_avg: dailyAvg,
-        turnover_rate: turnoverRate,
-        daily: dailyRes.rows,
-      };
+// 工位承接率計算
+const brBays = bayConfig[br] || {};
+const engineBays   = parseInt(brBays.engine   || 0);
+const bodyworkBays = parseInt(brBays.bodywork  || 0);
+const paintBays    = parseInt(brBays.paint     || 0);
+const totalBays    = engineBays + bodyworkBays + paintBays;
+
+// 鈑烤台次（保險鈑烤 + 自費鈑烤）
+const bwVisitsRes = await pool.query(`
+  SELECT COUNT(*) AS cnt FROM (
+    SELECT DISTINCT plate_no, clear_date
+    FROM repair_income
+    WHERE period=$1 AND branch=$2
+      AND COALESCE(plate_no,'') != ''
+      AND clear_date IS NOT NULL
+      AND TO_CHAR(clear_date,'YYYYMM') = $1
+      AND (account_type ILIKE '%保險%'
+           OR (COALESCE(bodywork_income,0) > 0 OR COALESCE(paint_income,0) > 0))
+  ) sub
+`, [period, br]);
+const bwVisits = parseInt(bwVisitsRes.rows[0]?.cnt || 0);
+
+const engineBayRate  = (engineBays   > 0 && elapsedDays > 0)
+  ? Math.round(totalVisits / engineBays   / elapsedDays * 100) / 100 : null;
+const bwBayRate = ((bodyworkBays + paintBays) > 0 && elapsedDays > 0)
+  ? Math.round(bwVisits / (bodyworkBays + paintBays) / elapsedDays * 100) / 100 : null;
+const totalBayRate   = (totalBays    > 0 && elapsedDays > 0)
+  ? Math.round((totalVisits + bwVisits) / totalBays / elapsedDays * 100) / 100 : null;
+
+result[br] = {
+  branch: br,
+  working_days:    workingDays,
+  elapsed_days:    elapsedDays,
+  tech_count:      techCount,
+  tech_names:      techNames,
+  total_visits:    totalVisits,
+  bw_visits:       bwVisits,
+  daily_avg:       dailyAvg,
+  turnover_rate:   turnoverRate,
+  daily:           dailyRes.rows,
+  bays: {
+    engine:   engineBays,
+    bodywork: bodyworkBays,
+    paint:    paintBays,
+    total:    totalBays,
+  },
+  bay_rates: {
+    engine:   engineBayRate,
+    bodywork: bwBayRate,
+    total:    totalBayRate,
+  },
+};
     }
 
     res.json({ branches: result, rosterPeriod, period });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── 工位設定 ──
+router.get('/tech-bay-config', async (req, res) => {
+  try {
+    const r = await pool.query(`SELECT value FROM app_settings WHERE key='service_bays'`);
+    res.json(r.rows[0] ? JSON.parse(r.rows[0].value) : {});
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/tech-bay-config', async (req, res) => {
+  try {
+    await pool.query(`
+      INSERT INTO app_settings (key, value) VALUES ('service_bays', $1)
+      ON CONFLICT (key) DO UPDATE SET value=$1
+    `, [JSON.stringify(req.body)]);
+    res.json({ ok: true });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
