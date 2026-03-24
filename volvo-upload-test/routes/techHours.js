@@ -614,17 +614,18 @@ const visitsRes = await pool.query(`
       const totalVisits = parseInt(visitsRes.rows[0]?.total_visits || 0);
 
       // ── 每日台數 ──
-      const dailyRes = await pool.query(`
-        SELECT settle_date AS work_date, COUNT(DISTINCT plate_no) AS vehicle_count
-        FROM repair_income
-        WHERE period=$1 AND branch=$2
-          AND settle_date IS NOT NULL
-          AND COALESCE(plate_no,'') != ''
-          AND account_type NOT ILIKE '%保險%'
-          AND COALESCE(bodywork_income,0) = 0
-          AND COALESCE(paint_income,0) = 0
-        GROUP BY settle_date ORDER BY settle_date
-      `, [period, br]);
+const dailyRes = await pool.query(`
+  SELECT clear_date AS work_date, COUNT(DISTINCT plate_no) AS vehicle_count
+  FROM repair_income
+  WHERE period=$1 AND branch=$2
+    AND clear_date IS NOT NULL
+    AND TO_CHAR(clear_date,'YYYYMM') = $1
+    AND COALESCE(plate_no,'') != ''
+    AND account_type NOT ILIKE '%保險%'
+    AND COALESCE(bodywork_income,0) = 0
+    AND COALESCE(paint_income,0) = 0
+  GROUP BY clear_date ORDER BY clear_date
+`, [period, br]);
 
       const dailyAvg = workingDays > 0
         ? Math.round(totalVisits / workingDays * 10) / 10
