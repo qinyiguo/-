@@ -19,24 +19,54 @@
   .filter-bar { display: flex; gap: 10px; align-items: center; background: #1e293b; border: 1px solid #2d3f56; border-radius: 10px; padding: 10px 16px; margin-bottom: 10px; flex-wrap: wrap; }
   .filter-bar label { font-size: 12px; color: #64748b; font-weight: 600; }
   .filter-bar select { background: #0f172a; border: 1px solid #2d3f56; color: #e2e8f0; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+/* ── Tab 列（單排可橫捲）── */
   .tabs-wrap {
-    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    position: relative;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    /* 右側漸層提示還有更多 */
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 40px), transparent 100%);
+    mask-image: linear-gradient(to right, black calc(100% - 40px), transparent 100%);
   }
   .tabs-wrap::-webkit-scrollbar { display: none; }
+  /* 捲到底時取消漸層 */
+  .tabs-wrap.scrolled-end {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
   .tabs {
-    display: flex; gap: 2px; align-items: center;
-    background: #1e293b; border-radius: 8px;
-    padding: 3px; width: max-content; min-width: 100%;
+    display: flex;
+    gap: 1px;
+    background: #1e293b;
+    border-radius: 8px;
+    padding: 3px;
+    width: max-content;
+    min-width: 100%;
   }
   .tab {
-    padding: 6px 12px; border: none; background: transparent;
-    color: #64748b; font-size: 12px; font-weight: 600;
-    cursor: pointer; border-radius: 6px; white-space: nowrap;
+    padding: 6px 12px;
+    border: none;
+    background: transparent;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 6px;
+    white-space: nowrap;
     transition: all .15s;
+    flex-shrink: 0;
   }
   .tab:hover { color: #e2e8f0; background: #253347; }
   .tab.active { background: #3b82f6; color: #fff; }
+  /* 群組分隔線 */
+  .tab-group-divider {
+    width: 1px;
+    background: #2d3f56;
+    align-self: stretch;
+    margin: 3px 4px;
+    flex-shrink: 0;
+  }
   .tab-group-divider {
     width: 1px; height: 20px; background: #2d3f56;
     flex-shrink: 0; margin: 0 2px;
@@ -262,28 +292,20 @@
         style="margin-left:auto;font-size:11px;color:#475569;white-space:nowrap"></span>
     </div>
 
-    <!-- Tabs 單排（含分組分隔線） -->
-    <div class="tabs-wrap">
-      <div class="tabs">
-        <!-- 收入/銷售 群組 -->
-        <button class="tab active" onclick="switchTab('repair')">🔧 維修收入</button>
-        <button class="tab"        onclick="switchTab('tech')">🚗 單車銷售</button>
-        <button class="tab"        onclick="switchTab('person-perf')">👤 個人業績</button>
-        <button class="tab"        onclick="switchTab('parts')">🔩 零件銷售</button>
-        <button class="tab"        onclick="switchTab('boutique')">💎 精品配件</button>
-        <button class="tab"        onclick="switchTab('sa-sales')">📋 指標銷售</button>
-
-        <!-- 群組分隔線 -->
-        <div class="tab-group-divider"></div>
-
-        <!-- 分析/管理 群組 -->
-        <button class="tab" onclick="switchTab('trend')">📈 趨勢</button>
-        <button class="tab" onclick="switchTab('daily')">📅 每日進廠</button>
-        <button class="tab" onclick="switchTab('wip')">🔧 WIP</button>
-        <button class="tab" onclick="switchTab('tech-hours')">⏱️ 技師工時</button>
-        <button class="tab" onclick="switchTab('tech-turnover')">🔄 周轉率</button>
-      </div>
-    </div>
+<div class="tabs-wrap" id="tabsWrap">
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('repair')">🔧 維修收入</button>
+    <button class="tab"        onclick="switchTab('tech')">🚗 單車銷售</button>
+    <button class="tab"        onclick="switchTab('person-perf')">👤 個人業績</button>
+    <button class="tab"        onclick="switchTab('parts')">🔩 零件銷售</button>
+    <button class="tab"        onclick="switchTab('boutique')">💎 精品配件</button>
+    <button class="tab"        onclick="switchTab('sa-sales')">📋 指標銷售</button>
+    <div class="tab-group-divider"></div>
+    <button class="tab"        onclick="switchTab('trend')">📈 趨勢</button>
+    <button class="tab"        onclick="switchTab('daily')">📅 每日進廠</button>
+    <button class="tab"        onclick="switchTab('wip')">🔧 WIP</button>
+    <button class="tab"        onclick="switchTab('tech-hours')">⏱️ 技師工時</button>
+    <button class="tab"        onclick="switchTab('tech-turnover')">🔄 周轉率</button>
   </div>
 </div>
 
@@ -892,6 +914,8 @@ document.addEventListener('keydown', e => {
     if (m && m.style.display !== 'none') closeTechHoursConfig();
   }
 });
+
+ 
 </script>
 
 <script>
@@ -3361,6 +3385,19 @@ document.addEventListener('DOMContentLoaded',async()=>{
   await loadAll();
   await initPPMetrics();
 });
+<script>
+  (function(){
+    const wrap = document.getElementById('tabsWrap');
+    if (!wrap) return;
+    function checkScroll() {
+      const atEnd = wrap.scrollLeft + wrap.clientWidth >= wrap.scrollWidth - 8;
+      wrap.classList.toggle('scrolled-end', atEnd);
+    }
+    wrap.addEventListener('scroll', checkScroll, { passive: true });
+    window.addEventListener('resize', checkScroll);
+    checkScroll();
+  })();
+ 
 </script>
 <div id="techHoursDetailModal"
   style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:600;
