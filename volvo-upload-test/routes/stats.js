@@ -576,8 +576,15 @@ router.get('/stats/wip', async (req, res) => {
           WHEN bq.open_time IS NOT NULL
           THEN EXTRACT(DAY FROM (NOW() - bq.open_time))
           ELSE NULL
-        END AS days_open
+        END AS days_open,
+        COALESCE(wsn.wip_status, '未填寫')  AS wip_status,
+        wsn.eta_date,
+        COALESCE(wsn.reason, '')            AS wip_reason,
+        COALESCE(wsn.updated_by, '')        AS wip_updated_by,
+        wsn.updated_at                      AS wip_updated_at
       FROM business_query bq
+      LEFT JOIN wip_status_notes wsn
+        ON wsn.work_order = bq.work_order AND wsn.branch = bq.branch
       WHERE
         bq.open_time < (to_date($1 || '01', 'YYYYMMDD') + interval '1 month')
         ${branchCond}
@@ -589,7 +596,6 @@ router.get('/stats/wip', async (req, res) => {
         )
       ORDER BY bq.branch, bq.open_time NULLS LAST, bq.work_order
     `, params);
-
     const rows = r.rows;
     const byRepairType = {};
     const byPeriod     = {};
