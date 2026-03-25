@@ -23,6 +23,7 @@ app.use('/api', require('./routes/auth'));
 app.use('/api', require('./routes/bonus'));
 app.use('/api', require('./routes/techHours'));
 app.use('/api', require('./routes/personTargets'));
+app.use('/api', require('./routes/wip'));
 
 // ── 啟動 ──
 initDatabase()
