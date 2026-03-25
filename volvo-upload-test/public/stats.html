@@ -2183,38 +2183,57 @@ window._openWipStatusEdit=function(workOrder,branch){
   const curReason=wipRow?wipRow.wip_reason||'':'';
   const curEta=wipRow&&wipRow.eta_date?String(wipRow.eta_date).slice(0,10):'';
   const curBy=wipRow?wipRow.wip_updated_by||'':'';
-
+  const isLightEdit=document.body.classList.contains('light-theme');
+  const CE={
+    bg:     isLightEdit?'#f1f5f9':'#0a1628',
+    input:  isLightEdit?'#ffffff':'#0f172a',
+    border: isLightEdit?'#cbd5e1':'#2d3f56',
+    text:   isLightEdit?'#1e293b':'#e2e8f0',
+    label:  isLightEdit?'#475569':'#94a3b8',
+  };
+ 
   const statusOpts=['等料','施工中','待修','待客確認','已可結帳','暫緩','未填寫'];
   const optsHtml=statusOpts.map(s=>{
-    const m=getWipStatusMeta(s);
+    const m2=getWipStatusMeta(s);
     const sel=s===curStatus;
-    return`<button onclick="_selectWipStatus('${workOrder}','${branch}','${s}')" id="wipStatusBtn-${workOrder}-${s.replace(/[^a-zA-Z\u4e00-\u9fff]/g,'')}"
-      style="padding:5px 12px;border-radius:7px;border:1.5px solid ${sel?m.color:'#2d3f56'};background:${sel?m.bg:'transparent'};color:${sel?m.color:'#64748b'};font-size:12px;font-weight:${sel?800:600};cursor:pointer;white-space:nowrap;transition:all .1s">
-      ${m.icon} ${s}
+    return`<button onclick="_selectWipStatus('${workOrder}','${branch}','${s}')"
+      id="wipStatusBtn-${workOrder}-${s.replace(/[^a-zA-Z\u4e00-\u9fff]/g,'')}"
+      style="padding:5px 12px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:${sel?800:600};
+             white-space:nowrap;transition:all .1s;
+             border:1.5px solid ${sel?m2.color:(isLightEdit?'#e2e8f0':'#2d3f56')};
+             background:${sel?(isLightEdit?m2.color+'18':m2.bg):(isLightEdit?'#ffffff':'transparent')};
+             color:${sel?m2.color:(isLightEdit?'#475569':'#64748b')}">
+      ${m2.icon} ${s}
     </button>`;
   }).join('');
-
+ 
   panel.innerHTML=`
-    <div style="display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;flex-direction:column;gap:10px;background:${CE.bg};border-radius:8px;padding:12px 16px">
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-        <span style="font-size:11px;font-weight:700;color:#94a3b8;flex-shrink:0">工單狀態：</span>
+        <span style="font-size:11px;font-weight:700;color:${CE.label};flex-shrink:0;min-width:55px">工單狀態：</span>
         ${optsHtml}
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:11px;color:#64748b;flex-shrink:0">原因備註：</span>
+        <span style="font-size:11px;color:${CE.label};flex-shrink:0;min-width:55px">原因備註：</span>
         <input type="text" id="wipReasonInput-${workOrder}" value="${curReason}"
           placeholder="例：等後懸吊料、客戶確認中、待接車施工…"
-          style="flex:1;min-width:180px;background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:5px 10px;border-radius:6px;font-size:12px;outline:none">
-        <span style="font-size:11px;color:#64748b;flex-shrink:0">預計完成：</span>
+          style="flex:1;min-width:180px;background:${CE.input};border:1px solid ${CE.border};color:${CE.text};
+                 padding:6px 10px;border-radius:6px;font-size:12px;outline:none">
+        <span style="font-size:11px;color:${CE.label};flex-shrink:0">預計完成：</span>
         <input type="date" id="wipEtaInput-${workOrder}" value="${curEta}"
-          style="background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:5px 10px;border-radius:6px;font-size:12px;outline:none">
-        <span style="font-size:11px;color:#64748b;flex-shrink:0">填寫人：</span>
+          style="background:${CE.input};border:1px solid ${CE.border};color:${CE.text};
+                 padding:6px 10px;border-radius:6px;font-size:12px;outline:none">
+        <span style="font-size:11px;color:${CE.label};flex-shrink:0">填寫人：</span>
         <input type="text" id="wipByInput-${workOrder}" value="${curBy}" placeholder="SA姓名"
-          style="width:90px;background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:5px 8px;border-radius:6px;font-size:12px;outline:none">
+          style="width:90px;background:${CE.input};border:1px solid ${CE.border};color:${CE.text};
+                 padding:6px 8px;border-radius:6px;font-size:12px;outline:none">
         <button onclick="_saveWipStatus('${workOrder}','${branch}')"
-          style="padding:5px 14px;background:#3b82f6;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">💾 儲存</button>
+          style="padding:5px 16px;background:#3b82f6;color:#fff;border:none;border-radius:6px;
+                 font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">💾 儲存</button>
         <button onclick="document.getElementById('${rowId}').style.display='none'"
-          style="padding:5px 10px;background:#253347;color:#94a3b8;border:1px solid #2d3f56;border-radius:6px;font-size:12px;cursor:pointer;flex-shrink:0">取消</button>
+          style="padding:5px 10px;background:${isLightEdit?'#f1f5f9':'#253347'};
+                 color:${isLightEdit?'#64748b':'#94a3b8'};
+                 border:1px solid ${CE.border};border-radius:6px;font-size:12px;cursor:pointer;flex-shrink:0">取消</button>
         <div id="wipSaveMsg-${workOrder}" style="font-size:11px;min-height:16px;flex-shrink:0"></div>
       </div>
     </div>`;
