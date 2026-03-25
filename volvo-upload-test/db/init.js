@@ -291,6 +291,19 @@ const initDatabase = async () => {
         UNIQUE(metric_id, period, branch, person_name)
       )`);
 
+    await client.query(`
+  CREATE TABLE IF NOT EXISTS wip_status_notes (
+    id          SERIAL PRIMARY KEY,
+    work_order  VARCHAR(50) NOT NULL,
+    branch      VARCHAR(10) NOT NULL,
+    wip_status  VARCHAR(20) NOT NULL DEFAULT '未填寫',
+    eta_date    DATE,
+    reason      TEXT DEFAULT '',
+    updated_by  VARCHAR(50) DEFAULT '',
+    updated_at  TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(work_order, branch)
+  )`);
+
     console.log('[initDB] ✅ 所有表格建立完成');
   } catch (err) {
     console.error('[initDB] ❌ 失敗:', err.message);
