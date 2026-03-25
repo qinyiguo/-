@@ -19,42 +19,28 @@
   .filter-bar { display: flex; gap: 10px; align-items: center; background: #1e293b; border: 1px solid #2d3f56; border-radius: 10px; padding: 10px 16px; margin-bottom: 10px; flex-wrap: wrap; }
   .filter-bar label { font-size: 12px; color: #64748b; font-weight: 600; }
   .filter-bar select { background: #0f172a; border: 1px solid #2d3f56; color: #e2e8f0; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
-  .tabs-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-   .tabs-wrap::-webkit-scrollbar { display: none; }
-   .tabs-group-wrap {
-     display: flex;
-     flex-direction: column;
-     gap: 4px;
-   }
-   .tabs {
-     display: flex;
-     gap: 2px;
-     background: #1e293b;
-     border-radius: 8px;
-     padding: 3px;
-     width: fit-content;
-   }
-   .tabs-row-label {
-     font-size: 10px;
-     font-weight: 700;
-     color: #374151;
-     letter-spacing: .05em;
-     padding: 0 4px 2px;
-     white-space: nowrap;
-   }
-   .tab {
-     padding: 7px 13px;
-     border: none;
-     background: transparent;
-     color: #64748b;
-     font-size: 12px;
-     font-weight: 600;
-     cursor: pointer;
-     border-radius: 6px;
-     white-space: nowrap;
-   }
-   .tab:hover { color: #e2e8f0; background: #253347; }
-   .tab.active { background: #3b82f6; color: #fff; }
+  .tabs-wrap {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tabs-wrap::-webkit-scrollbar { display: none; }
+  .tabs {
+    display: flex; gap: 2px; align-items: center;
+    background: #1e293b; border-radius: 8px;
+    padding: 3px; width: max-content; min-width: 100%;
+  }
+  .tab {
+    padding: 6px 12px; border: none; background: transparent;
+    color: #64748b; font-size: 12px; font-weight: 600;
+    cursor: pointer; border-radius: 6px; white-space: nowrap;
+    transition: all .15s;
+  }
+  .tab:hover { color: #e2e8f0; background: #253347; }
+  .tab.active { background: #3b82f6; color: #fff; }
+  .tab-group-divider {
+    width: 1px; height: 20px; background: #2d3f56;
+    flex-shrink: 0; margin: 0 2px;
+  }
   .tabs { display: flex; gap: 2px; background: #1e293b; border-radius: 8px; padding: 3px; width: max-content; min-width: 100%; }
   .tab { padding: 8px 16px; border: none; background: transparent; color: #64748b; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px; white-space: nowrap; }
   .tab:hover { color: #e2e8f0; background: #253347; }
@@ -233,54 +219,69 @@
 <body>
 
 <div class="sticky-header">
-  <nav class="nav">
+  <nav class="nav" style="padding:0 20px">
     <span class="nav-brand">&#x1F697; Volvo 營運統計</span>
-    <a href="/performance.html" class="nav-link">&#x1F3AF; 業績指標</a>
-    <a href="/stats.html" class="nav-link active">&#x1F4CA; 各廠明細</a>
-    <a href="/query.html" class="nav-link">&#x1F50D; 資料查詢</a>
-    <a href="/bonus.html" class="nav-link">&#x1F4B0; 獎金表</a>
-    <a href="/settings.html" class="nav-link">&#x2699;&#xFE0F; 設定</a>
-
-   <button id="themeToggleBtn" class="theme-toggle-btn"
-  onclick="toggleTheme()" title="切換白色/深色模式">☀️</button>
+    <a href="/performance.html" class="nav-link">🎯 業績指標</a>
+    <a href="/stats.html"       class="nav-link active">📊 各廠明細</a>
+    <a href="/query.html"       class="nav-link">🔍 資料查詢</a>
+    <a href="/bonus.html"       class="nav-link">💰 獎金表</a>
+    <a href="/settings.html"    class="nav-link">⚙️ 設定</a>
+    <button id="themeToggleBtn" class="theme-toggle-btn"
+      onclick="toggleTheme()" title="切換主題" style="margin-left:auto">☀️</button>
   </nav>
-  <div class="header-inner">
-    <div class="filter-bar">
-      <label>期間</label>
-      <div id="periodSelectorWrap"></div>
-      <label>據點</label>
-      <select id="selBranch">
-        <option value="">全部</option>
-        <option value="AMA">AMA</option>
-        <option value="AMC">AMC</option>
-        <option value="AMD">AMD</option>
-        <option value="聯合服務中心">聯合服務中心</option>
-        <option value="鈑烤廠">鈑烤廠</option>
-      </select>
-      <button class="btn btn-primary" onclick="loadAll()">查詢</button>
-      <span id="lastUpdate" style="margin-left:auto;font-size:11px;color:#64748b;white-space:nowrap"></span>
-    </div>
-<div class="tabs-wrap">
-  <div class="tabs-group-wrap">
-    <div>
-      <div class="tabs-row-label">💰 收入 / 銷售</div>
-      <div class="tabs" id="tabsRow1">
-        <button class="tab active" onclick="switchTab('repair')">🔧 維修收入</button>
-        <button class="tab" onclick="switchTab('tech')">🚗 單車銷售額</button>
-        <button class="tab" onclick="switchTab('person-perf')">👤 個人業績</button>
-        <button class="tab" onclick="switchTab('parts')">🔩 零件銷售</button>
-        <button class="tab" onclick="switchTab('boutique')">💎 精品配件</button>
-        <button class="tab" onclick="switchTab('sa-sales')">📋 指標銷售</button>
+
+  <!-- ── 壓縮後的 Filter + Tab 合併列 ── -->
+  <div style="padding:6px 20px 0; background:#0f172a; border-bottom:1px solid #2d3f56">
+
+    <!-- Filter Row -->
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px; flex-wrap:wrap">
+      <!-- 期間 -->
+      <div style="display:flex;align-items:center;gap:5px">
+        <span style="font-size:11px;color:#64748b;font-weight:600;white-space:nowrap">期間</span>
+        <div id="periodSelectorWrap"></div>
       </div>
+      <!-- 據點 -->
+      <div style="display:flex;align-items:center;gap:5px">
+        <span style="font-size:11px;color:#64748b;font-weight:600;white-space:nowrap">據點</span>
+        <select id="selBranch"
+          style="background:#1e293b;border:1px solid #2d3f56;color:#e2e8f0;
+                 padding:5px 8px;border-radius:6px;font-size:12px;font-weight:700;
+                 cursor:pointer;outline:none">
+          <option value="">全部</option>
+          <option value="AMA">AMA</option>
+          <option value="AMC">AMC</option>
+          <option value="AMD">AMD</option>
+          <option value="聯合服務中心">聯合</option>
+          <option value="鈑烤廠">鈑烤</option>
+        </select>
+      </div>
+      <button onclick="loadAll()"
+        style="background:#3b82f6;color:#fff;border:none;padding:5px 14px;
+               border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">查詢</button>
+      <span id="lastUpdate"
+        style="margin-left:auto;font-size:11px;color:#475569;white-space:nowrap"></span>
     </div>
-    <div>
-      <div class="tabs-row-label">📊 分析 / 管理</div>
-      <div class="tabs" id="tabsRow2">
-        <button class="tab" onclick="switchTab('trend')">📈 月份趨勢</button>
+
+    <!-- Tabs 單排（含分組分隔線） -->
+    <div class="tabs-wrap">
+      <div class="tabs">
+        <!-- 收入/銷售 群組 -->
+        <button class="tab active" onclick="switchTab('repair')">🔧 維修收入</button>
+        <button class="tab"        onclick="switchTab('tech')">🚗 單車銷售</button>
+        <button class="tab"        onclick="switchTab('person-perf')">👤 個人業績</button>
+        <button class="tab"        onclick="switchTab('parts')">🔩 零件銷售</button>
+        <button class="tab"        onclick="switchTab('boutique')">💎 精品配件</button>
+        <button class="tab"        onclick="switchTab('sa-sales')">📋 指標銷售</button>
+
+        <!-- 群組分隔線 -->
+        <div class="tab-group-divider"></div>
+
+        <!-- 分析/管理 群組 -->
+        <button class="tab" onclick="switchTab('trend')">📈 趨勢</button>
         <button class="tab" onclick="switchTab('daily')">📅 每日進廠</button>
-        <button class="tab" onclick="switchTab('wip')">🔧 WIP未結工單</button>
+        <button class="tab" onclick="switchTab('wip')">🔧 WIP</button>
         <button class="tab" onclick="switchTab('tech-hours')">⏱️ 技師工時</button>
-        <button class="tab" onclick="switchTab('tech-turnover')">🔄 施工周轉率</button>
+        <button class="tab" onclick="switchTab('tech-turnover')">🔄 周轉率</button>
       </div>
     </div>
   </div>
@@ -530,7 +531,8 @@
     </div>
   </div>
  
-</div><!-- /.container -->
+</div>
+   <!-- /.container -->
 
 <!-- ══ 技師工時產能設定 Modal ══ -->
 <div id="techHoursConfigModal"
