@@ -61,9 +61,6 @@
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
-    /* 右側漸層提示還有更多 */
-    -webkit-mask-image: linear-gradient(to right, black calc(100% - 40px), transparent 100%);
-    mask-image: linear-gradient(to right, black calc(100% - 40px), transparent 100%);
   }
   .tabs-wrap::-webkit-scrollbar { display: none; }
   /* 捲到底時取消漸層 */
@@ -280,6 +277,9 @@
   }
  
   body.light-theme .theme-toggle-btn:hover { background:#f1f5f9; }
+   /* tab 截切修正 */
+  .sticky-header { overflow: visible !important; max-width: none !important; width: 100% !important; }
+  .tabs-wrap { margin: 0 !important; -webkit-mask-image: none !important; mask-image: none !important; }
 </style>
 </head>
 <body>
