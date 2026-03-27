@@ -471,8 +471,8 @@ async function doLoad() {
   _wdSummary = null;
   _revRates  = null;
   _revData   = null;
+  await loadWorkingDaysProgress(period, branch);
   await Promise.all([
-    loadWorkingDaysProgress(period, branch),
     loadRevenueKPI(period, branch),
     loadIncomeBreakdown(period, branch),
     loadPerformance(period, branch),
