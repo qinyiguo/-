@@ -640,13 +640,17 @@ async function loadRevenueKPI(period,branch){
   const _delta=(_pct!==null&&rate!==null)?rate-_pct:null;
   const _dCol=_delta===null?'#64748b':_delta>=3?'#10b981':_delta<=-5?'#ef4444':'#f59e0b';
   const _dText=_delta===null?'':`${_delta>=3?'🚀':_delta<=-5?'⚠️':'〜'} ${_delta>=0?'+':''}${_delta.toFixed(1)}%`;
-  const _mk=_pct!==null?`<div style="position:absolute;top:-3px;left:${_pct.toFixed(1)}%;width:2px;height:11px;background:#374151;border-radius:1px;transform:translateX(-50%)" title="工作天 ${_el}/${_tot}天"></div>`:'';
+  const _mk=_pct!==null?`
+    <div style="position:absolute;top:-3px;left:${_pct.toFixed(1)}%;transform:translateX(-50%)">
+      <div style="width:2px;height:11px;background:#374151;border-radius:1px;margin:0 auto"></div>
+      ${_dText?`<div style="position:absolute;bottom:14px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:9px;font-weight:800;color:${_dCol};background:rgba(0,0,0,.55);padding:1px 4px;border-radius:3px">${_dText}</div>`:''}
+    </div>`:'';
   return`
     <div style="flex:1;background:#0f172a;border-radius:3px;height:5px;position:relative">
       <div style="width:${barW}%;height:5px;background:${rCol};border-radius:3px;transition:width .4s"></div>
       ${_mk}
     </div>
-    <span style="font-size:12px;font-weight:800;color:${rCol};white-space:nowrap">${rate!==null?rate.toFixed(1)+'%':'—'} ${_dText?`<span style="font-size:10px;font-weight:700;color:${_dCol}">${_dText}</span>`:''}</span>`;
+  <span style="font-size:12px;font-weight:800;color:${rCol};white-space:nowrap">${rate!==null?rate.toFixed(1)+'%':'—'}</span>`;
 })()}
           </div>
           ${est>0?`<div style="display:flex;align-items:center;gap:5px;margin-bottom:10px">
