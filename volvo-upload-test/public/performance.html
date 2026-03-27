@@ -627,31 +627,23 @@ async function loadRevenueKPI(period,branch){
           <div style="font-size:11px;font-weight:800;color:${col};margin-bottom:8px">${br}</div>
           <div style="font-size:${fullWidth?'24px':'20px'};font-weight:800;color:#e2e8f0;margin-bottom:4px">${fmtK(actual)}</div>
           <div style="display:flex;align-items:center;gap:5px;margin-bottom:${est>0?'6px':'10px'}">
-            <div style="flex:1;background:#0f172a;border-radius:3px;height:5px"><div style="width:${barW}%;height:5px;background:${rCol};border-radius:3px;transition:width .4s"></div></div>
-            <span style="font-size:12px;font-weight:800;color:${rCol};white-space:nowrap">${rate!==null?rate.toFixed(1)+'%':'—'}</span>
+          <div style="flex:1;background:#0f172a;border-radius:3px;height:5px;position:relative">
+            <div style="width:${barW}%;height:5px;background:${rCol};border-radius:3px;transition:width .4s"></div>
+            ${(()=>{
+              if(!fullWidth)return'';
+              const _ws=_wdSummary&&_wdSummary.find(r=>r.branch===br);
+              if(!_ws)return'';
+              const _el=parseInt(_ws.auto_working_days||0),_tot=parseInt(_ws.working_days||0);
+              const _pct=_tot>0?Math.min(100,_el/_tot*100):null;
+              return _pct!==null?`<div style="position:absolute;top:-3px;left:${_pct.toFixed(1)}%;width:2px;height:11px;background:rgba(255,255,255,.85);border-radius:1px;transform:translateX(-50%)" title="${_el}/${_tot}天"></div>`:'';
+            })()}
+          </div>
+          <span style="font-size:12px;font-weight:800;color:${rCol};white-space:nowrap">${rate!==null?rate.toFixed(1)+'%':'—'}</span>
           </div>
           ${est>0?`<div style="display:flex;align-items:center;gap:5px;margin-bottom:10px">
             <div style="flex:1;background:#0f172a;border-radius:3px;height:3px"><div style="width:${estBarW}%;height:3px;background:${eCol};border-radius:3px;opacity:.7;background:repeating-linear-gradient(90deg,${eCol} 0,${eCol} 4px,transparent 4px,transparent 7px)"></div></div>
             <span style="font-size:11px;font-weight:700;color:${eCol};white-space:nowrap">預 ${estRate!==null?estRate.toFixed(1)+'%':'—'}</span>
           </div>`:''}
-
-${(()=>{
-            const ws=_wdSummary&&_wdSummary.find(r=>r.branch===br);
-            if(!ws||!fullWidth)return'';
-            const elapsed=parseInt(ws.auto_working_days||0),total=parseInt(ws.working_days||0);
-            const wdPct=total>0?elapsed/total*100:0;
-            const delta=rate!==null?rate-wdPct:null;
-            const dCol=delta===null?'#64748b':delta>=3?'#10b981':delta<=-5?'#ef4444':'#f59e0b';
-            const dText=delta!==null?(delta>=3?'🚀 +':delta<=-5?'⚠️ ':'')+delta.toFixed(1)+'%':'';
-            const wdFill=wdPct>=90?'#10b981':wdPct>=50?'#94a3b8':'#f59e0b';
-            const mt=est>0?5:9;
-            return`<div style="display:flex;align-items:center;gap:5px;margin-top:-${mt}px;margin-bottom:${mt}px">
-              <div style="flex:1;background:#0a1628;border-radius:0 0 3px 3px;height:3px;position:relative">
-                <div style="width:${Math.min(100,wdPct).toFixed(1)}%;height:3px;background:${wdFill};border-radius:3px;opacity:.8"></div>
-              </div>
-              <span style="font-size:9px;font-weight:700;color:${dCol};white-space:nowrap">📅 ${elapsed}/${total}天 ${dText}</span>
-            </div>`;
-          })()}
           <div style="display:grid;grid-template-columns:auto 1fr;gap:2px 8px;font-size:11px;color:#64748b;align-items:center">
             <span>目標</span><span style="text-align:right;color:#94a3b8;font-weight:600">${target>0?fmtK(target):'未設定'}</span>
             ${est>0?`<span style="color:${eCol}">預估</span><span style="text-align:right;color:${eCol};font-weight:700">${fmtK(est)}</span>`:''}
