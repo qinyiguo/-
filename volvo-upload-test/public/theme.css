@@ -366,3 +366,15 @@ body.light-theme [style*="background: #0d1b2e"] { background: #f0f6ff !important
 
 body.light-theme [style*="background:#0a1020"],
 body.light-theme [style*="background: #0a1020"] { background: #f8fafc !important; }
+
+/* ── 業績預估 Modal ── */
+body.light-theme [style*="background:#1a2740"],
+body.light-theme [style*="background: #1a2740"] { background: #ffffff !important; }
+body.light-theme [style*="border:#2d4060"],
+body.light-theme [style*="border: #2d4060"] { border-color: #e2e8f0 !important; }
+body.light-theme [style*="border:1px solid #2d4060"] { border-color: #e2e8f0 !important; }
+body.light-theme [style*="background:#0c1524"],
+body.light-theme [style*="background: #0c1524"] { background: #f8fafc !important; }
+body.light-theme [style*="background:#1e3050"] { background: #f1f5f9 !important; }
+body.light-theme [style*="border-color:#1e3050"] { border-color: #e2e8f0 !important; }
+body.light-theme [style*="color:#2d4060"] { color: #94a3b8 !important; }
