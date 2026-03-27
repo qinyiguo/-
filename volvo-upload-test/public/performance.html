@@ -643,7 +643,7 @@ async function loadRevenueKPI(period,branch){
   const _mk=_pct!==null?`
     <div style="position:absolute;top:-3px;left:${_pct.toFixed(1)}%;transform:translateX(-50%)">
       <div style="width:2px;height:11px;background:#374151;border-radius:1px;margin:0 auto"></div>
-      ${_dText?`<div style="position:absolute;bottom:14px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:9px;font-weight:800;color:${_dCol};background:${document.body.classList.contains('light-theme')?'rgba(30,41,59,.85)':'rgba(0,0,0,.65)'};color:#fff;padding:1px 4px;border-radius:3px">${_dText}</div>`:''}
+      ${_dText?`<div style="position:absolute;bottom:14px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:9px;font-weight:800;color:${_dCol};background:#ef4444;color:#fff;padding:1px 4px;border-radius:3px">${_dText}</div>`:''}
     </div>`:'';
   return`
     <div style="flex:1;background:#0f172a;border-radius:3px;height:5px;position:relative">
