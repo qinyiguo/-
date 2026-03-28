@@ -1598,6 +1598,7 @@ const WIP_STATUS_META = {
   '待客確認': { color:'#f97316', bg:'rgba(249,115,22,.15)',  icon:'📞', label:'待確認',   category:'watch',   cat_color:'#f97316' },
   '已可結帳': { color:'#ef4444', bg:'rgba(239,68,68,.15)',   icon:'💳', label:'應結帳！', category:'urgent',  cat_color:'#ef4444' },
   '暫緩':     { color:'#64748b', bg:'rgba(100,116,139,.15)', icon:'⏸️', label:'其他暫緩', category:'hold',    cat_color:'#64748b' },
+  '已結清':   { color:'#10b981', bg:'rgba(16,185,129,.12)',  icon:'✅', label:'已結清',   category:'done',    cat_color:'#10b981' },
   '未填寫':   { color:'#475569', bg:'rgba(71,85,105,.08)',   icon:'❓', label:'未標記',   category:'unknown', cat_color:'#475569' },
 };
 
@@ -1919,6 +1920,7 @@ function renderWipModal(){
     {v:'待修',     l:'⏳ 待修',  c:'#f59e0b'},
     {v:'待客確認', l:'📞 待確認', c:'#f97316'},
     {v:'暫緩',     l:'⏸️ 暫緩',  c:'#64748b'},
+    {v:'已結清',   l:'✅ 已結清', c:'#10b981'},
     {v:'未填寫',   l:'❓ 未標記', c:'#94a3b8'},
   ];
   const allRows=_wipData.rows;
