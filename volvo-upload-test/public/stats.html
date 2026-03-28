@@ -1672,37 +1672,76 @@ async function loadWip(period,branch){
     const filled =rows.length-unknown;
     const fillPct=rows.length>0?Math.round(filled/rows.length*100):0;
 
+   // 金額分組計算
+   const canSettleRows  = rows.filter(r=>(r.wip_status||'未填寫')==='已可結帳');
+   const cantSettleRows = rows.filter(r=>(r.wip_status||'未填寫')==='暫緩');
+   const within30Rows   = rows.filter(r=>(r.days||0)<=30);
+   const over30Rows     = rows.filter(r=>(r.days||0)>30);
+   
+   const canSettleAmt  = canSettleRows.reduce((s,r)=>s+(+r.sales||0),0);
+   const cantSettleAmt = cantSettleRows.reduce((s,r)=>s+(+r.sales||0),0);
+   const within30Amt   = within30Rows.reduce((s,r)=>s+(+r.sales||0),0);
+   const over30Amt     = over30Rows.reduce((s,r)=>s+(+r.sales||0),0);
+   const canSettleCnt  = canSettleRows.length;
+   const cantSettleCnt = cantSettleRows.length;
+   
     // KPI 大卡 + 狀態分類卡
 kpiEl.innerHTML=`
-<div style="display:grid;grid-template-columns:180px 1fr 120px 200px 220px;gap:10px;margin-bottom:16px;align-items:stretch">
-  <div style="background:linear-gradient(135deg,rgba(239,68,68,.18),rgba(239,68,68,.06));border:2px solid #ef4444;border-radius:12px;padding:16px;cursor:pointer;text-align:center;display:flex;flex-direction:column;justify-content:center" onclick="openWipModal('status','已可結帳')">
-    <div style="font-size:10px;font-weight:700;color:#ef4444;margin-bottom:4px">💳 應結帳</div>
-    <div style="font-size:48px;font-weight:900;color:#ef4444;line-height:1">${urgent}</div>
-    <div style="font-size:10px;color:#94a3b8;margin-top:4px">立即處理 →</div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px">
+  <!-- 應結帳 -->
+  <div style="background:linear-gradient(135deg,rgba(239,68,68,.18),rgba(239,68,68,.06));border:2px solid #ef4444;border-radius:12px;padding:16px;cursor:pointer" onclick="openWipModal('status','已可結帳')">
+    <div style="font-size:10px;font-weight:700;color:#ef4444;margin-bottom:6px">💳 應結帳（立即處理）</div>
+    <div style="font-size:42px;font-weight:900;color:#ef4444;line-height:1">${canSettleCnt}</div>
+    <div style="font-size:13px;color:#f87171;margin-top:6px;font-weight:600">${fmtK(canSettleAmt)} K</div>
+    <div style="font-size:10px;color:#94a3b8;margin-top:2px">點擊查看工單 →</div>
   </div>
+  <!-- 暫緩/無法結帳 -->
+  <div style="background:#1a2332;border:1px solid rgba(59,130,246,.4);border-radius:12px;padding:16px;cursor:pointer" onclick="openWipModal('status','暫緩')">
+    <div style="font-size:10px;font-weight:700;color:#3b82f6;margin-bottom:6px">⏸️ 暫緩（無法結帳）</div>
+    <div style="font-size:42px;font-weight:900;color:#3b82f6;line-height:1">${cantSettleCnt}</div>
+    <div style="font-size:13px;color:#60a5fa;margin-top:6px;font-weight:600">${fmtK(cantSettleAmt)} K</div>
+    <div style="font-size:10px;color:#64748b;margin-top:2px">佔總額 ${T.sales>0?Math.round(cantSettleAmt/T.sales*100):0}%</div>
+  </div>
+  <!-- 30天內 -->
+  <div style="background:#1a2332;border:1px solid rgba(16,185,129,.4);border-radius:12px;padding:16px">
+    <div style="font-size:10px;font-weight:700;color:#10b981;margin-bottom:6px">✅ 30天內</div>
+    <div style="font-size:42px;font-weight:900;color:#10b981;line-height:1">${within30Rows.length}</div>
+    <div style="font-size:13px;color:#34d399;margin-top:6px;font-weight:600">${fmtK(within30Amt)} K</div>
+    <div style="font-size:10px;color:#64748b;margin-top:2px">佔總件 ${T.count>0?Math.round(within30Rows.length/T.count*100):0}%</div>
+  </div>
+  <!-- 逾30天 -->
+  <div style="background:#1a2332;border:1px solid rgba(239,68,68,.4);border-radius:12px;padding:16px">
+    <div style="font-size:10px;font-weight:700;color:#ef4444;margin-bottom:6px">🔴 逾30天</div>
+    <div style="font-size:42px;font-weight:900;color:#ef4444;line-height:1">${T.cOver30}</div>
+    <div style="font-size:13px;color:#f87171;margin-top:6px;font-weight:600">${fmtK(over30Amt)} K</div>
+    <div style="font-size:10px;color:#64748b;margin-top:2px">佔總件 ${T.count>0?Math.round(T.cOver30/T.count*100):0}%</div>
+  </div>
+</div>
+<div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:16px">
+  <!-- WIP總覽 -->
   <div style="background:#1a2332;border:1px solid #2d3f56;border-radius:12px;padding:16px">
-    <div style="font-size:10px;font-weight:700;color:#94a3b8;margin-bottom:4px">📋 WIP 總件數</div>
-    <div style="font-size:32px;font-weight:900;color:#f97316;line-height:1;margin-bottom:8px">${T.count.toLocaleString()} <span style="font-size:12px;color:#64748b;font-weight:400">扣PDI: ${E.count}</span></div>
+    <div style="font-size:10px;font-weight:700;color:#94a3b8;margin-bottom:6px">📋 WIP 總件數</div>
+    <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px">
+      <span style="font-size:36px;font-weight:900;color:#f97316">${T.count.toLocaleString()}</span>
+      <span style="font-size:12px;color:#64748b">扣PDI: ${E.count}　預估: ${fmtK(T.sales)} K</span>
+    </div>
     <div style="display:flex;gap:5px;flex-wrap:wrap">
       <span style="font-size:11px;background:rgba(59,130,246,.15);color:#3b82f6;padding:3px 10px;border-radius:10px;cursor:pointer" onclick="openWipModal('status_group','hold')">⏸️ 暫緩 ${hold}</span>
       <span style="font-size:11px;background:rgba(245,158,11,.15);color:#f59e0b;padding:3px 10px;border-radius:10px;cursor:pointer" onclick="openWipModal('status_group','watch')">⚠️ 追蹤 ${watch}</span>
       <span style="font-size:11px;background:rgba(100,116,139,.15);color:#94a3b8;padding:3px 10px;border-radius:10px">❓ 未標記 ${unknown}</span>
     </div>
   </div>
-  <div style="background:#1a2332;border:1px solid rgba(239,68,68,.4);border-radius:12px;padding:16px;text-align:center;display:flex;flex-direction:column;justify-content:center">
-    <div style="font-size:10px;color:#ef4444;font-weight:700;margin-bottom:4px">🔴 逾30天</div>
-    <div style="font-size:32px;font-weight:900;color:#ef4444;line-height:1">${T.cOver30.toLocaleString()}</div>
-    <div style="font-size:10px;color:#64748b;margin-top:4px">30天內: ${T.c30}</div>
+  <!-- 預估總額 -->
+  <div style="background:#1a2332;border:1px solid rgba(139,92,246,.4);border-radius:12px;padding:16px;display:flex;flex-direction:column;justify-content:center">
+    <div style="font-size:10px;color:#8b5cf6;font-weight:700;margin-bottom:6px">💰 預估總額</div>
+    <div style="font-size:26px;font-weight:900;color:#8b5cf6">${fmtK(T.sales)}</div>
+    <div style="font-size:10px;color:#64748b;margin-top:4px">扣PDI: ${fmtK(E.sales)} K</div>
   </div>
-  <div style="background:#1a2332;border:1px solid rgba(139,92,246,.4);border-radius:12px;padding:16px;text-align:center;display:flex;flex-direction:column;justify-content:center">
-    <div style="font-size:10px;color:#8b5cf6;font-weight:700;margin-bottom:4px">💰 預估總額</div>
-    <div style="font-size:24px;font-weight:900;color:#8b5cf6;line-height:1">${fmtK(T.sales)}</div>
-    <div style="font-size:10px;color:#64748b;margin-top:4px">扣PDI: ${fmtK(E.sales)}K</div>
-  </div>
+  <!-- 填寫率 -->
   <div style="background:#1a2332;border:1px solid #2d3f56;border-radius:12px;padding:16px;display:flex;flex-direction:column;justify-content:center">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
       <span style="font-size:10px;color:#64748b;font-weight:700">📝 填寫率</span>
-      <span style="font-size:20px;font-weight:900;color:${fillPct>80?'#10b981':fillPct>50?'#f59e0b':'#ef4444'}">${fillPct}%</span>
+      <span style="font-size:22px;font-weight:900;color:${fillPct>80?'#10b981':fillPct>50?'#f59e0b':'#ef4444'}">${fillPct}%</span>
     </div>
     <div style="background:#0f172a;border-radius:4px;height:8px;margin-bottom:6px">
       <div style="width:${fillPct}%;height:8px;border-radius:4px;background:${fillPct>80?'#10b981':fillPct>50?'#f59e0b':'#ef4444'}"></div>
