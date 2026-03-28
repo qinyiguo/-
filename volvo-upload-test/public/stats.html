@@ -1772,55 +1772,81 @@ const _wa = v => { const nv=parseFloat(v||0); return nv>0 ? fmtK(nv) : '—'; };
       <span style="color:#64748b;font-size:12px">載入上月資料中...</span>
     </div>`;
 
- // 載入上月比較
+// 載入上月比較
 loadWipLastMonthComparison();
   async function loadWipLastMonthComparison() {
   const lmEl = document.getElementById('wip-last-month-card');
   if (!lmEl) return;
-  lmEl.innerHTML = `<span style="color:#64748b;font-size:12px">載入中...</span>`;
+  lmEl.innerHTML = `<div style="padding:8px;color:#64748b;font-size:12px"><span class="spinner"></span> 載入中...</div>`;
 
-  const branch = document.getElementById('branchSelect')?.value || '全部';
-  const params = branch !== '全部' ? `?branch=${encodeURIComponent(branch)}` : '';
+  const selBranch = document.getElementById('selBranch')?.value || '';
+  const BRANCHES  = selBranch && ['AMA','AMC','AMD'].includes(selBranch) ? [selBranch] : ['AMA','AMC','AMD'];
+  const brColors  = { AMA:'#3b82f6', AMC:'#10b981', AMD:'#f59e0b' };
+  const brAlpha   = { AMA:'59,130,246', AMC:'16,185,129', AMD:'245,158,11' };
+  const _fk = v  => { const nv=parseFloat(v||0); if(!nv)return'—'; return nv>=1000?Math.round(nv/1000).toLocaleString()+'K':Math.round(nv).toLocaleString(); };
+  const rCol = r => r>=90?'#10b981':r>=70?'#f59e0b':'#ef4444';
+
+  const buildCol = (d, label, col, alpha, big) => {
+    if (!d||!d.ok) return `<div style="flex:1;min-width:0;background:#1a2332;border:1px solid #2d3f56;border-radius:10px;padding:14px;text-align:center"><div style="font-size:12px;font-weight:800;color:${col};margin-bottom:8px">${label}</div><div style="color:#475569;font-size:11px">無資料</div></div>`;
+    const rc = rCol(d.rate);
+    const numSz = big ? '26px' : '20px';
+    const amtSz = big ? '14px' : '12px';
+    return `
+      <div style="flex:1;min-width:0;background:rgba(${alpha},.07);border:${big?'2px':'1px'} solid ${col}${big?'':44};border-radius:10px;padding:14px">
+        <div style="font-size:12px;font-weight:900;color:${col};margin-bottom:12px;text-align:center">${label}</div>
+        <div style="text-align:center;padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid rgba(255,255,255,.06)">
+          <div style="font-size:9px;color:#64748b;margin-bottom:3px">進廠台數</div>
+          <div style="font-size:${numSz};font-weight:900;color:#e2e8f0;line-height:1">${d.total.toLocaleString()}</div>
+        </div>
+        <div style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.25);border-radius:7px;padding:8px 10px;margin-bottom:7px">
+          <div style="font-size:9px;color:#10b981;font-weight:700;margin-bottom:4px">✅ 已結清</div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
+            <span style="font-size:${numSz};font-weight:900;color:#10b981;line-height:1">${d.settled.toLocaleString()}</span>
+            <span style="font-size:${amtSz};font-weight:800;color:#34d399">${_fk(d.settledAmt)}</span>
+          </div>
+        </div>
+        <div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);border-radius:7px;padding:8px 10px;margin-bottom:10px">
+          <div style="font-size:9px;color:#f59e0b;font-weight:700;margin-bottom:4px">⏳ 仍未結</div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
+            <span style="font-size:${numSz};font-weight:900;color:#f59e0b;line-height:1">${d.stillWip.toLocaleString()}</span>
+            <span style="font-size:${amtSz};font-weight:800;color:#fbbf24">${_fk(d.stillAmt)}</span>
+          </div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:9px;color:#64748b">結清率</span>
+            <span style="font-size:${big?'20px':'16px'};font-weight:900;color:${rc}">${d.rate}%</span>
+          </div>
+          <div style="background:#0f172a;border-radius:3px;height:5px">
+            <div style="width:${d.rate}%;height:5px;border-radius:3px;background:${rc};transition:width .5s"></div>
+          </div>
+        </div>
+      </div>`;
+  };
+
   try {
-    const d = await fetch(`/api/stats/wip/last-month-comparison${params}`).then(r=>r.json());
-    if (!d.ok) throw new Error(d.error);
+    const [totalData, ...brData] = await Promise.all([
+      fetch('/api/stats/wip/last-month-comparison').then(r=>r.json()),
+      ...BRANCHES.map(br => fetch(`/api/stats/wip/last-month-comparison?branch=${br}`).then(r=>r.json()))
+    ]);
+    if (!totalData.ok) throw new Error(totalData.error);
 
-    const lm = d.lmPrefix; // '202602'
+    const lm = totalData.lmPrefix;
     const lmLabel = `${lm.slice(0,4)}年${parseInt(lm.slice(4))}月`;
-    const stillPct = d.total > 0 ? Math.round(d.stillWip / d.total * 100) : 0;
-    const fmtK = v => (v/1000).toFixed(0);
+
+    const totalCol = buildCol(totalData, '🏢 集團合計', '#f97316', '249,115,22', true);
+    const brCols   = BRANCHES.map((br,i) => buildCol(brData[i], br, brColors[br], brAlpha[br], false)).join('');
 
     lmEl.innerHTML = `
-      <div style="font-size:10px;font-weight:700;color:#94a3b8;margin-bottom:8px">📅 上月（${lmLabel}）結清狀況</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-        <div style="text-align:center">
-          <div style="font-size:10px;color:#64748b;margin-bottom:2px">進廠總數</div>
-          <div style="font-size:20px;font-weight:700;color:#e2e8f0">${d.total.toLocaleString()}</div>
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:10px;color:#10b981;margin-bottom:2px">✅ 已結清</div>
-          <div style="font-size:20px;font-weight:700;color:#10b981">${d.settled.toLocaleString()}</div>
-          <div style="font-size:10px;color:#64748b">${fmtK(d.settledAmt)} K</div>
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:10px;color:#f59e0b;margin-bottom:2px">⏳ 仍未結</div>
-          <div style="font-size:20px;font-weight:700;color:#f59e0b">${d.stillWip.toLocaleString()}</div>
-          <div style="font-size:10px;color:#64748b">${fmtK(d.stillAmt)} K</div>
-        </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <span style="font-size:14px;font-weight:800;color:#e2e8f0">📅 上月（${lmLabel}）結清狀況</span>
+        <span style="font-size:11px;color:#64748b">各據點分組比較</span>
       </div>
-      <div style="margin-top:10px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-          <span style="font-size:10px;color:#64748b">結清率</span>
-          <span style="font-size:13px;font-weight:700;color:${d.rate>=90?'#10b981':d.rate>=70?'#f59e0b':'#ef4444'}">${d.rate}%</span>
-        </div>
-        <div style="background:#0f172a;border-radius:4px;height:8px">
-          <div style="width:${d.rate}%;height:8px;border-radius:4px;background:${d.rate>=90?'#10b981':d.rate>=70?'#f59e0b':'#ef4444'}"></div>
-        </div>
-        <div style="font-size:10px;color:#64748b;margin-top:4px">仍滯留 ${stillPct}% 工單未結帳</div>
-      </div>
-    `;
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${totalCol}${brCols}
+      </div>`;
   } catch(e) {
-    lmEl.innerHTML = `<span style="color:#ef4444;font-size:11px">載入失敗: ${e.message}</span>`;
+    lmEl.innerHTML = `<span style="color:#ef4444;font-size:11px">❌ 載入失敗: ${e.message}</span>`;
   }
 }
    
