@@ -2079,13 +2079,13 @@ function renderWipModal(){
       </td>
     </tr>
     <tr id="wipStatusEditRow-${r.work_order}-${brKey}" style="display:none">
-      <td colspan="11" style="padding:0;background:${C.bgEdit};border-bottom:2px solid ${C.borderEd}">
+        <td colspan="12" style="padding:0;background:${C.bgEdit};border-bottom:2px solid ${C.borderEd}">
         <div id="wipStatusEditPanel-${r.work_order}-${brKey}" style="padding:12px 20px"></div>
       </td>
     </tr>`;
   });
 
-  if(!filtered.length) html+=`<tr><td colspan="11"
+  if (!filtered.length) html+=`<tr><td colspan="12"
     style="padding:36px;text-align:center;color:${C.textDim};font-size:13px">
     ${searchQ||saFilter?'🔍 無符合條件的工單':'無工單資料'}
   </td></tr>`;
