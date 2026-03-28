@@ -1746,10 +1746,6 @@ async function loadWip(period,branch){
     <div id="wip-last-month-card" style="background:#1a2332;border:1px solid #2d3f56;border-radius:12px;padding:16px;margin-bottom:16px">
       <span style="color:#64748b;font-size:12px">載入上月資料中...</span>
     </div>`;
-const lmCard = document.createElement('div');
-lmCard.id = 'wip-last-month-card';
-lmCard.style.cssText = 'background:#1a2332;border:1px solid #2d3f56;border-radius:12px;padding:16px;margin-bottom:16px';
-kpiEl.appendChild(lmCard);
 
  // 載入上月比較
 loadWipLastMonthComparison();
@@ -1761,7 +1757,7 @@ loadWipLastMonthComparison();
   const branch = document.getElementById('branchSelect')?.value || '全部';
   const params = branch !== '全部' ? `?branch=${encodeURIComponent(branch)}` : '';
   try {
-    const d = await fetch(`/stats/wip/last-month-comparison${params}`).then(r=>r.json());
+    const d = await fetch(`/api/stats/wip/last-month-comparison${params}`).then(r=>r.json());
     if (!d.ok) throw new Error(d.error);
 
     const lm = d.lmPrefix; // '202602'
