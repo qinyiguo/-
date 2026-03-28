@@ -1627,14 +1627,31 @@ async function loadWip(period,branch){
    _wipData.rows=_wipData.rows.filter(r=>(r.wip_status||'未填寫')!=='已結清');
 
     // 將狀態合併到 rows
-    _wipData.rows.forEach(row=>{
-      const key=`${row.work_order}|||${row.branch}`;
-      const saved=_wipStatusMap[key];
-      row.wip_status    = saved ? saved.wip_status   : (row.wip_status || '未填寫');
-      row.wip_reason    = saved ? saved.reason        : (row.wip_reason || '');
-      row.eta_date      = saved ? saved.eta_date      : row.eta_date;
-      row.wip_updated_by= saved ? saved.updated_by    : '';
-    });
+   _wipData.rows = _wipData.rows.filter(r => (r.wip_status||'未填寫') !== '已結清');
+   
+   const _ZERO = () => ({ count:0,wage:0,mat:0,sales:0,c30:0,cOver30:0,wage30:0,mat30:0,sales30:0 });
+   const _rebuildSummary = (filteredRows) => {
+     const byRT={},byPer={},byBr={};
+     let tot=_ZERO(),excl=_ZERO();
+     filteredRows.forEach(row=>{
+       const rt=row.repair_type||'（未知）', per=row.open_period||'（未知）', br=row.branch||'（未知）';
+       const w=parseFloat(row.wage||0), m=parseFloat(row.cost_amt||0), s=parseFloat(row.sales_amt||0);
+       const days=row.days_open!=null?parseFloat(row.days_open):null, over=days!=null&&days>30;
+       const isPdi=/PDI/i.test(row.repair_type||'')||/PDI/i.test(row.repair_item||'');
+       const inc=(obj)=>{obj.count++;obj.wage+=w;obj.mat+=m;obj.sales+=s;if(days!=null){if(over)obj.cOver30++;else{obj.c30++;obj.wage30+=w;obj.mat30+=m;obj.sales30+=s;}}};
+       if(!byRT[rt])byRT[rt]={label:rt,..._ZERO()};inc(byRT[rt]);
+       if(!byPer[per])byPer[per]={label:per,..._ZERO()};inc(byPer[per]);
+       if(!byBr[br])byBr[br]={label:br,..._ZERO()};inc(byBr[br]);
+       inc(tot);if(!isPdi)inc(excl);row.is_pdi=isPdi;
+     });
+     return {
+       total:tot,exclPdi:excl,
+       byAccountType:Object.values(byPer).sort((a,b)=>a.label<b.label?-1:1),
+       byRepairType:Object.values(byRT).sort((a,b)=>b.count-a.count),
+       byBranch:Object.values(byBr).sort((a,b)=>a.label<b.label?-1:1),
+     };
+   };
+   data.summary = _rebuildSummary(_wipData.rows);
 
     const{rows,summary}=data;
     const{total,exclPdi,byAccountType,byRepairType}=summary;
