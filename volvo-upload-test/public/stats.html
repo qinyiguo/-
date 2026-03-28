@@ -1748,7 +1748,63 @@ kpiEl.innerHTML=`
     </div>
     <div style="font-size:10px;color:#64748b">${filled} / ${rows.length} 件已標記</div>
   </div>
-</div>`;
+</div>`
+const lmCard = document.createElement('div');
+lmCard.id = 'wip-last-month-card';
+lmCard.style.cssText = 'background:#1a2332;border:1px solid #2d3f56;border-radius:12px;padding:16px;margin-bottom:16px';
+kpiEl.appendChild(lmCard);
+
+ // 載入上月比較
+loadWipLastMonthComparison();
+  async function loadWipLastMonthComparison() {
+  const lmEl = document.getElementById('wip-last-month-card');
+  if (!lmEl) return;
+  lmEl.innerHTML = `<span style="color:#64748b;font-size:12px">載入中...</span>`;
+
+  const branch = document.getElementById('branchSelect')?.value || '全部';
+  const params = branch !== '全部' ? `?branch=${encodeURIComponent(branch)}` : '';
+  try {
+    const d = await fetch(`/stats/wip/last-month-comparison${params}`).then(r=>r.json());
+    if (!d.ok) throw new Error(d.error);
+
+    const lm = d.lmPrefix; // '202602'
+    const lmLabel = `${lm.slice(0,4)}年${parseInt(lm.slice(4))}月`;
+    const stillPct = d.total > 0 ? Math.round(d.stillWip / d.total * 100) : 0;
+    const fmtK = v => (v/1000).toFixed(0);
+
+    lmEl.innerHTML = `
+      <div style="font-size:10px;font-weight:700;color:#94a3b8;margin-bottom:8px">📅 上月（${lmLabel}）結清狀況</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div style="text-align:center">
+          <div style="font-size:10px;color:#64748b;margin-bottom:2px">進廠總數</div>
+          <div style="font-size:20px;font-weight:700;color:#e2e8f0">${d.total.toLocaleString()}</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:10px;color:#10b981;margin-bottom:2px">✅ 已結清</div>
+          <div style="font-size:20px;font-weight:700;color:#10b981">${d.settled.toLocaleString()}</div>
+          <div style="font-size:10px;color:#64748b">${fmtK(d.settledAmt)} K</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:10px;color:#f59e0b;margin-bottom:2px">⏳ 仍未結</div>
+          <div style="font-size:20px;font-weight:700;color:#f59e0b">${d.stillWip.toLocaleString()}</div>
+          <div style="font-size:10px;color:#64748b">${fmtK(d.stillAmt)} K</div>
+        </div>
+      </div>
+      <div style="margin-top:10px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="font-size:10px;color:#64748b">結清率</span>
+          <span style="font-size:13px;font-weight:700;color:${d.rate>=90?'#10b981':d.rate>=70?'#f59e0b':'#ef4444'}">${d.rate}%</span>
+        </div>
+        <div style="background:#0f172a;border-radius:4px;height:8px">
+          <div style="width:${d.rate}%;height:8px;border-radius:4px;background:${d.rate>=90?'#10b981':d.rate>=70?'#f59e0b':'#ef4444'}"></div>
+        </div>
+        <div style="font-size:10px;color:#64748b;margin-top:4px">仍滯留 ${stillPct}% 工單未結帳</div>
+      </div>
+    `;
+  } catch(e) {
+    lmEl.innerHTML = `<span style="color:#ef4444;font-size:11px">載入失敗: ${e.message}</span>`;
+  }
+}
    
     // 狀態分布圖
     const statusBarHtml = Object.entries(statusCounts)
