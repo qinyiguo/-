@@ -829,7 +829,7 @@ router.get('/stats/sa-paid-revenue', async (req, res) => {
 });
 
 // WIP 上月結清率比較
-router.get('/wip/last-month-comparison', async (req, res) => {
+router.get('/stats/wip/last-month-comparison', async (req, res) => {
   const { branch } = req.query;
   try {
     const now = new Date();
