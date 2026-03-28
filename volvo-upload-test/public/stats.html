@@ -1674,58 +1674,46 @@ async function loadWip(period,branch){
 
     // KPI 大卡 + 狀態分類卡
 kpiEl.innerHTML=`
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-    <div style="background:linear-gradient(135deg,rgba(239,68,68,.15),rgba(239,68,68,.05));border:2px solid #ef4444;border-radius:12px;padding:18px 20px;cursor:pointer;display:flex;align-items:center;gap:16px" onclick="openWipModal('status','已可結帳')">
-      <div style="font-size:40px">💳</div>
+  <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+    <!-- 應結帳大卡 -->
+    <div style="background:linear-gradient(135deg,rgba(239,68,68,.18),rgba(239,68,68,.06));border:2px solid #ef4444;border-radius:12px;padding:20px 24px;cursor:pointer;display:flex;align-items:center;gap:16px;min-width:220px;flex:1" onclick="openWipModal('status','已可結帳')">
+      <div style="font-size:48px;line-height:1">💳</div>
       <div>
-        <div style="font-size:12px;font-weight:700;color:#ef4444;margin-bottom:4px">應結帳清單 — 立即處理！</div>
-        <div style="font-size:36px;font-weight:900;color:#ef4444;line-height:1">${urgent}</div>
-        <div style="font-size:11px;color:#64748b;margin-top:3px">點擊查看工單 →</div>
+        <div style="font-size:12px;font-weight:700;color:#ef4444;margin-bottom:4px">應結帳 — 立即處理！</div>
+        <div style="font-size:44px;font-weight:900;color:#ef4444;line-height:1">${urgent}</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:4px">點擊查看工單清單 →</div>
       </div>
     </div>
-    <div style="background:#1a2332;border:1px solid #2d3f56;border-radius:12px;padding:18px 20px;display:flex;align-items:center;gap:16px">
-      <div style="font-size:40px">📋</div>
-      <div style="flex:1">
-        <div style="font-size:12px;font-weight:700;color:#94a3b8;margin-bottom:8px">WIP 總件數</div>
-        <div style="font-size:32px;font-weight:900;color:#f97316;line-height:1">${T.count.toLocaleString()}</div>
-        <div style="font-size:11px;color:#64748b;margin-top:3px">扣PDI: ${E.count} 件</div>
-        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-          <span style="font-size:10px;background:rgba(59,130,246,.15);color:#3b82f6;padding:2px 8px;border-radius:10px">暫緩 ${hold}</span>
-          <span style="font-size:10px;background:rgba(245,158,11,.15);color:#f59e0b;padding:2px 8px;border-radius:10px">追蹤 ${watch}</span>
-          <span style="font-size:10px;background:rgba(100,116,139,.15);color:#94a3b8;padding:2px 8px;border-radius:10px">未標記 ${unknown}</span>
-        </div>
+    <!-- WIP 總覽卡 -->
+    <div style="background:#1a2332;border:1px solid #2d3f56;border-radius:12px;padding:20px 24px;min-width:220px;flex:1">
+      <div style="font-size:12px;font-weight:700;color:#94a3b8;margin-bottom:6px">WIP 總件數</div>
+      <div style="font-size:36px;font-weight:900;color:#f97316;margin-bottom:8px">${T.count.toLocaleString()} <span style="font-size:14px;color:#64748b">扣PDI: ${E.count}</span></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <span style="font-size:11px;background:rgba(59,130,246,.15);color:#3b82f6;padding:3px 10px;border-radius:10px;cursor:pointer" onclick="openWipModal('status_group','hold')">暫緩 ${hold}</span>
+        <span style="font-size:11px;background:rgba(245,158,11,.15);color:#f59e0b;padding:3px 10px;border-radius:10px;cursor:pointer" onclick="openWipModal('status_group','watch')">追蹤 ${watch}</span>
+        <span style="font-size:11px;background:rgba(100,116,139,.15);color:#94a3b8;padding:3px 10px;border-radius:10px">未標記 ${unknown}</span>
       </div>
     </div>
   </div>
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
-    <div class="kpi-card" style="border-color:#3b82f6">
-      <div class="kpi-label" style="color:#3b82f6">⏸️ 暫緩有因</div>
-      <div class="kpi-value kpi-blue">${hold}</div>
-      <div class="kpi-sub">等料/施工中/暫緩</div>
-    </div>
-    <div class="kpi-card" style="border-color:#f59e0b;cursor:pointer" onclick="openWipModal('status_group','watch')">
-      <div class="kpi-label" style="color:#f59e0b">⚠️ 需追蹤</div>
-      <div class="kpi-value kpi-yellow">${watch}</div>
-      <div class="kpi-sub">待修/待客確認</div>
-    </div>
-    <div class="kpi-card" style="border-color:#ef4444">
+  <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+    <div class="kpi-card" style="border-color:#ef4444;flex:1;min-width:130px">
       <div class="kpi-label" style="color:#ef4444">🔴 逾30天</div>
       <div class="kpi-value kpi-red">${T.cOver30.toLocaleString()}</div>
-      <div class="kpi-sub">30天內: ${T.c30} | 扣PDI逾30: ${E.cOver30}</div>
+      <div class="kpi-sub">30天內: ${T.c30}</div>
     </div>
-    <div class="kpi-card" style="border-color:#8b5cf6">
+    <div class="kpi-card" style="border-color:#8b5cf6;flex:1;min-width:130px">
       <div class="kpi-label" style="color:#8b5cf6">💰 預估總額</div>
       <div class="kpi-value kpi-purple">${fmtK(T.sales)}</div>
       <div class="kpi-sub">扣PDI: ${fmtK(E.sales)}K</div>
     </div>
-  </div>
-  <div style="background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:10px 14px;margin-bottom:4px;display:flex;align-items:center;gap:8px">
-    <span style="font-size:11px;color:#475569">填寫率</span>
-    <div style="flex:1;background:#1e293b;border-radius:4px;height:8px">
-      <div style="width:${fillPct}%;height:8px;border-radius:4px;background:${fillPct>80?'#10b981':fillPct>50?'#f59e0b':'#ef4444'};transition:width .5s"></div>
+    <div class="kpi-card" style="flex:1;min-width:130px">
+      <div class="kpi-label">📝 填寫率</div>
+      <div class="kpi-value" style="color:${fillPct>80?'#10b981':fillPct>50?'#f59e0b':'#ef4444'}">${fillPct}%</div>
+      <div class="kpi-sub">${filled} / ${rows.length} 件已標記</div>
+      <div style="background:#0f172a;border-radius:3px;height:4px;margin-top:6px">
+        <div style="width:${fillPct}%;height:4px;border-radius:3px;background:${fillPct>80?'#10b981':fillPct>50?'#f59e0b':'#ef4444'}"></div>
+      </div>
     </div>
-    <span style="font-size:12px;font-weight:800;color:${fillPct>80?'#10b981':fillPct>50?'#f59e0b':'#ef4444'}">${fillPct}%</span>
-    <span style="font-size:11px;color:#64748b">已標記 ${filled} / ${rows.length} 件</span>
   </div>`;
 
     // 狀態分布圖
