@@ -845,7 +845,7 @@ router.get('/stats/wip/last-month-comparison', async (req, res) => {
         SELECT COUNT(*) AS total
         FROM business_query bq
         WHERE TO_CHAR(bq.open_time, 'YYYYMM') = '${lmPrefix}'
-          AND COALESCE(bq.account_type,'') NOT IN ('PV','外賣訂單')
+          AND COALESCE(bq.repair_type,'') NOT ILIKE '%PV%'
           ${branchCond}
       `, params),
       pool.query(`
@@ -854,15 +854,15 @@ router.get('/stats/wip/last-month-comparison', async (req, res) => {
         FROM business_query bq
         JOIN repair_income ri ON ri.work_order = bq.work_order AND ri.branch = bq.branch
         WHERE TO_CHAR(bq.open_time, 'YYYYMM') = '${lmPrefix}'
-          AND COALESCE(bq.account_type,'') NOT IN ('PV','外賣訂單')
+          AND COALESCE(bq.repair_type,'') NOT ILIKE '%PV%'
           ${branchCond}
       `, params),
       pool.query(`
         SELECT COUNT(*) AS still_wip,
-               COALESCE(SUM(bq.sales), 0) AS still_wip_amt
+               COALESCE(SUM(bq.repair_amount), 0) AS still_wip_amt
         FROM business_query bq
         WHERE TO_CHAR(bq.open_time, 'YYYYMM') = '${lmPrefix}'
-          AND COALESCE(bq.account_type,'') NOT IN ('PV','外賣訂單')
+          AND COALESCE(bq.repair_type,'') NOT ILIKE '%PV%'
           AND NOT EXISTS (
             SELECT 1 FROM repair_income ri
             WHERE ri.work_order = bq.work_order AND ri.branch = bq.branch
