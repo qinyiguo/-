@@ -28,8 +28,8 @@ router.get('/wip/status', async (req, res) => {
           WHERE ri.work_order = bq.work_order
             AND ri.branch     = bq.branch
         )
-        AND COALESCE(wsn.wip_status, '未填寫') != '已結清'
-      ORDER BY bq.branch, bq.open_time NULLS LAST, bq.work_order
+      )
+      AND COALESCE(wsn.wip_status, '未填寫') != '已結清'
     `, params);
 
     // 回傳為 { work_order|||branch: {...} } 格式方便前端查詢
