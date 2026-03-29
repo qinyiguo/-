@@ -153,7 +153,22 @@ body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background:
     <div id="rosterAlerts"></div>
     <div id="rosterTree"><div class="loading"><span class="spinner"></span>載入中</div></div>
   </div>
-  <div id="tab-progress" style="display:none">
+<div id="tab-progress" style="display:none">
+    <!-- ══ 促銷獎金獨立設定 ══ -->
+    <div style="background:#1a2332;border:1px solid #2d3f56;border-radius:12px;margin-bottom:14px;overflow:hidden">
+      <div style="background:linear-gradient(135deg,rgba(16,185,129,.1),rgba(16,185,129,.04));padding:14px 20px;display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none" onclick="togglePromoSection()">
+        <span id="promoSectionArrow" style="font-size:11px;color:#10b981;display:inline-block;transition:transform .2s">▶</span>
+        <span style="font-size:14px;font-weight:800;color:#10b981">🎁 促銷獎金設定</span>
+        <span id="promoConfigCount" style="font-size:12px;color:#64748b;background:#0f172a;padding:2px 10px;border-radius:10px"></span>
+        <button onclick="event.stopPropagation();openPromoModal(null)"
+          style="margin-left:auto;padding:5px 14px;background:#10b981;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">
+          ＋ 新增規則
+        </button>
+      </div>
+      <div id="promoSectionBody" style="display:none;padding:14px 20px">
+        <div id="promoConfigList"><div class="loading"><span class="spinner"></span>載入中</div></div>
+      </div>
+    </div>
     <div id="progressContent"><div class="empty">請先選擇期間後按查詢</div></div>
   </div>
 </div>
@@ -197,14 +212,6 @@ body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background:
       </div>
     <div class="form-group"><label>說明</label><input type="text" id="mDesc" class="form-input" placeholder="（選填）"></div>
     
-    <!-- ══ 獎金頁籤 ══ -->
-    <div style="display:flex;gap:2px;background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:3px;width:fit-content;margin:10px 0 14px">
-      <button id="bonusTab-perf" onclick="_switchBonusTab('perf')"
-        style="padding:7px 20px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:#3b82f6;color:#fff">🏆 績效獎金</button>
-      <button id="bonusTab-promo" onclick="_switchBonusTab('promo')"
-        style="padding:7px 20px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b">🎁 促銷獎金</button>
-    </div>
-
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="form-group">
           <label>目標範圍</label>
@@ -344,52 +351,6 @@ body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background:
   </div>
 </div>
 
-<!-- ══ 頁籤二：促銷獎金 ══ -->
-<div id="bonusTabPanel-promo" style="display:none">
-  <div class="section-label">🎁 促銷獎金規則</div>
-  <div style="background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:12px 14px;margin-bottom:14px">
-    <div style="font-size:12px;color:#64748b;line-height:1.7;margin-bottom:12px">
-      不需設定目標或部門，依業績指標自動計算。<strong style="color:#94a3b8">與達成率階梯獨立計算、累加後為總獎金</strong>。
-    </div>
-    <div id="mPromoRulesWrap" style="margin-bottom:12px">
-      <div style="color:#475569;font-size:12px;padding:6px 0">尚未設定促銷獎金</div>
-    </div>
-
-    <!-- 數量型 -->
-    <div style="background:#1e293b;border:1px solid #f59e0b44;border-radius:7px;padding:10px 12px;margin-bottom:8px">
-      <div style="font-size:11px;color:#f59e0b;font-weight:700;margin-bottom:8px">📦 數量型：每賣出 N 件/筆 給固定獎金</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <select id="mPromoCfgSel" class="form-select" style="flex:1;min-width:130px">
-          <option value="">選擇業績指標...</option>
-        </select>
-        <span style="font-size:11px;color:#64748b">每</span>
-        <input type="number" id="mPromoPerQty" value="1" min="1" step="1"
-          style="width:52px;background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:5px 6px;border-radius:5px;font-size:12px;text-align:center;outline:none">
-        <span style="font-size:11px;color:#64748b">件</span>
-        <input type="number" id="mPromoBonus" placeholder="獎金元" min="0" step="1"
-          style="width:80px;background:#0f172a;border:1px solid #f59e0b;color:#f59e0b;padding:5px 8px;border-radius:5px;font-size:13px;font-weight:700;text-align:right;outline:none">
-        <span style="font-size:11px;color:#64748b">元/件</span>
-        <button class="btn btn-secondary btn-sm" onclick="addPromoRuleQty()" style="white-space:nowrap;border-color:#f59e0b;color:#f59e0b">加入</button>
-      </div>
-    </div>
-
-    <!-- 比例型 -->
-    <div style="background:#1e293b;border:1px solid #8b5cf644;border-radius:7px;padding:10px 12px">
-      <div style="font-size:11px;color:#8b5cf6;font-weight:700;margin-bottom:8px">💎 比例型：銷售實績金額 × %（適合精品/配件）</div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <select id="mPromoPctSel" class="form-select" style="flex:1;min-width:130px">
-          <option value="">選擇業績指標...</option>
-        </select>
-        <span style="font-size:11px;color:#64748b">銷售額</span>
-        <input type="number" id="mPromoPct" placeholder="%" min="0" max="100" step="0.1"
-          style="width:60px;background:#0f172a;border:1px solid #8b5cf6;color:#8b5cf6;padding:5px 8px;border-radius:5px;font-size:13px;font-weight:700;text-align:right;outline:none">
-        <span style="font-size:11px;color:#64748b">%</span>
-        <button class="btn btn-secondary btn-sm" onclick="addPromoRulePct()" style="white-space:nowrap;border-color:#8b5cf6;color:#8b5cf6">加入</button>
-      </div>
-      <div style="font-size:10px;color:#475569;margin-top:5px">💡 若有設定職稱，可在上方規則列表中對每個職稱設定不同百分比</div>
-    </div>
-  </div>
-</div>
         <input type="text" id="mRuleNote" class="form-input" placeholder="例：需同時達成服務滿意度 ≥ 90 分">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -400,6 +361,102 @@ body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background:
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('metricModal')">取消</button>
       <button class="btn btn-primary" id="btnSaveMetric" onclick="saveMetric()">儲存指標</button>
+    </div>
+  </div>
+</div>
+
+  <!-- 促銷獎金設定 Modal -->
+<div class="modal-bd" id="promoModal">
+  <div class="modal-win" style="max-width:640px">
+    <div class="modal-head">
+      <div class="modal-title" id="promoModalTitle">新增促銷獎金規則</div>
+      <button class="modal-close" onclick="closeModal('promoModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div class="form-group">
+          <label>規則名稱 <span style="color:#ef4444">*</span></label>
+          <input type="text" id="pmRuleName" class="form-input" placeholder="例：精品折扣獎金">
+        </div>
+        <div class="form-group">
+          <label>規則類型</label>
+          <select id="pmRuleType" class="form-select" onchange="onPmRuleTypeChange()">
+            <option value="sa_qty">📦 數量型（依指標銷售件數）</option>
+            <option value="parts_discount">💎 折扣型（精品/配件折扣區間）</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- SA qty fields -->
+      <div id="pmSaArea">
+        <div class="section-label">📦 數量型設定</div>
+        <div style="background:#1e293b;border:1px solid #f59e0b44;border-radius:8px;padding:12px 14px;margin-bottom:12px">
+          <div class="form-group">
+            <label>連結指標銷售品項</label>
+            <select id="pmSaConfigId" class="form-select"><option value="">選擇...</option></select>
+            <div style="font-size:11px;color:#64748b;margin-top:4px">來自「各廠明細 → 指標銷售」的設定</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="form-group">
+              <label>每幾件觸發</label>
+              <input type="number" id="pmPerQty" class="form-input" value="1" min="1" step="1" placeholder="1">
+            </div>
+            <div class="form-group">
+              <label>每件獎金（元）</label>
+              <input type="number" id="pmBonusUnit" class="form-input" value="0" min="0" step="1" placeholder="獎金元/件">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Parts discount fields -->
+      <div id="pmDiscArea" style="display:none">
+        <div class="section-label">💎 折扣型設定（parts_sales × parts_catalog）</div>
+        <div style="background:#1e293b;border:1px solid #8b5cf644;border-radius:8px;padding:12px 14px;margin-bottom:12px">
+          <div class="form-group">
+            <label>品項類型（parts_catalog.part_type）</label>
+            <div id="pmCatalogTypes" style="display:flex;flex-wrap:wrap;gap:3px;background:#0f172a;border:1px solid #2d3f56;border-radius:7px;padding:8px 10px;min-height:40px"></div>
+          </div>
+          <div class="form-group">
+            <label>帳類篩選（parts_sales.part_type / Paycode，留空=全部）</label>
+            <div id="pmPaycodes" style="display:flex;flex-wrap:wrap;gap:3px;background:#0f172a;border:1px solid #2d3f56;border-radius:7px;padding:8px 10px;min-height:40px"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div class="form-group">
+              <label>折扣率下限（0~1）</label>
+              <input type="number" id="pmDiscMin" class="form-input" placeholder="例：0.85" min="0" max="1" step="0.01">
+              <div style="font-size:11px;color:#64748b">留空=不限</div>
+            </div>
+            <div class="form-group">
+              <label>折扣率上限（0~1）</label>
+              <input type="number" id="pmDiscMax" class="form-input" placeholder="例：0.99" min="0" max="1" step="0.01">
+              <div style="font-size:11px;color:#64748b">留空=不限</div>
+            </div>
+            <div class="form-group">
+              <label>獎金比例（%）</label>
+              <input type="number" id="pmBonusPct" class="form-input" placeholder="例：5" min="0" max="100" step="0.1">
+              <div style="font-size:11px;color:#64748b">銷售金額 × %</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group">
+          <label>排列順序</label>
+          <input type="number" id="pmSortOrder" class="form-input" value="0" min="0">
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="pmActive" checked style="accent-color:#10b981;width:16px;height:16px">
+            <span>啟用此規則</span>
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('promoModal')">取消</button>
+      <button class="btn btn-primary" id="pmBtnSave" onclick="savePromoCfg()">💾 儲存規則</button>
     </div>
   </div>
 </div>
@@ -455,7 +512,7 @@ async function hideLock() {
   document.getElementById('lockScreen').style.display='none';
   await loadPeriods();
   await loadPerfMetricsList();
-  await Promise.all([loadRoster(), loadMetrics()]);
+  await Promise.all([loadRoster(), loadMetrics(), loadPromoConfigs()]);
 }
 async function doLogin() {
   const pwd=document.getElementById('lockInput').value, errEl=document.getElementById('lockError'), btn=document.getElementById('lockBtn');
@@ -474,8 +531,6 @@ async function doLogin() {
 let _period='', _actualPeriod='', _rosterPeriods=[], _metrics=[], _editingMetricId=null, _rosterData=[];
 let _rosterLoadedPeriod='';
 let _tierRoles=[], _tiers=[], _allDepts=[], _perfMetricsList=[];
-let _promoRules = [];    // 促銷獎金規則
-let _saConfigsList = []; // SA 品項設定清單（供促銷獎金選用）
 
 const FACTORY_META = {
   '售後服務處':{label:'售後服務處',color:'#e2e8f0',icon:'🏢'},
@@ -1122,8 +1177,6 @@ async function openMetricModal(id) {
   document.getElementById('mRuleNote').value=rule.note||'';
   _tierRoles=[...(rule.roles||[])];
   _tiers=(rule.tiers||[]).map(t=>({...t}));
-  _promoRules=(rule.promo_rules||[]).map(r=>({...r}));  // ← 新增這行
-  _promoRules = (rule.promo_rules || []).map(function(r) { return Object.assign({}, r); });
   if (m.metric_source==='performance') {
     const perfId=(m.filters||[]).find(f=>f.type==='perf_metric_id')?.value;
     if (perfId) document.getElementById('mPerfMetricId').value=perfId;
@@ -1143,13 +1196,10 @@ async function openMetricModal(id) {
   renderRoleTags();
   renderTierTable();
   openModal('metricModal');
-  await _ensureSaConfigs();
   // 確保業績指標已載入
   if (!_perfMetricsList.length) {
     try { _perfMetricsList = await fetch('/api/performance-metrics').then(r => r.json()); } catch(e) {}
   }
-  _buildPromoConfigSelect();
-  renderPromoRules();       // ← 確保開啟時就渲染現有促銷規則
   await loadDeptCheckboxes(m.target_dept_codes||[]);
   if ((m.target_dept_codes||[]).length) loadDeptJobTitles();
   setTimeout(()=>document.getElementById('mName').focus(),80);
@@ -1181,13 +1231,11 @@ async function saveMetric() {
   const target_dept_codes=getSelectedDeptCodes();
   const tiersData=getTiersData();
   // 整理促銷獎金（讀取最新 per_qty、bonus 值）
-    const promoData=_promoRules.map(r=>({...r}));
-  const bonus_rule={
-    roles:   [..._tierRoles],
-    tiers:   tiersData,
-    promo_rules: promoData,
-    note:    document.getElementById('mRuleNote').value.trim()
-  };
+    const bonus_rule={
+      roles:   [..._tierRoles],
+      tiers:   tiersData,
+      note:    document.getElementById('mRuleNote').value.trim()
+    };
   const payload={ metric_name, description:document.getElementById('mDesc').value.trim(), scope_type:document.getElementById('mScope').value, metric_source:src, stat_field:document.getElementById('mStatField')?.value||'amount', unit:document.getElementById('mUnit').value.trim(), sort_order:parseInt(document.getElementById('mOrder').value)||0, filters, bonus_rule, target_dept_codes };
   const btn=document.getElementById('btnSaveMetric'); btn.disabled=true;
   // ★ 儲存捲軸位置
@@ -1311,26 +1359,12 @@ async function renderProgressContent() {
       var allMetricIds=Object.keys(metaById);
       var hasMetrics=allMetricIds.length>0; 
 // promo_rules 需要的 SA 銷售矩陣（per-person qty）
-      var promoActuals = {}; // { metric_id: { branch: { person_name: actual } } }
+// ── 獨立促銷獎金結果 ──
+      var _promoApiResults = { configs:[], resultsByConfig:{} };
       try {
-        var promoMetricIds = new Set();
-        allMetricIds.forEach(function(mId) {
-          var pr = (metaById[mId].metric.bonus_rule || {}).promo_rules || [];
-          pr.forEach(function(r) { if (r.metric_id) promoMetricIds.add(r.metric_id); });
-        });
-        if (promoMetricIds.size > 0) {
-          var promoBranches = factory && ['AMA','AMC','AMD'].indexOf(factory) >= 0 ? [factory] : ['AMA','AMC','AMD'];
-          await Promise.all([...promoMetricIds].map(async function(mid) {
-            promoActuals[mid] = {};
-            await Promise.all(promoBranches.map(async function(br) {
-              try {
-                var r = await fetch('/api/stats/person-performance?metric_id='+mid+'&period='+_actualPeriod+'&branch='+br).then(function(r){return r.json();});
-                promoActuals[mid][br] = {};
-                (r.persons||[]).forEach(function(p){ promoActuals[mid][br][p.person_name] = parseFloat(p.actual||0); });
-              } catch(e) {}
-            }));
-          }));
-        }
+        var promoQs = 'period=' + _actualPeriod;
+        if (factory && ['AMA','AMC','AMD'].indexOf(factory) >= 0) promoQs += '&branch=' + factory;
+        _promoApiResults = await fetch('/api/promo-bonus/results?' + promoQs).then(function(r){return r.json();});
       } catch(e) {}
       
       try {
@@ -1354,48 +1388,22 @@ async function renderProgressContent() {
       }
     } catch(apiErr){ console.warn('progress API error:',apiErr); }
 
-   // ── 促銷獎金計算 ──
-function calcPromoBonus(promoRules, promoActualsMap, branch, personName, jobTitle) {
-  if (!promoRules || !promoRules.length) return 0;
+// ── 促銷獎金計算（使用獨立設定）──
+function calcPromoBonus(unused1, unused2, branch, personName, jobTitle) {
   var total = 0;
-  promoRules.forEach(function(rule) {
-    var mid = rule.metric_id;
-    if (!mid) return;
-    var brMap = (promoActualsMap[mid] && promoActualsMap[mid][branch]) || {};
-    var actual = brMap[personName] !== undefined ? brMap[personName] : 0;
-    if (!actual) {
+  var rByC = (_promoApiResults && _promoApiResults.resultsByConfig) || {};
+  for (var cid in rByC) {
+    var brMap = (rByC[cid].byBranch && rByC[cid].byBranch[branch]) || {};
+    var bonus = brMap[personName];
+    if (bonus === undefined) {
       for (var k in brMap) {
-        if (k.includes(personName) || personName.includes(k)) { actual = brMap[k]; break; }
-      }
-    }
-    var bonusAmt = 0;
-    if (rule.type === 'boutique_pct') {
-      // 比例型：銷售額 × %
-      var pct = parseFloat(rule.pct || 0);
-      if (rule.role_amounts && jobTitle) {
-        for (var rk in rule.role_amounts) {
-          if (jobTitle === rk || jobTitle.indexOf(rk) >= 0 || rk.indexOf(jobTitle) >= 0) {
-            pct = parseFloat(rule.role_amounts[rk]) || pct; break;
-          }
+        if (k.length >= 2 && (k.indexOf(personName) >= 0 || personName.indexOf(k) >= 0)) {
+          bonus = brMap[k]; break;
         }
       }
-      bonusAmt = (actual || 0) * pct / 100;
-    } else {
-      // 數量型（sa_qty 或舊格式）
-      var units = Math.floor((actual || 0) / (rule.per_qty || 1));
-      if (units <= 0) return;
-      bonusAmt = rule.bonus || 0;
-      if (rule.role_amounts && jobTitle) {
-        for (var role in rule.role_amounts) {
-          if (jobTitle === role || jobTitle.indexOf(role) >= 0 || role.indexOf(jobTitle) >= 0) {
-            bonusAmt = rule.role_amounts[role] || bonusAmt; break;
-          }
-        }
-      }
-      bonusAmt = units * bonusAmt;
     }
-    total += bonusAmt;
-  });
+    total += parseFloat(bonus || 0);
+  }
   return total;
 }
     
@@ -1496,7 +1504,7 @@ function calcPromoBonus(promoRules, promoActualsMap, branch, personName, jobTitl
             // ★ auto 指標：即使沒有手動設定目標，也用 autoRate
 var eff0=te0?te0.rate:(meta00.useAuto?meta00.autoRate:null);
             if (eff0!==null) pTotal0+=calcBonus(eff0,p0.job_title||'',meta00.tiers,meta00.roles);
-            pTotal0 += calcPromoBonus(meta00.promoRules, promoActuals, fc, p0.emp_name, p0.job_title||'')
+            pTotal0 += calcPromoBonus(null, null, fc, p0.emp_name, p0.job_title||'')
           }
           if (pTotal0>0) fcBonusPpl++;
           fcTotalBonus+=pTotal0;
@@ -1529,7 +1537,7 @@ var eff0=te0?te0.rate:(meta00.useAuto?meta00.autoRate:null);
             var effectiveHasTarget=!!te3||meta3.useAuto;
             var bonusAmt=effectiveHasTarget?calcBonus(effectiveRate,person3.job_title||'',meta3.tiers,meta3.roles):0;
             // 促銷獎金：不需要設定目標，只要有銷售就計算
-            var promoBonus = calcPromoBonus(meta3.promoRules, promoActuals, fc, person3.emp_name, person3.job_title||'')
+            var promoBonus = calcPromoBonus(null, null, fc, person3.emp_name, person3.job_title||'')
 
             personBonuses[mId3]={bonus:bonusAmt,promoBonus:promoBonus,rate:effectiveRate,hasTarget:effectiveHasTarget};
             personTotal += bonusAmt + promoBonus;
@@ -1699,6 +1707,174 @@ async function doUploadRoster() {
 }
 
 checkAuth();
+
+  // ════════════════════════════════════════════
+// 促銷獎金獨立設定
+// ════════════════════════════════════════════
+let _promoCfgs = [];
+let _editingPromoCfgId = null;
+const ALL_PAYCODES = ['一般','票劵','內結','保險','延保','保固','善意維修','VSA'];
+const CATALOG_TYPES = ['精品','配件'];
+
+function togglePromoSection() {
+  var body = document.getElementById('promoSectionBody');
+  var arrow = document.getElementById('promoSectionArrow');
+  var open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  arrow.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
+  if (!open && !_promoCfgs.length) loadPromoConfigs();
+}
+
+async function loadPromoConfigs() {
+  try {
+    _promoCfgs = await fetch('/api/promo-bonus/configs').then(r => r.json());
+    renderPromoConfigList();
+    var cnt = document.getElementById('promoConfigCount');
+    if (cnt) cnt.textContent = _promoCfgs.length + ' 條規則';
+  } catch(e) {}
+}
+
+function renderPromoConfigList() {
+  var el = document.getElementById('promoConfigList');
+  if (!el) return;
+  if (!_promoCfgs.length) {
+    el.innerHTML = '<div style="color:#475569;font-size:13px;padding:8px 0">尚未建立促銷獎金規則</div>';
+    return;
+  }
+  el.innerHTML = _promoCfgs.map(function(c) {
+    var isQty = c.rule_type === 'sa_qty';
+    var col = isQty ? '#f59e0b' : '#8b5cf6';
+    var typeLabel = isQty ? '📦 數量型' : '💎 折扣型';
+    var desc = isQty
+      ? (c.sa_config_name || '（未選指標）') + '　每' + c.per_qty + '件 → ' + parseFloat(c.bonus_per_unit).toLocaleString() + '元'
+      : (c.part_catalog_types || []).join('/') + '　折扣' + (c.discount_min != null ? (c.discount_min*100).toFixed(0)+'%' : '') + '~' + (c.discount_max != null ? (c.discount_max*100).toFixed(0)+'%' : '') + '　獎金' + c.bonus_pct + '%';
+    return '<div style="background:#0f172a;border:1px solid #2d3f56;border-radius:9px;padding:11px 14px;display:flex;align-items:center;gap:10px;margin-bottom:7px">'
+      + '<span style="font-size:10px;background:' + col + '22;color:' + col + ';padding:2px 8px;border-radius:4px;font-weight:700;flex-shrink:0">' + typeLabel + '</span>'
+      + '<div style="flex:1;min-width:0">'
+        + '<div style="font-weight:700;font-size:13px;color:#e2e8f0">' + c.rule_name + '</div>'
+        + '<div style="font-size:11px;color:#64748b;margin-top:2px">' + desc + '</div>'
+      + '</div>'
+      + '<span style="font-size:11px;padding:2px 8px;border-radius:5px;background:' + (c.active ? 'rgba(16,185,129,.15)' : 'rgba(100,116,139,.15)') + ';color:' + (c.active ? '#10b981' : '#94a3b8') + ';flex-shrink:0">' + (c.active ? '✅ 啟用' : '⏸ 停用') + '</span>'
+      + '<button class="btn btn-secondary btn-sm" onclick="openPromoModal(' + c.id + ')">✏️</button>'
+      + '<button class="btn btn-danger btn-sm" onclick="deletePromoCfg(' + c.id + ',\'' + c.rule_name.replace(/'/g,"\\'") + '\')">刪除</button>'
+      + '</div>';
+  }).join('');
+}
+
+async function openPromoModal(id) {
+  _editingPromoCfgId = id || null;
+  var cfg = _promoCfgs.find(function(c){ return c.id === id; }) || {};
+  document.getElementById('promoModalTitle').textContent = id ? '編輯促銷獎金規則' : '新增促銷獎金規則';
+  document.getElementById('pmRuleName').value = cfg.rule_name || '';
+  document.getElementById('pmRuleType').value = cfg.rule_type || 'sa_qty';
+  document.getElementById('pmSortOrder').value = cfg.sort_order || 0;
+  document.getElementById('pmActive').checked = cfg.active !== false;
+  // SA qty fields
+  document.getElementById('pmPerQty').value = cfg.per_qty || 1;
+  document.getElementById('pmBonusUnit').value = cfg.bonus_per_unit || 0;
+  // Parts discount fields
+  document.getElementById('pmBonusPct').value = cfg.bonus_pct || 0;
+  document.getElementById('pmDiscMin').value = cfg.discount_min != null ? parseFloat(cfg.discount_min) : '';
+  document.getElementById('pmDiscMax').value = cfg.discount_max != null ? parseFloat(cfg.discount_max) : '';
+  // Load sa_configs
+  if (!_perfMetricsList.length) {
+    try { _perfMetricsList = await fetch('/api/performance-metrics').then(r=>r.json()); } catch(e) {}
+  }
+  var saList = await fetch('/api/sa-config').then(r=>r.json()).catch(()=>[]);
+  var saSel = document.getElementById('pmSaConfigId');
+  saSel.innerHTML = '<option value="">選擇指標銷售品項...</option>' + saList.map(function(s){
+    return '<option value="' + s.id + '" ' + (s.id == cfg.sa_config_id ? 'selected' : '') + '>' + s.config_name + '</option>';
+  }).join('');
+  // Catalog type checkboxes
+  var selCatTypes = cfg.part_catalog_types || [];
+  document.getElementById('pmCatalogTypes').innerHTML = CATALOG_TYPES.map(function(t){
+    var on = selCatTypes.includes(t);
+    return '<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;padding:5px 12px;border-radius:6px;margin:2px;border:1.5px solid ' + (on?'#8b5cf6':'#2d3f56') + ';background:' + (on?'rgba(139,92,246,.15)':'transparent') + ';font-size:12px;font-weight:700;color:' + (on?'#8b5cf6':'#64748b') + '" onclick="toggleChipLabel(this,\'#8b5cf6\')">'
+      + '<input type="checkbox" value="' + t + '" ' + (on?'checked':'') + ' style="display:none">' + t + '</label>';
+  }).join('');
+  // Paycode checkboxes
+  var selPay = cfg.paycode_types || [];
+  document.getElementById('pmPaycodes').innerHTML = ALL_PAYCODES.map(function(t){
+    var on = selPay.includes(t);
+    return '<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;padding:5px 12px;border-radius:6px;margin:2px;border:1.5px solid ' + (on?'#f97316':'#2d3f56') + ';background:' + (on?'rgba(249,115,22,.15)':'transparent') + ';font-size:12px;font-weight:700;color:' + (on?'#f97316':'#64748b') + '" onclick="toggleChipLabel(this,\'#f97316\')">'
+      + '<input type="checkbox" value="' + t + '" ' + (on?'checked':'') + ' style="display:none">' + t + '</label>';
+  }).join('');
+  onPmRuleTypeChange();
+  openModal('promoModal');
+  setTimeout(function(){ document.getElementById('pmRuleName').focus(); }, 80);
+}
+
+function toggleChipLabel(el, col) {
+  var cb = el.querySelector('input');
+  cb.checked = !cb.checked;
+  el.style.borderColor = cb.checked ? col : '#2d3f56';
+  el.style.background  = cb.checked ? col + '22' : 'transparent';
+  el.style.color       = cb.checked ? col : '#64748b';
+}
+
+function onPmRuleTypeChange() {
+  var type = document.getElementById('pmRuleType').value;
+  var saArea    = document.getElementById('pmSaArea');
+  var discArea  = document.getElementById('pmDiscArea');
+  if (saArea)   saArea.style.display   = type === 'sa_qty' ? '' : 'none';
+  if (discArea) discArea.style.display = type === 'parts_discount' ? '' : 'none';
+}
+
+async function savePromoCfg() {
+  var ruleName = document.getElementById('pmRuleName').value.trim();
+  if (!ruleName) { alert('請輸入規則名稱'); return; }
+  var ruleType = document.getElementById('pmRuleType').value;
+  var payload = {
+    rule_name:   ruleName,
+    rule_type:   ruleType,
+    sort_order:  parseInt(document.getElementById('pmSortOrder').value) || 0,
+    active:      document.getElementById('pmActive').checked,
+    role_amounts: {},
+    target_factories: [],
+  };
+  if (ruleType === 'sa_qty') {
+    var saId = document.getElementById('pmSaConfigId').value;
+    if (!saId) { alert('請選擇指標銷售品項'); return; }
+    payload.sa_config_id   = parseInt(saId);
+    payload.per_qty        = parseFloat(document.getElementById('pmPerQty').value) || 1;
+    payload.bonus_per_unit = parseFloat(document.getElementById('pmBonusUnit').value) || 0;
+  } else {
+    var catTypes = [...document.querySelectorAll('#pmCatalogTypes input:checked')].map(function(cb){ return cb.value; });
+    if (!catTypes.length) { alert('請選擇品項類型（精品/配件）'); return; }
+    var payCodes = [...document.querySelectorAll('#pmPaycodes input:checked')].map(function(cb){ return cb.value; });
+    var discMin  = document.getElementById('pmDiscMin').value;
+    var discMax  = document.getElementById('pmDiscMax').value;
+    var bonusPct = parseFloat(document.getElementById('pmBonusPct').value);
+    if (!bonusPct) { alert('請填入獎金%數'); return; }
+    payload.part_catalog_types = catTypes;
+    payload.paycode_types      = payCodes;
+    payload.discount_min       = discMin !== '' ? parseFloat(discMin) : null;
+    payload.discount_max       = discMax !== '' ? parseFloat(discMax) : null;
+    payload.bonus_pct          = bonusPct;
+  }
+  var btn = document.getElementById('pmBtnSave');
+  btn.disabled = true;
+  try {
+    var url    = _editingPromoCfgId ? '/api/promo-bonus/configs/' + _editingPromoCfgId : '/api/promo-bonus/configs';
+    var method = _editingPromoCfgId ? 'PUT' : 'POST';
+    var data   = await fetch(url, { method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }).then(r=>r.json());
+    if (data.error) throw new Error(data.error);
+    closeModal('promoModal');
+    await loadPromoConfigs();
+    // 重新計算進度
+    var inner = document.getElementById('progressInner');
+    if (inner) { inner.innerHTML = '<div class="loading"><span class="spinner"></span>重新計算中</div>'; await renderProgressContent(); }
+  } catch(e) { alert('儲存失敗：' + e.message); }
+  finally { btn.disabled = false; }
+}
+
+async function deletePromoCfg(id, name) {
+  if (!confirm('確定刪除促銷獎金規則「' + name + '」？')) return;
+  await fetch('/api/promo-bonus/configs/' + id, { method: 'DELETE' });
+  await loadPromoConfigs();
+  var inner = document.getElementById('progressInner');
+  if (inner) { inner.innerHTML = '<div class="loading"><span class="spinner"></span>重新計算中</div>'; await renderProgressContent(); }
+}
 </script>
 </body>
 </html>
