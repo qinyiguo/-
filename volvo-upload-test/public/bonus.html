@@ -2103,13 +2103,13 @@ async function _saveMRModal() {
     var val   = parseInt(inp.value) || 0;
     var noteEl = body.querySelector('input[data-modalnote="'+empId+'"]');
     var note  = noteEl ? noteEl.value : '';
-    if (!_managerReviewMap[empId]) _managerReviewMap[empId] = {};
-    _managerReviewMap[empId].mrBonus = val;
-    _managerReviewMap[empId].note    = note;
+if (!_managerReviewMap[empId]) _managerReviewMap[empId] = {};
+    _managerReviewMap[empId].amount = val;
+    _managerReviewMap[empId].note   = note;
     promises.push(fetch('/api/manager-review', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ emp_id:empId, period:_actualPeriod, bonus:val, note:note })
+      body: JSON.stringify({ emp_id:empId, period:_actualPeriod, amount:val, note:note })
     }));
   });
   await Promise.all(promises);
