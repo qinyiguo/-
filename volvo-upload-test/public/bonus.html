@@ -307,84 +307,82 @@ body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background:
 
 <!-- ══ 頁籤一：績效獎金 ══ -->
 <div id="bonusTabPanel-perf">
-<div class="section-label">🏆 達成率階梯獎金</div>
-<div style="background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:12px 14px;margin-bottom:14px">
-  <div style="font-size:12px;color:#64748b;line-height:1.7;margin-bottom:10px">
-    依達成率高低給予固定獎金，與促銷獎金<strong style="color:#94a3b8">分開累加</strong>。
-  </div>
-  <div style="margin-bottom:10px">
-    <div style="font-size:12px;color:#64748b;margin-bottom:6px">
-      設定職稱欄位（不同職稱可有不同獎金金額）。<strong style="color:#94a3b8">不設定 = 所有人同一金額</strong>
+  <div class="section-label">🏆 達成率階梯獎金</div>
+  <div style="background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+    <div style="font-size:12px;color:#64748b;line-height:1.7;margin-bottom:10px">
+      依達成率高低給予固定獎金，與促銷獎金<strong style="color:#94a3b8">分開累加</strong>。
     </div>
-    <div id="mRoleTagsWrap" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;min-height:28px;background:#0f172a;border:1px solid #2d3f56;border-radius:6px;padding:6px 8px;align-items:center"></div>
-    <div style="display:flex;gap:6px">
-      <input type="text" id="mRoleInput" class="form-input" placeholder="輸入職稱，例：資深經理" style="flex:1"
-        onkeydown="if(event.key==='Enter'){event.preventDefault();addRole();}">
-      <button class="btn btn-secondary btn-sm" onclick="addRole()">＋ 加入</button>
+    <div style="margin-bottom:10px">
+      <div style="font-size:12px;color:#64748b;margin-bottom:6px">
+        設定職稱欄位（不同職稱可有不同獎金金額）。<strong style="color:#94a3b8">不設定 = 所有人同一金額</strong>
+      </div>
+      <div id="mRoleTagsWrap" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;min-height:28px;background:#0f172a;border:1px solid #2d3f56;border-radius:6px;padding:6px 8px;align-items:center"></div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="mRoleInput" class="form-input" placeholder="輸入職稱，例：資深經理" style="flex:1"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();addRole();}">
+        <button class="btn btn-secondary btn-sm" onclick="addRole()">＋ 加入</button>
+      </div>
+      <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">
+        <span style="font-size:11px;color:#475569">常用：</span>
+        <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px" onclick="addRoleVal('資深經理')">資深經理</button>
+        <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px" onclick="addRoleVal('經理')">經理</button>
+        <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px" onclick="addRoleVal('資深副理')">資深副理</button>
+        <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px" onclick="addRoleVal('副理')">副理</button>
+        <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px" onclick="addRoleVal('組員')">組員</button>
+      </div>
     </div>
-    <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">
-      <span style="font-size:11px;color:#475569">常用：</span>
-      <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px" onclick="addRoleVal('資深經理')">資深經理</button>
-      <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px" onclick="addRoleVal('經理')">經理</button>
-      <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px" onclick="addRoleVal('資深副理')">資深副理</button>
-      <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px" onclick="addRoleVal('副理')">副理</button>
-      <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px" onclick="addRoleVal('組員')">組員</button>
+    <div style="font-size:12px;color:#64748b;margin-bottom:6px">設定達成率對應的獎金金額（由高到低排列）</div>
+    <div style="overflow-x:auto;margin-bottom:8px">
+      <table id="mTierTable" style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead id="mTierHead"></thead>
+        <tbody id="mTierBody"></tbody>
+      </table>
     </div>
+    <button class="btn btn-secondary btn-sm" onclick="addTier()" style="margin-bottom:4px">＋ 新增階梯</button>
   </div>
-  <div style="font-size:12px;color:#64748b;margin-bottom:6px">設定達成率對應的獎金金額（由高到低排列）</div>
-  <div style="overflow-x:auto;margin-bottom:8px">
-    <table id="mTierTable" style="width:100%;border-collapse:collapse;font-size:12px">
-      <thead id="mTierHead"></thead>
-      <tbody id="mTierBody"></tbody>
-    </table>
-  </div>
-  <button class="btn btn-secondary btn-sm" onclick="addTier()" style="margin-bottom:4px">＋ 新增階梯</button>
 </div>
 
 <!-- ══ 頁籤二：促銷獎金 ══ -->
 <div id="bonusTabPanel-promo" style="display:none">
-<div class="section-label">🎁 促銷獎金規則（依銷售數量）</div>
-<div style="background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:12px 14px;margin-bottom:14px">
-  <div style="font-size:12px;color:#64748b;line-height:1.7;margin-bottom:10px">
-    針對特定品項，每賣出 N 件 / 筆即給予固定獎金。<strong style="color:#94a3b8">與達成率階梯獨立計算、相加後為總獎金</strong>。
-  </div>
-
-  <!-- 已加入的促銷規則列表 -->
-  <div id="mPromoRulesWrap" style="margin-bottom:10px">
-    <div style="color:#475569;font-size:12px;padding:6px 0">尚未設定促銷獎金</div>
-  </div>
-
-  <!-- 新增促銷規則輸入列 -->
-  <div style="background:#1e293b;border:1px solid #2d3f56;border-radius:7px;padding:10px 12px">
-    <div style="font-size:11px;color:#64748b;font-weight:700;margin-bottom:8px">＋ 新增促銷規則</div>
-    <div style="display:grid;grid-template-columns:1fr auto auto auto auto;gap:8px;align-items:center;flex-wrap:wrap">
-      <select id="mPromoCfgSel" class="form-select">
-        <option value="">選擇品項設定...</option>
-      </select>
-      <select id="mPromoStatField" class="form-select" style="min-width:80px">
-        <option value="qty">數量（件）</option>
-        <option value="count">筆數</option>
-        <option value="sales">金額（元）</option>
-      </select>
-      <div style="display:flex;align-items:center;gap:4px;white-space:nowrap">
-        <span style="font-size:11px;color:#64748b">每</span>
-        <input type="number" id="mPromoPerQty" value="1" min="1" step="1"
-          style="width:52px;background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:5px 6px;border-radius:5px;font-size:12px;text-align:center;outline:none">
-        <span style="font-size:11px;color:#64748b">件</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:4px;white-space:nowrap">
-        <span style="font-size:11px;color:#64748b">獎金</span>
-        <input type="number" id="mPromoBonus" placeholder="元" min="0" step="1"
-          style="width:80px;background:#0f172a;border:1px solid #2d3f56;color:#10b981;padding:5px 8px;border-radius:5px;font-size:13px;font-weight:700;text-align:right;outline:none">
-        <span style="font-size:11px;color:#64748b">元</span>
-      </div>
-      <button class="btn btn-secondary btn-sm" onclick="addPromoRule()" style="white-space:nowrap">加入</button>
+  <div class="section-label">🎁 促銷獎金規則（依銷售數量）</div>
+  <div style="background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+    <div style="font-size:12px;color:#64748b;line-height:1.7;margin-bottom:10px">
+      針對特定品項，每賣出 N 件 / 筆即給予固定獎金。<strong style="color:#94a3b8">與達成率階梯獨立計算、相加後為總獎金</strong>。
     </div>
-    <div style="font-size:10px;color:#475569;margin-top:6px">
+    <div id="mPromoRulesWrap" style="margin-bottom:10px">
+      <div style="color:#475569;font-size:12px;padding:6px 0">尚未設定促銷獎金</div>
+    </div>
+    <div style="background:#1e293b;border:1px solid #2d3f56;border-radius:7px;padding:10px 12px">
+      <div style="font-size:11px;color:#64748b;font-weight:700;margin-bottom:8px">＋ 新增促銷規則</div>
+      <div style="display:grid;grid-template-columns:1fr auto auto auto auto;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="mPromoCfgSel" class="form-select">
+          <option value="">選擇品項設定...</option>
+        </select>
+        <select id="mPromoStatField" class="form-select" style="min-width:80px">
+          <option value="qty">數量（件）</option>
+          <option value="count">筆數</option>
+          <option value="sales">金額（元）</option>
+        </select>
+        <div style="display:flex;align-items:center;gap:4px;white-space:nowrap">
+          <span style="font-size:11px;color:#64748b">每</span>
+          <input type="number" id="mPromoPerQty" value="1" min="1" step="1"
+            style="width:52px;background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:5px 6px;border-radius:5px;font-size:12px;text-align:center;outline:none">
+          <span style="font-size:11px;color:#64748b">件</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;white-space:nowrap">
+          <span style="font-size:11px;color:#64748b">獎金</span>
+          <input type="number" id="mPromoBonus" placeholder="元" min="0" step="1"
+            style="width:80px;background:#0f172a;border:1px solid #2d3f56;color:#10b981;padding:5px 8px;border-radius:5px;font-size:13px;font-weight:700;text-align:right;outline:none">
+          <span style="font-size:11px;color:#64748b">元</span>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="addPromoRule()" style="white-space:nowrap">加入</button>
+      </div>
+      <div style="font-size:10px;color:#475569;margin-top:6px">
         💡 若上方有設定職稱，加入後可在列表中分別調整各職稱金額
       </div>
     </div>
-</div><!-- end bonusTabPanel-promo -->
+  </div>
+</div>
         <input type="text" id="mRuleNote" class="form-input" placeholder="例：需同時達成服務滿意度 ≥ 90 分">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
