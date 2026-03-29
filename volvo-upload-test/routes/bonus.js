@@ -687,6 +687,7 @@ actual = totalActual;
             actual = parseFloat(overR.rows[0].actual_value);
         } catch(e) {}
       }
+      } catch(e) { actual = null; }
 
       const myTargets = targets.filter(t => t.metric_id === m.id);
       results.push({ metric: m, targets: myTargets, actual, perfTarget, effectiveBranch });
