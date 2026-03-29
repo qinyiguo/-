@@ -26,6 +26,7 @@ app.use('/api', require('./routes/personTargets'));
 app.use('/api', require('./routes/wip'));
 app.use('/api', require('./routes/vctl'));
 app.use('/api', require('./routes/promoBonus'));
+app.use('/api/manager-review', require('./routes/managerReview'));
 
 
 // ── 啟動 ──
