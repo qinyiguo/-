@@ -1428,8 +1428,7 @@ async function renderProgressContent() {
             // ★ auto 指標：即使沒有手動設定目標，也用 autoRate
 var eff0=te0?te0.rate:(meta00.useAuto?meta00.autoRate:null);
             if (eff0!==null) pTotal0+=calcBonus(eff0,p0.job_title||'',meta00.tiers,meta00.roles);
-            var promoMap0 = (saPromoMap[fc] && saPromoMap[fc][p0.emp_name]) || {};
-            pTotal0 += calcPromoBonus(meta00.promoRules, promoMap0, p0.job_title||'');
+            pTotal0 += calcPromoBonus(meta00.promoRules, promoActuals, fc, p0.emp_name, p0.job_title||'')
           }
           if (pTotal0>0) fcBonusPpl++;
           fcTotalBonus+=pTotal0;
@@ -1462,7 +1461,7 @@ var eff0=te0?te0.rate:(meta00.useAuto?meta00.autoRate:null);
             var effectiveHasTarget=!!te3||meta3.useAuto;
             var bonusAmt=effectiveHasTarget?calcBonus(effectiveRate,person3.job_title||'',meta3.tiers,meta3.roles):0;
             // 促銷獎金：不需要設定目標，只要有銷售就計算
-            var promoBonus = calcPromoBonus(meta3.promoRules, promoActuals, fc, person3.emp_name, person3.job_title||'');
+            var promoBonus = calcPromoBonus(meta3.promoRules, promoActuals, fc, person3.emp_name, person3.job_title||'')
 
             personBonuses[mId3]={bonus:bonusAmt,promoBonus:promoBonus,rate:effectiveRate,hasTarget:effectiveHasTarget};
             personTotal += bonusAmt + promoBonus;
