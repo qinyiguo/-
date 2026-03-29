@@ -370,7 +370,7 @@ const initDatabase = async () => {
     )
   `);
 
-    await client.query(`
+await client.query(`
       CREATE TABLE IF NOT EXISTS bonus_actual_overrides (
         id           SERIAL PRIMARY KEY,
         metric_id    INTEGER NOT NULL,
@@ -378,9 +378,13 @@ const initDatabase = async () => {
         branch       VARCHAR(10) DEFAULT '',
         actual_value NUMERIC(15,2),
         note         TEXT DEFAULT '',
-        updated_at   TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE(metric_id, period, COALESCE(branch,''))
+        updated_at   TIMESTAMPTZ DEFAULT NOW()
       )`);
+
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS bonus_actual_overrides_unique_idx
+      ON bonus_actual_overrides (metric_id, period, COALESCE(branch,''))
+    `);
 
     console.log('[initDB] ✅ 所有表格建立完成');
   } catch (err) {
