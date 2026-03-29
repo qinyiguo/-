@@ -1680,10 +1680,9 @@ memberRows.push({person:person3,bonuses:personBonuses,promoBonus:personPromoBonu
             var mId5=deptMetricIds[mci], bData=mRow.bonuses[mId5];
             var bonus5=bData?bData.bonus:0, rate5=bData?bData.rate:null, hasTgt=bData?bData.hasTarget:false;
             var rc5=rate5===null?'#64748b':rate5>=100?'#10b981':rate5>=80?'#f59e0b':'#ef4444';
-          html+='<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);text-align:center;border-right:1px solid #1a2535;background:rgba(245,158,11,.02)">'
+html+='<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);text-align:center;border-right:1px solid #1a2535;background:rgba(245,158,11,.02)">'
               +(hasTgt
-                ?(rate5!==null?'<div style="font-size:10px;color:'+rc5+';margin-bottom:2px;font-weight:700">'+rate5.toFixed(1)+'%</div>':'')
-                  +(bonus5>0?'<span style="color:#f59e0b;font-weight:900;font-size:13px">'+bonus5.toLocaleString()+'<span style="font-size:9px;margin-left:1px">元</span></span>':'<span style="color:#475569;font-size:11px">0 元</span>')
+                ?(bonus5>0?'<span style="color:#f59e0b;font-weight:900;font-size:13px">'+bonus5.toLocaleString()+'<span style="font-size:9px;margin-left:1px">元</span></span>':'<span style="color:#475569;font-size:11px">0 元</span>')
                 :'<span style="color:#475569;font-size:11px">—</span>')
               +(bData&&bData.promoBonus>0?'<div style="margin-top:3px;font-size:10px;color:#10b981;font-weight:700">🎁 '+bData.promoBonus.toLocaleString()+'<span style="font-size:9px;margin-left:1px">元</span></div>':'')
             +'</td>';
