@@ -1703,7 +1703,7 @@ memberRows.push({person:person3,bonuses:personBonuses,promoBonus:personPromoBonu
                 +' data-empid="'+safeEmpId+'" data-period="'+_actualPeriod+'"'
                 +' style="flex:1;min-width:0;background:#1a0f2e;border:1.5px solid #4a1d96;border-radius:5px;'
                 +'color:#c4b5fd;padding:4px;font-size:12px;font-weight:800;text-align:center;outline:none"'
-                +' onchange="_saveMR(this)"'
+                +' oninput="_mrDebounce(this)"'
                 +' onfocus="this.style.borderColor=\'#8b5cf6\'" onblur="this.style.borderColor=\'#4a1d96\'">'
               +'<button onclick="_mrAdjust(this,1000)" style="width:22px;height:22px;flex-shrink:0;border-radius:4px;border:1px solid #4a1d96;background:rgba(139,92,246,.15);color:#a78bfa;font-size:15px;cursor:pointer;line-height:1;padding:0">＋</button>'
             +'</div>'
@@ -2074,7 +2074,14 @@ function _mrAdjust(btn, delta) {
   if (!inp) return;
   var newVal = (parseInt(inp.value) || 0) + delta;
   inp.value  = newVal || '';
-  inp.dispatchEvent(new Event('change', { bubbles: true }));
+  inp.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+var _mrDebounceTimers = {};
+function _mrDebounce(el) {
+  var empId = el.dataset.empid || '';
+  clearTimeout(_mrDebounceTimers[empId]);
+  _mrDebounceTimers[empId] = setTimeout(function(){ _saveMR(el); }, 700);
 }
 
 // ══ 主管考核 ══
