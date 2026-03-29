@@ -559,16 +559,66 @@ router.get('/bonus/progress', async (req, res) => {
             }
             const fld = m.stat_field==='amount'?'SUM(wage)':m.stat_field==='hours'?'SUM(standard_hours)':'COUNT(DISTINCT work_order)';
             actual = parseFloat((await pool.query(`SELECT COALESCE(${fld},0) AS v FROM tech_performance WHERE ${conds.join(' AND ')}`, p)).rows[0]?.v || 0);
-          } else if (m.metric_source === 'parts_sales') {
-            const conds = [`period=$1`]; const p = [actualPeriod]; let idx=2;
-            if (branchF) { conds.push(`branch=$${idx++}`); p.push(branchF); }
-            const cc=filters.filter(f=>f.type==='category_code').map(f=>f.value);
-            const pt=filters.filter(f=>f.type==='part_type').map(f=>f.value);
-            if (cc.length) { conds.push(`category_code=ANY($${idx++})`); p.push(cc); }
-            if (pt.length) { conds.push(`part_type=ANY($${idx++})`); p.push(pt); }
-            const fld = m.stat_field==='qty'?'SUM(sale_qty)':m.stat_field==='count'?'COUNT(*)':'SUM(sale_price_untaxed)';
-            actual = parseFloat((await pool.query(`SELECT COALESCE(${fld},0) AS v FROM parts_sales WHERE ${conds.join(' AND ')}`, p)).rows[0]?.v || 0);
+} else if (m.metric_source === 'tech_hours') {
+        // 從 tech_performance 計算工時（與 techHours.js 同邏輯，折扣還原）
+        const deptTypes = filters.filter(f=>f.type==='dept_type').map(f=>f.value);
+        const acTypes   = filters.filter(f=>f.type==='account_type').map(f=>f.value);
+        // 取產能設定裡的時薪
+        let hourlyRates = { engine:2150, bodywork:1450, paint:1450, beauty:2150 };
+        try {
+          const cfgRes = await pool.query(`SELECT value FROM app_settings WHERE key='tech_capacity_config'`);
+          if (cfgRes.rows[0]?.value) {
+            const cfg = JSON.parse(cfgRes.rows[0].value);
+            if (cfg.hourly_rates) hourlyRates = { ...hourlyRates, ...cfg.hourly_rates };
           }
+        } catch(e) {}
+        // 折扣還原工資 SQL 片段
+        const restoreWage = `CASE WHEN discount IS NOT NULL AND discount > 0 AND discount < 1 THEN wage / NULLIF(discount,0) WHEN discount IS NOT NULL AND discount >= 1 AND discount < 100 THEN wage / NULLIF(discount/100.0,0) ELSE wage END`;
+        const DEPT_PATTERNS = { engine:['引擎'], bodywork:['鈑金'], paint:['烤漆','噴漆'], beauty:['美容'] };
+        const brF = effectiveBranch;
+        try {
+          let totalActual = 0;
+          const BRANCHES = brF ? [brF] : ['AMA','AMC','AMD'];
+          for (const br of BRANCHES) {
+            if (deptTypes.length) {
+              // 依科別篩選人員 + 各科時薪換算
+              const rosterPeriodRes = await pool.query(`SELECT DISTINCT period FROM staff_roster ORDER BY period DESC LIMIT 1`);
+              const rp = rosterPeriodRes.rows[0]?.period;
+              for (const dt of deptTypes) {
+                const patterns = DEPT_PATTERNS[dt] || [];
+                const dtRate   = parseFloat(hourlyRates[dt] || 2150);
+                if (!rp || !patterns.length) continue;
+                const rosterRes = await pool.query(
+                  `SELECT emp_name FROM staff_roster WHERE period=$1 AND (factory=$2 OR factory IS NULL) AND (${patterns.map((_,i)=>`dept_name ILIKE $${i+3}`).join(' OR ')}) AND COALESCE(job_category,'') NOT ILIKE '%計時%' AND status!='離職'`,
+                  [rp, br, ...patterns.map(p=>`%${p}%`)]
+                );
+                const techNames = rosterRes.rows.map(r=>r.emp_name).filter(Boolean);
+                if (!techNames.length) continue;
+                const conds=[`period=$1`,`branch=$2`,`tech_name_clean=ANY($3)`];
+                const p=[actualPeriod, br, techNames]; let idx=4;
+                if (acTypes.length){conds.push(`account_type=ANY($${idx++})`);p.push(acTypes);}
+                let expr;
+                if (m.stat_field==='hours'){
+                  expr=`SUM(ROUND((${restoreWage}/${dtRate})::numeric,2))`;
+                } else if (m.stat_field==='count'){
+                  expr=`COUNT(DISTINCT work_order)`;
+                } else {
+                  expr=`SUM(${restoreWage})`;
+                }
+                const r = await pool.query(`SELECT COALESCE(${expr},0) AS v FROM tech_performance WHERE ${conds.join(' AND ')}`, p);
+                totalActual += parseFloat(r.rows[0]?.v || 0);
+              }
+            } else {
+              // 不限科別，全廠技師，用引擎時薪
+              const dtRate = parseFloat(hourlyRates.engine || 2150);
+              const conds=[`period=$1`,`branch=$2`]; const p=[actualPeriod,br]; let idx=3;
+              if (acTypes.length){conds.push(`account_type=ANY($${idx++})`);p.push(acTypes);}
+              let expr = m.stat_field==='hours'?`SUM(ROUND((${restoreWage}/${dtRate})::numeric,2))`:m.stat_field==='count'?'COUNT(DISTINCT work_order)':`SUM(${restoreWage})`;
+              const r = await pool.query(`SELECT COALESCE(${expr},0) AS v FROM tech_performance WHERE ${conds.join(' AND ')}`, p);
+              totalActual += parseFloat(r.rows[0]?.v || 0);
+            }
+          }
+          actual = totalActual;
         } catch(e) { actual = null; }
       }
 
