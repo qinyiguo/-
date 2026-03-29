@@ -195,7 +195,16 @@ body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background:
         <label>指標名稱 <span style="color:#ef4444">*</span></label>
         <input type="text" id="mName" class="form-input" placeholder="例：AMA有費營收達成率-廠主管">
       </div>
-      <div class="form-group"><label>說明</label><input type="text" id="mDesc" class="form-input" placeholder="（選填）"></div>
+    <div class="form-group"><label>說明</label><input type="text" id="mDesc" class="form-input" placeholder="（選填）"></div>
+    
+    <!-- ══ 獎金頁籤 ══ -->
+    <div style="display:flex;gap:2px;background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:3px;width:fit-content;margin:10px 0 14px">
+      <button id="bonusTab-perf" onclick="_switchBonusTab('perf')"
+        style="padding:7px 20px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:#3b82f6;color:#fff">🏆 績效獎金</button>
+      <button id="bonusTab-promo" onclick="_switchBonusTab('promo')"
+        style="padding:7px 20px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b">🎁 促銷獎金</button>
+    </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="form-group">
           <label>目標範圍</label>
@@ -297,13 +306,6 @@ body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background:
         <div id="mJobTitleChips" style="display:flex;flex-wrap:wrap;gap:5px"></div>
       </div>
 
-<!-- ══ 獎金頁籤 ══ -->
-<div style="display:flex;gap:2px;background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:3px;width:fit-content;margin:10px 0 14px">
-  <button id="bonusTab-perf" onclick="_switchBonusTab('perf')"
-    style="padding:7px 20px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:#3b82f6;color:#fff">🏆 績效獎金</button>
-  <button id="bonusTab-promo" onclick="_switchBonusTab('promo')"
-    style="padding:7px 20px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b">🎁 促銷獎金</button>
-</div>
 
 <!-- ══ 頁籤一：績效獎金 ══ -->
 <div id="bonusTabPanel-perf">
@@ -344,39 +346,47 @@ body { font-family: -apple-system, 'Microsoft JhengHei', sans-serif; background:
 
 <!-- ══ 頁籤二：促銷獎金 ══ -->
 <div id="bonusTabPanel-promo" style="display:none">
-  <div class="section-label">🎁 促銷獎金規則（依銷售數量）</div>
+  <div class="section-label">🎁 促銷獎金規則</div>
   <div style="background:#0f172a;border:1px solid #2d3f56;border-radius:8px;padding:12px 14px;margin-bottom:14px">
-    <div style="font-size:12px;color:#64748b;line-height:1.7;margin-bottom:10px">
-      針對特定品項，每賣出 N 件 / 筆即給予固定獎金。<strong style="color:#94a3b8">與達成率階梯獨立計算、相加後為總獎金</strong>。
+    <div style="font-size:12px;color:#64748b;line-height:1.7;margin-bottom:12px">
+      不需設定目標或部門，依業績指標自動計算。<strong style="color:#94a3b8">與達成率階梯獨立計算、累加後為總獎金</strong>。
     </div>
-    <div id="mPromoRulesWrap" style="margin-bottom:10px">
+    <div id="mPromoRulesWrap" style="margin-bottom:12px">
       <div style="color:#475569;font-size:12px;padding:6px 0">尚未設定促銷獎金</div>
     </div>
-    <div style="background:#1e293b;border:1px solid #2d3f56;border-radius:7px;padding:10px 12px">
-      <div style="font-size:11px;color:#64748b;font-weight:700;margin-bottom:8px">＋ 新增促銷規則</div>
-      <div style="display:grid;grid-template-columns:1fr auto auto auto auto;gap:8px;align-items:center;flex-wrap:wrap">
 
-      <select id="mPromoCfgSel" class="form-select">
-        <option value="">選擇業績指標...</option>
-      </select>
-        
-        <div style="display:flex;align-items:center;gap:4px;white-space:nowrap">
-          <span style="font-size:11px;color:#64748b">每</span>
-          <input type="number" id="mPromoPerQty" value="1" min="1" step="1"
-            style="width:52px;background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:5px 6px;border-radius:5px;font-size:12px;text-align:center;outline:none">
-          <span style="font-size:11px;color:#64748b">（件/筆，依指標單位）</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:4px;white-space:nowrap">
-          <span style="font-size:11px;color:#64748b">獎金</span>
-          <input type="number" id="mPromoBonus" placeholder="元" min="0" step="1"
-            style="width:80px;background:#0f172a;border:1px solid #2d3f56;color:#10b981;padding:5px 8px;border-radius:5px;font-size:13px;font-weight:700;text-align:right;outline:none">
-          <span style="font-size:11px;color:#64748b">元</span>
-        </div>
-        <button class="btn btn-secondary btn-sm" onclick="addPromoRule()" style="white-space:nowrap">加入</button>
+    <!-- 數量型 -->
+    <div style="background:#1e293b;border:1px solid #f59e0b44;border-radius:7px;padding:10px 12px;margin-bottom:8px">
+      <div style="font-size:11px;color:#f59e0b;font-weight:700;margin-bottom:8px">📦 數量型：每賣出 N 件/筆 給固定獎金</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="mPromoCfgSel" class="form-select" style="flex:1;min-width:130px">
+          <option value="">選擇業績指標...</option>
+        </select>
+        <span style="font-size:11px;color:#64748b">每</span>
+        <input type="number" id="mPromoPerQty" value="1" min="1" step="1"
+          style="width:52px;background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:5px 6px;border-radius:5px;font-size:12px;text-align:center;outline:none">
+        <span style="font-size:11px;color:#64748b">件</span>
+        <input type="number" id="mPromoBonus" placeholder="獎金元" min="0" step="1"
+          style="width:80px;background:#0f172a;border:1px solid #f59e0b;color:#f59e0b;padding:5px 8px;border-radius:5px;font-size:13px;font-weight:700;text-align:right;outline:none">
+        <span style="font-size:11px;color:#64748b">元/件</span>
+        <button class="btn btn-secondary btn-sm" onclick="addPromoRuleQty()" style="white-space:nowrap;border-color:#f59e0b;color:#f59e0b">加入</button>
       </div>
-      <div style="font-size:10px;color:#475569;margin-top:6px">
-        💡 若上方有設定職稱，加入後可在列表中分別調整各職稱金額
+    </div>
+
+    <!-- 比例型 -->
+    <div style="background:#1e293b;border:1px solid #8b5cf644;border-radius:7px;padding:10px 12px">
+      <div style="font-size:11px;color:#8b5cf6;font-weight:700;margin-bottom:8px">💎 比例型：銷售實績金額 × %（適合精品/配件）</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="mPromoPctSel" class="form-select" style="flex:1;min-width:130px">
+          <option value="">選擇業績指標...</option>
+        </select>
+        <span style="font-size:11px;color:#64748b">銷售額</span>
+        <input type="number" id="mPromoPct" placeholder="%" min="0" max="100" step="0.1"
+          style="width:60px;background:#0f172a;border:1px solid #8b5cf6;color:#8b5cf6;padding:5px 8px;border-radius:5px;font-size:13px;font-weight:700;text-align:right;outline:none">
+        <span style="font-size:11px;color:#64748b">%</span>
+        <button class="btn btn-secondary btn-sm" onclick="addPromoRulePct()" style="white-space:nowrap;border-color:#8b5cf6;color:#8b5cf6">加入</button>
       </div>
+      <div style="font-size:10px;color:#475569;margin-top:5px">💡 若有設定職稱，可在上方規則列表中對每個職稱設定不同百分比</div>
     </div>
   </div>
 </div>
@@ -745,11 +755,12 @@ function renderMetricManagementPanel() {
     let tierPreview='';
     let promoPreview='';
     const promoRules=rule.promo_rules||[];
-    if(promoRules.length){
-      promoPreview=promoRules.map(function(r){
-        return (r.metric_name||r.config_name||'?')+'每'+r.per_qty+'件→'+r.bonus+'元';
-      }).join('；');
-    }
+if(promoRules.length){
+  promoPreview=promoRules.map(function(r){
+    if(r.type==='boutique_pct') return (r.metric_name||'?')+'×'+(r.pct||0)+'%';
+    return (r.metric_name||r.config_name||'?')+'每'+(r.per_qty||1)+'件→'+(r.bonus||0)+'元';
+  }).join('；');
+}
     if (tiers.length) {
       tierPreview=tiers.sort((a,b)=>b.gte-a.gte).slice(0,2).map(t=>{
         const range='≥'+t.gte+'%'+(t.lt!==null?'<'+t.lt+'%':'');
@@ -926,42 +937,57 @@ async function _ensureSaConfigs() {
 }
 
 function renderPromoRules() {
-  const wrap = document.getElementById('mPromoRulesWrap');
+  var wrap = document.getElementById('mPromoRulesWrap');
   if (!wrap) return;
   if (!_promoRules.length) {
     wrap.innerHTML = '<div style="color:#475569;font-size:12px;padding:6px 0">尚未設定促銷獎金</div>';
     return;
   }
-  const roles = _tierRoles;
+  var roles = _tierRoles;
   wrap.innerHTML = _promoRules.map(function(rule, i) {
-    const roleAmtHtml = roles.length
-      ? roles.map(function(r) {
-          const amt = (rule.role_amounts && rule.role_amounts[r] != null) ? rule.role_amounts[r] : rule.bonus;
-          return '<span style="font-size:10px;color:#94a3b8">' + r + ':</span> '
-            + '<input type="number" value="' + amt + '" min="0" step="1" '
-            + 'style="background:#0f172a;border:1px solid #2d3f56;color:#10b981;padding:3px 6px;border-radius:4px;font-size:11px;width:72px;text-align:right;outline:none" '
-            + 'data-pi="' + i + '" data-role="' + r.replace(/"/g, '&quot;') + '" '
-            + 'oninput="_syncPromoRoleAmt(this)">';
-        }).join(' &nbsp; ')
+    var isQty = rule.type !== 'boutique_pct';
+    var col   = isQty ? '#f59e0b' : '#8b5cf6';
+    var typeLabel = isQty ? '📦 數量型' : '💎 比例型';
+
+    var mainRow = isQty
+      ? '<span style="font-size:11px;color:#64748b">每</span>'
+        + '<input type="number" value="'+rule.per_qty+'" min="1" step="1" '
+        + 'style="background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:3px 6px;border-radius:5px;font-size:12px;width:48px;text-align:center;outline:none" '
+        + 'data-pi="'+i+'" oninput="_promoRules['+i+'].per_qty=parseFloat(this.value)||1">'
+        + '<span style="font-size:11px;color:#64748b">件 給</span>'
+        + '<input type="number" value="'+rule.bonus+'" min="0" step="1" '
+        + 'style="background:#0f172a;border:1px solid #2d3f56;color:'+col+';padding:3px 8px;border-radius:5px;font-size:13px;font-weight:700;width:80px;text-align:right;outline:none" '
+        + 'data-pi="'+i+'" oninput="_promoRules['+i+'].bonus=parseFloat(this.value)||0">'
+        + '<span style="font-size:11px;color:#64748b">元/件</span>'
+      : '<span style="font-size:11px;color:#64748b">銷售額</span>'
+        + '<input type="number" value="'+(rule.pct||0)+'" min="0" max="100" step="0.1" '
+        + 'style="background:#0f172a;border:1px solid #2d3f56;color:'+col+';padding:3px 8px;border-radius:5px;font-size:13px;font-weight:700;width:60px;text-align:right;outline:none" '
+        + 'data-pi="'+i+'" oninput="_promoRules['+i+'].pct=parseFloat(this.value)||0">'
+        + '<span style="font-size:11px;color:#64748b">%</span>';
+
+    var roleAmtHtml = roles.length
+      ? '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:6px;border-top:1px solid #2d3f56;margin-top:6px">'
+        + '<span style="font-size:10px;font-weight:700;color:#475569">各職稱：</span>'
+        + roles.map(function(r) {
+            var defVal = isQty ? (rule.bonus||0) : (rule.pct||0);
+            var val = (rule.role_amounts && rule.role_amounts[r] != null) ? rule.role_amounts[r] : defVal;
+            return '<span style="font-size:10px;color:#94a3b8">' + r + ':</span> '
+              + '<input type="number" value="' + val + '" min="0" step="'+(isQty?'1':'0.1')+'" '
+              + 'style="background:#0f172a;border:1px solid #2d3f56;color:'+col+';padding:2px 6px;border-radius:4px;font-size:11px;width:'+(isQty?'70':'55')+'px;text-align:right;outline:none" '
+              + 'data-pi="' + i + '" data-role="' + r.replace(/"/g, '&quot;') + '" '
+              + 'oninput="_syncPromoRoleAmt(this)">';
+          }).join(' &nbsp; ')
+        + '</div>'
       : '';
-    return '<div style="background:#1e293b;border:1px solid #2d3f56;border-radius:8px;padding:10px 14px;margin-bottom:8px">'
-      + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:' + (roles.length ? '8px' : '0') + '">'
-        + '<span style="font-size:13px;font-weight:800;color:#10b981">' + (rule.metric_name || '（未選）') + '</span>'
-        + '<span style="font-size:11px;color:#64748b">每</span>'
-        + '<input type="number" value="' + rule.per_qty + '" min="1" step="1" '
-          + 'style="background:#0f172a;border:1px solid #2d3f56;color:#e2e8f0;padding:4px 8px;border-radius:5px;font-size:12px;width:56px;text-align:center;outline:none" '
-          + 'data-pi="' + i + '" oninput="_promoRules[' + i + '].per_qty=parseFloat(this.value)||1">'
-        + '<span style="font-size:11px;color:#64748b">件/筆　獎金</span>'
-        + (roles.length ? '' :
-          '<input type="number" value="' + rule.bonus + '" min="0" step="1" '
-            + 'style="background:#0f172a;border:1px solid #2d3f56;color:#10b981;padding:4px 8px;border-radius:5px;font-size:12px;font-weight:700;width:80px;text-align:right;outline:none" '
-            + 'data-pi="' + i + '" oninput="_promoRules[' + i + '].bonus=parseFloat(this.value)||0">'
-          + '<span style="font-size:11px;color:#64748b">元/件</span>')
-        + '<button onclick="removePromoRule(' + i + ')" style="margin-left:auto;background:rgba(239,68,68,.12);color:#ef4444;border:1px solid rgba(239,68,68,.25);padding:3px 10px;border-radius:5px;font-size:11px;cursor:pointer">刪除</button>'
+
+    return '<div style="background:#1e293b;border:1px solid '+col+'33;border-radius:8px;padding:10px 14px;margin-bottom:8px">'
+      + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:'+(roles.length?'6px':'0')+'">'
+        + '<span style="font-size:10px;background:'+col+'22;color:'+col+';padding:2px 7px;border-radius:4px;font-weight:700">'+typeLabel+'</span>'
+        + '<span style="font-size:13px;font-weight:800;color:'+col+'">'+rule.metric_name+'</span>'
+        + mainRow
+        + '<button onclick="removePromoRule('+i+')" style="margin-left:auto;background:rgba(239,68,68,.12);color:#ef4444;border:1px solid rgba(239,68,68,.25);padding:3px 10px;border-radius:5px;font-size:11px;cursor:pointer">刪除</button>'
       + '</div>'
-      + (roles.length ? '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding-top:6px;border-top:1px solid #2d3f56">'
-        + '<span style="font-size:10px;font-weight:700;color:#475569">各職稱獎金：</span>'
-        + roleAmtHtml + '</div>' : '')
+      + roleAmtHtml
       + '</div>';
   }).join('');
 }
@@ -992,15 +1018,16 @@ function removePromoRule(i) {
   renderPromoRules();
 }
 
-async function addPromoRule() {
+async function addPromoRuleQty() {
   var metricId = parseInt(document.getElementById('mPromoCfgSel').value);
   var perQty   = parseFloat(document.getElementById('mPromoPerQty').value) || 1;
-  var bonus    = parseFloat(document.getElementById('mPromoBonus').value) || 0;
+  var bonus    = parseFloat(document.getElementById('mPromoBonus').value)  || 0;
   if (!metricId) { alert('請選擇業績指標'); return; }
   var metric = _perfMetricsList.find(function(m) { return m.id === metricId; });
   var roleAmounts = {};
   _tierRoles.forEach(function(r) { roleAmounts[r] = bonus; });
   _promoRules.push({
+    type: 'sa_qty',
     metric_id:   metricId,
     metric_name: metric ? metric.metric_name : '（未知）',
     per_qty:     perQty,
@@ -1010,6 +1037,27 @@ async function addPromoRule() {
   document.getElementById('mPromoBonus').value = '';
   renderPromoRules();
 }
+
+async function addPromoRulePct() {
+  var metricId = parseInt(document.getElementById('mPromoPctSel').value);
+  var pct      = parseFloat(document.getElementById('mPromoPct').value) || 0;
+  if (!metricId) { alert('請選擇業績指標'); return; }
+  var metric = _perfMetricsList.find(function(m) { return m.id === metricId; });
+  var roleAmounts = {};
+  _tierRoles.forEach(function(r) { roleAmounts[r] = pct; });
+  _promoRules.push({
+    type: 'boutique_pct',
+    metric_id:   metricId,
+    metric_name: metric ? metric.metric_name : '（未知）',
+    pct:         pct,
+    role_amounts: roleAmounts,
+  });
+  document.getElementById('mPromoPct').value = '';
+  renderPromoRules();
+}
+
+// 保留舊名稱相容（若舊資料有 type 未設的規則）
+async function addPromoRule() { addPromoRuleQty(); }
   
 function removeTier(i) { _tiers.splice(i,1); renderTierTable(); }
 
@@ -1050,12 +1098,14 @@ function onMSourceChange() {
 }
 
 function _buildPromoConfigSelect() {
-  var sel = document.getElementById('mPromoCfgSel');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">選擇業績指標...</option>'
+  var html = '<option value="">選擇業績指標...</option>'
     + _perfMetricsList.map(function(m) {
         return '<option value="' + m.id + '">' + m.metric_name + '</option>';
       }).join('');
+  ['mPromoCfgSel', 'mPromoPctSel'].forEach(function(id) {
+    var sel = document.getElementById(id);
+    if (sel) sel.innerHTML = html;
+  });
 }
 
 async function openMetricModal(id) {
@@ -1306,34 +1356,49 @@ async function renderProgressContent() {
     var hasMetrics=allMetricIds.length>0;
 
    // ── 促銷獎金計算 ──
-    function calcPromoBonus(promoRules, promoActualsMap, branch, personName, jobTitle) {
-      if (!promoRules || !promoRules.length) return 0;
-      var total = 0;
-      promoRules.forEach(function(rule) {
-        var mid = rule.metric_id;
-        if (!mid) return;
-        var brMap = (promoActualsMap[mid] && promoActualsMap[mid][branch]) || {};
-        var actual = brMap[personName] !== undefined ? brMap[personName] : 0;
-        // 模糊比對（DMS 姓名格式差異）
-        if (!actual) {
-          for (var k in brMap) {
-            if (k.includes(personName) || personName.includes(k)) { actual = brMap[k]; break; }
-          }
-        }
-        var units = Math.floor((actual || 0) / (rule.per_qty || 1));
-        if (units <= 0) return;
-        var bonusAmt = rule.bonus || 0;
-        if (rule.role_amounts && jobTitle) {
-          for (var role in rule.role_amounts) {
-            if (jobTitle === role || jobTitle.indexOf(role) >= 0 || role.indexOf(jobTitle) >= 0) {
-              bonusAmt = rule.role_amounts[role] || bonusAmt; break;
-            }
-          }
-        }
-        total += units * bonusAmt;
-      });
-      return total;
+function calcPromoBonus(promoRules, promoActualsMap, branch, personName, jobTitle) {
+  if (!promoRules || !promoRules.length) return 0;
+  var total = 0;
+  promoRules.forEach(function(rule) {
+    var mid = rule.metric_id;
+    if (!mid) return;
+    var brMap = (promoActualsMap[mid] && promoActualsMap[mid][branch]) || {};
+    var actual = brMap[personName] !== undefined ? brMap[personName] : 0;
+    if (!actual) {
+      for (var k in brMap) {
+        if (k.includes(personName) || personName.includes(k)) { actual = brMap[k]; break; }
+      }
     }
+    var bonusAmt = 0;
+    if (rule.type === 'boutique_pct') {
+      // 比例型：銷售額 × %
+      var pct = parseFloat(rule.pct || 0);
+      if (rule.role_amounts && jobTitle) {
+        for (var rk in rule.role_amounts) {
+          if (jobTitle === rk || jobTitle.indexOf(rk) >= 0 || rk.indexOf(jobTitle) >= 0) {
+            pct = parseFloat(rule.role_amounts[rk]) || pct; break;
+          }
+        }
+      }
+      bonusAmt = (actual || 0) * pct / 100;
+    } else {
+      // 數量型（sa_qty 或舊格式）
+      var units = Math.floor((actual || 0) / (rule.per_qty || 1));
+      if (units <= 0) return;
+      bonusAmt = rule.bonus || 0;
+      if (rule.role_amounts && jobTitle) {
+        for (var role in rule.role_amounts) {
+          if (jobTitle === role || jobTitle.indexOf(role) >= 0 || role.indexOf(jobTitle) >= 0) {
+            bonusAmt = rule.role_amounts[role] || bonusAmt; break;
+          }
+        }
+      }
+      bonusAmt = units * bonusAmt;
+    }
+    total += bonusAmt;
+  });
+  return total;
+}
     
     function calcBonus(rate,jobTitle,tiers,roles) {
       if (rate===null||!tiers||!tiers.length) return 0;
