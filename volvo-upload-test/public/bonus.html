@@ -1529,6 +1529,7 @@ var deptMetricIds=getMetricIdsForDept(dkey, fc), deptHasMetrics=deptMetricIds.le
         var isTeamDept=_ppGetTeamMode(fc, dkey);
         // ── 團體制：預先計算各指標的獎金池 ──
         var teamPoolMap={};
+        var savedWeights=isTeamDept?_ppGetWeights(fc, dkey):{};
         if(isTeamDept){
           deptMetricIds.forEach(function(mId){
             var meta=metaById[mId];
@@ -1538,10 +1539,10 @@ var deptMetricIds=getMetricIdsForDept(dkey, fc), deptHasMetrics=deptMetricIds.le
             var pool=0,totalW=0;
             dept.members.forEach(function(p){
               var baseB=calcBonus(dRate,p.job_title||'',meta.tiers,meta.roles);
-              var wtRaw=empTargets[p.emp_id]&&empTargets[p.emp_id][mId]
-                        ?parseFloat(empTargets[p.emp_id][mId].target_value||0):0;
               pool+=baseB;
-              totalW+=(wtRaw>0?wtRaw:(baseB||1));
+              // 優先用手動設定的權重，否則等權重(1)
+              var wt=savedWeights[p.emp_id]!==undefined?savedWeights[p.emp_id]:1;
+              totalW+=wt;
             });
             teamPoolMap[mId]={pool:Math.round(pool),totalW:totalW,dRate:dRate};
           });
@@ -1557,13 +1558,11 @@ var deptMetricIds=getMetricIdsForDept(dkey, fc), deptHasMetrics=deptMetricIds.le
                   var effectiveRate=te3?te3.rate:(meta3.useAuto?meta3.autoRate:null);
                   var effectiveHasTarget=!!te3||meta3.useAuto;
                   var bonusAmt=0,dispRate=effectiveRate,dispHasTgt=effectiveHasTarget;
-                            if(isTeamDept&&teamPoolMap[mId3]){
-                              var tp=teamPoolMap[mId3];
-                              var baseB3=calcBonus(tp.dRate,person3.job_title||'',meta3.tiers,meta3.roles);
-                              var wtRaw3=empTargets[person3.emp_id]&&empTargets[person3.emp_id][mId3]
-                                         ?parseFloat(empTargets[person3.emp_id][mId3].target_value||0):0;
-                              var wt3=wtRaw3>0?wtRaw3:(baseB3||1);
-                              bonusAmt=tp.totalW>0?Math.round(tp.pool*wt3/tp.totalW):0;
+                        if(isTeamDept&&teamPoolMap[mId3]){
+                          var tp=teamPoolMap[mId3];
+                          // 使用手動設定的權重，未設定預設 1（等權重）
+                          var wt3=savedWeights[person3.emp_id]!==undefined?savedWeights[person3.emp_id]:1;
+                          bonusAmt=tp.totalW>0?Math.round(tp.pool*wt3/tp.totalW):0;
                               dispRate=tp.dRate; dispHasTgt=true;
                             } else if(effectiveHasTarget){
                               bonusAmt=calcBonus(effectiveRate,person3.job_title||'',meta3.tiers,meta3.roles);
@@ -1610,6 +1609,14 @@ var deptMetricIds=getMetricIdsForDept(dkey, fc), deptHasMetrics=deptMetricIds.le
           +' title="點擊切換計算模式">'
           +(isTeamDept?'👥 團體制':'👤 個人制')
           +'</span>'
+          +(isTeamDept
+            ? (function(){
+                var mData=encodeURIComponent(JSON.stringify(dept.members.map(function(m){return{emp_id:m.emp_id,name:m.emp_name,job_title:m.job_title||''};})));
+                return '&nbsp;<span onclick="event.stopPropagation();_openWeightModal(\''+fc+'\',\''+dkey+'\',\''+mData+'\')"'
+                  +' style="font-size:10px;padding:3px 10px;border-radius:5px;font-weight:700;cursor:pointer;user-select:none;border:1.5px solid #f59e0b;background:rgba(245,158,11,.12);color:#f59e0b"'
+                  +' title="設定分配權重">⚖️ 權重設定</span>';
+              })()
+            : '')
           +'<span style="font-size:11px;color:#475569;background:#0f172a;padding:1px 7px;border-radius:6px">'+dept.members.length+' 人</span>'
             +(deptBonusPpl>0?'<span style="font-size:11px;color:#10b981">'+deptBonusPpl+' 人有獎金</span>':'')
             +deptTagsHtml
@@ -1919,19 +1926,84 @@ async function deletePromoCfg(id, name) {
   if (inner) { inner.innerHTML = '<div class="loading"><span class="spinner"></span>重新計算中</div>'; await renderProgressContent(); }
 }
 
-  // ── 團體/個人模式 localStorage helpers ──
+// ── 團體/個人模式 helpers ──
 function _ppGetTeamMode(fc, dkey) {
   try {
     var v = localStorage.getItem('bonus-team-'+fc+'-'+dkey);
     if (v !== null) return v === '1';
   } catch(e) {}
-  return false; // 預設全部個人制，由使用者手動開啟
+  return false;
 }
 function _ppSetTeamMode(fc, dkey, isTeam) {
   try { localStorage.setItem('bonus-team-'+fc+'-'+dkey, isTeam?'1':'0'); } catch(e) {}
 }
 function _toggleTeamMode(fc, dkey, current) {
   _ppSetTeamMode(fc, dkey, !current);
+  var inner = document.getElementById('progressInner');
+  if (inner) { inner.innerHTML = '<div class="loading"><span class="spinner"></span>重新計算中</div>'; renderProgressContent(); }
+}  
+
+// ── 團體制權重 helpers ──
+function _ppGetWeights(fc, dkey) {
+  try {
+    var v = localStorage.getItem('bonus-weights-'+fc+'-'+dkey);
+    if (v) return JSON.parse(v); // { emp_id: weight, ... }
+  } catch(e) {}
+  return {};
+}
+function _ppSetWeights(fc, dkey, obj) {
+  try { localStorage.setItem('bonus-weights-'+fc+'-'+dkey, JSON.stringify(obj)); } catch(e) {}
+}
+function _openWeightModal(fc, dkey, membersJSON) {
+  var members = JSON.parse(decodeURIComponent(membersJSON));
+  var saved = _ppGetWeights(fc, dkey);
+  var rows = members.map(function(m){
+    var w = saved[m.emp_id] !== undefined ? saved[m.emp_id] : 1;
+    return '<tr>'
+      +'<td style="padding:6px 10px;color:#e2e8f0;font-size:13px">'+m.name+'</td>'
+      +'<td style="padding:6px 10px;color:#94a3b8;font-size:12px">'+m.job_title+'</td>'
+      +'<td style="padding:6px 4px;text-align:center">'
+        +'<input type="number" min="0" step="0.5" value="'+w+'" data-empid="'+m.emp_id+'"'
+        +' style="width:70px;background:#0f172a;border:1px solid #334155;border-radius:5px;'
+        +'color:#f1f5f9;padding:3px 6px;font-size:13px;text-align:center">'
+      +'</td>'
+    +'</tr>';
+  }).join('');
+
+  var html = '<div id="weightModalBg" onclick="if(event.target===this)document.getElementById(\'weightModalBg\').remove()"'
+    +' style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center">'
+    +'<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:24px;min-width:360px;max-width:90vw;max-height:80vh;overflow-y:auto">'
+    +'<div style="font-size:15px;font-weight:800;color:#f1f5f9;margin-bottom:4px">⚖️ 團體制權重設定</div>'
+    +'<div style="font-size:11px;color:#64748b;margin-bottom:16px">數字越大分得越多，設為 0 則不分配</div>'
+    +'<table style="width:100%;border-collapse:collapse">'
+    +'<thead><tr>'
+    +'<th style="text-align:left;padding:4px 10px;font-size:11px;color:#64748b;font-weight:600">姓名</th>'
+    +'<th style="text-align:left;padding:4px 10px;font-size:11px;color:#64748b;font-weight:600">職稱</th>'
+    +'<th style="text-align:center;padding:4px 10px;font-size:11px;color:#64748b;font-weight:600">權重</th>'
+    +'</tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table>'
+    +'<div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">'
+    +'<button onclick="document.getElementById(\'weightModalBg\').remove()"'
+    +' style="padding:6px 16px;border-radius:6px;border:1px solid #475569;background:transparent;color:#94a3b8;font-size:12px;cursor:pointer">取消</button>'
+    +'<button onclick="_saveWeightModal(\''+fc+'\',\''+dkey+'\')"'
+    +' style="padding:6px 16px;border-radius:6px;border:none;background:#3b82f6;color:#fff;font-size:12px;font-weight:700;cursor:pointer">💾 儲存</button>'
+    +'</div>'
+    +'</div></div>';
+
+  var existing = document.getElementById('weightModalBg');
+  if (existing) existing.remove();
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+function _saveWeightModal(fc, dkey) {
+  var inputs = document.querySelectorAll('#weightModalBg input[data-empid]');
+  var obj = {};
+  inputs.forEach(function(inp){
+    var val = parseFloat(inp.value);
+    obj[inp.getAttribute('data-empid')] = isNaN(val)||val<0 ? 0 : val;
+  });
+  _ppSetWeights(fc, dkey, obj);
+  document.getElementById('weightModalBg').remove();
   var inner = document.getElementById('progressInner');
   if (inner) { inner.innerHTML = '<div class="loading"><span class="spinner"></span>重新計算中</div>'; renderProgressContent(); }
 }
