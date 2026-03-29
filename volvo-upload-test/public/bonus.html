@@ -1652,8 +1652,8 @@ memberRows.push({person:person3,bonuses:personBonuses,promoBonus:personPromoBonu
         }
 
         if (!deptHasMetrics) html+='<th style="'+thBase+'min-width:120px;text-align:center;color:#334155">（尚無獎金指標）</th>';
-         html+='<th style="'+thBase+'min-width:110px;text-align:center;background:#0c1524;color:#a78bfa">🎯 主管考核</th>'
         html+='<th style="'+thBase+'min-width:100px;text-align:right;background:#0c1524;color:#10b981">🎁 促銷獎金</th>'
+        html+='<th style="'+thBase+'min-width:140px;text-align:center;background:#0c1524;color:#a78bfa">🎯 主管考核</th>'
     +'<th style="'+thBase+'min-width:80px;text-align:right;background:#0c1524;color:#f59e0b'+(deptHasMetrics?'':';display:none')+'">總獎金</th>'
           +'</tr></thead><tbody>';
 
@@ -1682,19 +1682,36 @@ memberRows.push({person:person3,bonuses:personBonuses,promoBonus:personPromoBonu
           var mrVal = mRow.mrBonus||0;
           var mrNote = (_managerReviewMap[p4.emp_id]&&_managerReviewMap[p4.emp_id].note)||'';
           var safeEmpId = p4.emp_id.replace(/'/g,"\\'");
-          html+='<td style="padding:6px 8px;border-bottom:1px solid rgba(45,63,86,.2);text-align:center;background:rgba(167,139,250,.03)">'
-            +'<div style="display:flex;align-items:center;gap:4px;justify-content:center">'
-            +'<input type="number" step="1" value="'+(mrVal||'')+'" placeholder="+加/-減"'
-            +' data-empid="'+safeEmpId+'" data-period="'+_actualPeriod+'"'
-            +' style="width:80px;background:#0f172a;border:1px solid #334155;border-radius:5px;color:#a78bfa;padding:3px 6px;font-size:12px;font-weight:700;text-align:center;outline:none"'
-            +' onchange="_saveMR(this)"'
-            +' title="'+(mrNote?'備註：'+mrNote:'')+'">'
-            +(mrNote?'<span title="'+mrNote.replace(/"/g,'&quot;')+'" style="font-size:10px;color:#64748b;cursor:default">📝</span>':'')
+          // 促銷獎金（前）
+          html+='<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);text-align:right;background:rgba(16,185,129,.03);font-weight:900;">'
+            +(mRow.promoBonus>0?'<span style="color:#10b981;font-size:14px">'+mRow.promoBonus.toLocaleString()+'<span style="font-size:9px;margin-left:1px">元</span></span>':'<span style="color:#2d4060">—</span>')
+          +'</td>';
+          // 主管考核（後）
+          html+='<td style="padding:5px 8px;border-bottom:1px solid rgba(45,63,86,.2);background:rgba(167,139,250,.03);min-width:140px">'
+            +(mrVal
+              ?'<div style="text-align:center;margin-bottom:4px">'
+                +'<span style="display:inline-flex;align-items:baseline;gap:2px;padding:2px 10px;border-radius:20px;font-size:13px;font-weight:900;'
+                  +'background:'+(mrVal>0?'rgba(167,139,250,.18)':'rgba(239,68,68,.15)')+';'
+                  +'color:'+(mrVal>0?'#c4b5fd':'#f87171')+'">'
+                  +(mrVal>0?'＋':'')+mrVal.toLocaleString()
+                  +'<span style="font-size:9px;margin-left:2px">元</span>'
+                +'</span></div>'
+              :'')
+            +'<div style="display:flex;gap:3px;align-items:center">'
+              +'<button onclick="_mrAdjust(this,-1000)" style="width:22px;height:22px;flex-shrink:0;border-radius:4px;border:1px solid #4a1d96;background:rgba(139,92,246,.15);color:#a78bfa;font-size:15px;cursor:pointer;line-height:1;padding:0">−</button>'
+              +'<input type="number" step="100" value="'+(mrVal||'')+'" placeholder="±金額"'
+                +' data-empid="'+safeEmpId+'" data-period="'+_actualPeriod+'"'
+                +' style="flex:1;min-width:0;background:#1a0f2e;border:1.5px solid #4a1d96;border-radius:5px;'
+                +'color:#c4b5fd;padding:4px;font-size:12px;font-weight:800;text-align:center;outline:none"'
+                +' onchange="_saveMR(this)"'
+                +' onfocus="this.style.borderColor=\'#8b5cf6\'" onblur="this.style.borderColor=\'#4a1d96\'">'
+              +'<button onclick="_mrAdjust(this,1000)" style="width:22px;height:22px;flex-shrink:0;border-radius:4px;border:1px solid #4a1d96;background:rgba(139,92,246,.15);color:#a78bfa;font-size:15px;cursor:pointer;line-height:1;padding:0">＋</button>'
             +'</div>'
             +'<input type="text" value="'+mrNote+'" placeholder="備註（選填）"'
-            +' data-empid="'+safeEmpId+'" data-period="'+_actualPeriod+'" data-notefield="1"'
-            +' style="width:100%;margin-top:3px;background:transparent;border:none;border-bottom:1px solid #1e2d40;color:#64748b;padding:2px 4px;font-size:10px;outline:none"'
-            +' onchange="_saveMR(this)">'
+              +' data-empid="'+safeEmpId+'" data-period="'+_actualPeriod+'" data-notefield="1"'
+              +' style="width:100%;margin-top:4px;background:rgba(139,92,246,.05);border:none;border-bottom:1px solid #3b2063;color:#94a3b8;padding:3px 4px;font-size:10px;outline:none"'
+              +' onchange="_saveMR(this)"'
+              +' onfocus="this.style.borderBottomColor=\'#8b5cf6\'" onblur="this.style.borderBottomColor=\'#3b2063\'">'
           +'</td>';
           html+='<td style="padding:8px 10px;border-bottom:1px solid rgba(45,63,86,.2);text-align:right;background:rgba(16,185,129,.03);font-weight:900;">'
             +(mRow.promoBonus>0?'<span style="color:#10b981;font-size:14px">'+mRow.promoBonus.toLocaleString()+'<span style="font-size:9px;margin-left:1px">元</span></span>':'<span style="color:#2d4060">—</span>')
@@ -1713,8 +1730,8 @@ memberRows.push({person:person3,bonuses:personBonuses,promoBonus:personPromoBonu
           }
 var deptPromoTotal=memberRows.reduce(function(s,r){return s+(r.promoBonus||0);},0);
         var deptMRTotal=memberRows.reduce(function(s,r){return s+(r.mrBonus||0);},0);
-          html+='<td style="padding:7px 10px;text-align:center;font-weight:900;color:'+(deptMRTotal!==0?'#a78bfa':'#334155')+'">'+(deptMRTotal!==0?deptMRTotal.toLocaleString()+' 元':'—')+'</td>';
           html+='<td style="padding:7px 10px;text-align:right;font-weight:900;color:'+(deptPromoTotal>0?'#10b981':'#334155')+'">'+(deptPromoTotal>0?deptPromoTotal.toLocaleString()+' 元':'—')+'</td>';
+          html+='<td style="padding:7px 10px;text-align:center;font-weight:900;color:'+(deptMRTotal!==0?'#a78bfa':'#334155')+'">'+(deptMRTotal!==0?deptMRTotal.toLocaleString()+' 元':'—')+'</td>';
           html+='<td style="padding:7px 10px;text-align:right;font-weight:900;color:'+(deptTotalBonus>0?'#f59e0b':'#334155')+'">'+(deptTotalBonus>0?deptTotalBonus.toLocaleString()+' 元':'—')+'</td></tr>';
         }
 
@@ -2047,6 +2064,17 @@ function _saveWeightModal(fc, dkey) {
   document.getElementById('weightModalBg').remove();
   var inner = document.getElementById('progressInner');
   if (inner) { inner.innerHTML = '<div class="loading"><span class="spinner"></span>重新計算中</div>'; renderProgressContent(); }
+}
+
+// ── 主管考核 ±快速調整 ──
+function _mrAdjust(btn, delta) {
+  var td  = btn.closest('td');
+  if (!td) return;
+  var inp = td.querySelector('input[type="number"]');
+  if (!inp) return;
+  var newVal = (parseInt(inp.value) || 0) + delta;
+  inp.value  = newVal || '';
+  inp.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 // ══ 主管考核 ══
