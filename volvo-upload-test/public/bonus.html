@@ -2112,11 +2112,55 @@ if (!_managerReviewMap[empId]) _managerReviewMap[empId] = {};
       body: JSON.stringify({ emp_id:empId, period:_actualPeriod, amount:val, note:note })
     }));
   });
-  await Promise.all(promises);
+await Promise.all(promises);
   _closeMRModal();
-  renderProgressContent();
-}
 
+  // 直接更新 DOM，不重繪整張表
+  inputs.forEach(function(inp) {
+    var empId  = inp.dataset.modalempid;
+    var val    = _managerReviewMap[empId] ? _managerReviewMap[empId].amount : 0;
+    var note   = _managerReviewMap[empId] ? _managerReviewMap[empId].note   : '';
+    var cell   = document.querySelector('td[data-mrcell="'+empId+'"]');
+    if (!cell) return;
+    if (val) {
+      var col = val > 0 ? '#c4b5fd' : '#f87171';
+      var bg  = val > 0 ? 'rgba(167,139,250,.18)' : 'rgba(239,68,68,.15)';
+      var pre = val > 0 ? '＋' : '';
+      cell.innerHTML = '<span style="display:inline-flex;align-items:baseline;gap:2px;padding:2px 10px;border-radius:20px;font-size:13px;font-weight:900;background:'+bg+';color:'+col+'">'
+        + pre + val.toLocaleString() + '<span style="font-size:9px;margin-left:2px">元</span></span>'
+        + (note ? '<div style="font-size:10px;color:#64748b;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px" title="'+note.replace(/"/g,'&quot;')+'">'+note+'</div>' : '');
+      // 更新同列總獎金
+      var tr = cell.closest('tr');
+      if (tr) {
+        var cells = tr.querySelectorAll('td');
+        var lastTd = cells[cells.length - 1];
+        var perfVal = 0, promoVal = 0;
+        if (cells[3]) { var m = cells[3].innerText.replace(/,/g,'').match(/-?\d+/); if (m) perfVal = parseInt(m[0])||0; }
+        if (cells[4]) { var m2 = cells[4].innerText.replace(/,/g,'').match(/-?\d+/); if (m2) promoVal = parseInt(m2[0])||0; }
+        var total = perfVal + promoVal + val;
+        if (lastTd) lastTd.innerHTML = total
+          ? '<span style="color:#f59e0b;font-weight:900;font-size:14px">'+total.toLocaleString()+'<span style="font-size:9px;margin-left:1px">元</span></span>'
+          : '<span style="color:#2d4060">—</span>';
+      }
+    } else {
+      cell.innerHTML = '<span style="color:#334155">—</span>';
+      var tr2 = cell.closest('tr');
+      if (tr2) {
+        var cells2 = tr2.querySelectorAll('td');
+        var lastTd2 = cells2[cells2.length - 1];
+        var perfVal2 = 0, promoVal2 = 0;
+        if (cells2[3]) { var m3 = cells2[3].innerText.replace(/,/g,'').match(/-?\d+/); if (m3) perfVal2 = parseInt(m3[0])||0; }
+        if (cells2[4]) { var m4 = cells2[4].innerText.replace(/,/g,'').match(/-?\d+/); if (m4) promoVal2 = parseInt(m4[0])||0; }
+        var total2 = perfVal2 + promoVal2;
+        if (lastTd2) lastTd2.innerHTML = total2
+          ? '<span style="color:#f59e0b;font-weight:900;font-size:14px">'+total2.toLocaleString()+'<span style="font-size:9px;margin-left:1px">元</span></span>'
+          : '<span style="color:#2d4060">—</span>';
+      }
+    }
+    // 更新小計列
+    _updateSectionTotals(cell);
+  });
+}
 // ── 主管考核 ±快速調整 ──
 function _mrAdjust(btn, delta) {
   var td  = btn.closest('td');
