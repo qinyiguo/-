@@ -1309,6 +1309,7 @@ async function renderProgressContent() {
     }
 
       var allMetricIds=Object.keys(metaById);
+      var hasMetrics=allMetricIds.length>0; 
 // promo_rules 需要的 SA 銷售矩陣（per-person qty）
       var promoActuals = {}; // { metric_id: { branch: { person_name: actual } } }
       try {
